@@ -107,6 +107,33 @@ struct UpdaterScreenTests {
         #expect(await rig.finder.find().panel == .onSerial(build: nil))
     }
 
+    @Test("A panel since #667 talks at 921600: read there, and 115200 isn't tried")
+    func panelAt921600() async {
+        let rig = Rig()
+        Self.panel(rig, printing: ["\u{FFFD}\u{FFFD}x", "deck panel: boot, build 1d0683f, version 1.2.0"])
+        #expect(await rig.finder.find().panel == .onSerial(build: PanelBuild(sha: "1d0683f", version: FirmwareVersion("1.2.0"))))
+        #expect(rig.serial.bauds == [921_600])
+    }
+
+    @Test("A panel flashed before #667 talks at 115200: tried after 921600, and read there")
+    func panelAt115200() async {
+        let rig = Rig()
+        Self.panel(rig, printing: ["\u{FFFD}x\u{FFFD}"])
+        rig.serial.oldLines[Self.port] = ["deck panel: boot, build 1d0683f"]
+        #expect(await rig.finder.find().panel == .onSerial(build: PanelBuild(sha: "1d0683f")))
+        #expect(rig.serial.bauds == [921_600, 115_200])
+    }
+
+    @Test("Nothing read at either speed: build not read, both tried once, on the panel's port only")
+    func panelAtNeitherSpeed() async {
+        let rig = Rig()
+        Self.panel(rig, printing: [])
+        let screen = await rig.screen()
+        #expect(screen.panel.detail == "Build not read: unplug the panel and plug it back in to read it")
+        #expect(rig.serial.bauds == [921_600, 115_200])
+        #expect(rig.serial.opened == [Self.port, Self.port])
+    }
+
     @Test("An LC6000 on MIDI (DeckBridge's port names): found, firmware not checked yet")
     func lc6000OnMIDI() async {
         let rig = Rig()
@@ -141,7 +168,7 @@ struct UpdaterScreenTests {
         Self.panel(rig, printing: [])
         rig.usb.plugged.append(USBDevice(vendor: 0x0403, product: 0x6001, name: "FT232R USB UART", serialPort: "/dev/cu.usbserial-A1"))
         _ = await rig.finder.find()
-        #expect(rig.serial.opened == [Self.port])
+        #expect(rig.serial.opened == [Self.port, Self.port]) // 921600, then 115200
     }
 
     @Test("The LC6000 section shows only its warning until the owner accepts it; the panel section isn't locked")
