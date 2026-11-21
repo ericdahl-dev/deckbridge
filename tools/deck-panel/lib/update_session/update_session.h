@@ -84,6 +84,8 @@ class Session {
     Reply signature(const uint8_t* bytes, size_t length);
     Reply chunk(const uint8_t* bytes, size_t length);
     Reply done();
+    /// Ends the update for a reason outside the frames (a cap, a timeout, a dropped link): nothing is switched.
+    Reply stop(Refusal why) { return refuse(why); }
 
   private:
     Reply refuse(Refusal why);

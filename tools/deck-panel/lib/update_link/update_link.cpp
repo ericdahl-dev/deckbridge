@@ -77,6 +77,13 @@ Out Link::received(int connection, const uint8_t* bytes, size_t length, uint32_t
             payload_want_ = static_cast<uint32_t>(header_[1]) | static_cast<uint32_t>(header_[2]) << 8 |
                             static_cast<uint32_t>(header_[3]) << 16 | static_cast<uint32_t>(header_[4]) << 24;
             payload_.clear();
+            // Caps from the header alone, before a byte of the payload is kept.
+            const char type = static_cast<char>(header_[0]);
+            const bool known = type == 'M' || type == 'S' || type == 'I' || type == 'D';
+            if (!known) { handle(session_->stop(Refusal::no_manifest), out); break; }
+            const bool fits = (type == 'M' && payload_want_ <= kMaxManifest) || (type == 'S' && payload_want_ == 64) ||
+                              (type == 'I' && payload_want_ <= kMaxChunk) || (type == 'D' && payload_want_ == 0);
+            if (!fits) { handle(session_->stop(Refusal::too_large), out); break; }
         }
         const size_t take = std::min(length - i, static_cast<size_t>(payload_want_) - payload_.size());
         payload_.insert(payload_.end(), bytes + i, bytes + i + take);
@@ -87,7 +94,6 @@ Out Link::received(int connection, const uint8_t* bytes, size_t length, uint32_t
             case 'M': handle(session_->manifest(payload_.data(), payload_.size()), out); break;
             case 'S': handle(session_->signature(payload_.data(), payload_.size()), out); break;
             case 'I': handle(session_->chunk(payload_.data(), payload_.size()), out); break;
-            case 'D': handle(session_->done(), out); break;
             default: handle(session_->done(), out); break;
         }
     }

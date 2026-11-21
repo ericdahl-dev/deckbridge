@@ -96,11 +96,66 @@ void test_the_same_update_a_byte_at_a_time_gives_the_same_lines() {
     TEST_ASSERT_TRUE(outs.back().reboot);
 }
 
+Out connected_and_sent(Panel& panel, const std::vector<uint8_t>& bytes) {
+    Out out;
+    panel.link.accept(1, 0, out);
+    return panel.link.received(1, bytes.data(), bytes.size(), 10);
+}
+
+void expect_refused(const Out& out, const char* expected) {
+    TEST_ASSERT_EQUAL(1, out.lines.size());
+    TEST_ASSERT_EQUAL_STRING(expected, out.lines[0].c_str());
+    TEST_ASSERT_TRUE(out.close);
+    TEST_ASSERT_FALSE(out.reboot);
+}
+
+// The caps are checked from the frame's header, before its bytes are kept: no one can make the panel buffer more.
+void test_a_manifest_frame_over_the_cap_is_refused_from_its_header() {
+    Panel panel;
+    std::vector<uint8_t> header{'M', 0, 0, 0, 0};
+    const uint32_t n = update_link::kMaxManifest + 1;
+    for (int i = 0; i < 4; ++i) header[1 + i] = static_cast<uint8_t>(n >> (8 * i));
+    expect_refused(connected_and_sent(panel, header), "refused too-large");
+}
+
+void test_an_image_chunk_over_the_cap_is_refused_and_nothing_is_written() {
+    Panel panel;
+    auto bytes = whole_update();
+    bytes.resize(bytes.size() - 2 * 5 - 4);  // up to the signature: then a chunk over the cap
+    std::vector<uint8_t> header{'I', 0, 0, 0, 0};
+    const uint32_t n = update_link::kMaxChunk + 1;
+    for (int i = 0; i < 4; ++i) header[1 + i] = static_cast<uint8_t>(n >> (8 * i));
+    bytes.insert(bytes.end(), header.begin(), header.end());
+    Out out;
+    panel.link.accept(1, 0, out);
+    out = panel.link.received(1, bytes.data(), bytes.size(), 10);
+    TEST_ASSERT_EQUAL_STRING("refused too-large", out.lines.back().c_str());
+    TEST_ASSERT_TRUE(panel.slot.written.empty());
+    TEST_ASSERT_TRUE(panel.slot.aborted);
+}
+
+void test_a_signature_frame_that_is_not_64_bytes_is_refused() {
+    Panel panel;
+    auto bytes = frame('M', std::vector<uint8_t>(kManifest.begin(), kManifest.end()));
+    const auto signature = frame('S', std::vector<uint8_t>(65, 0x11));
+    bytes.insert(bytes.end(), signature.begin(), signature.end());
+    expect_refused(connected_and_sent(panel, bytes), "refused too-large");
+}
+
+void test_a_frame_of_an_unknown_type_is_refused() {
+    Panel panel;
+    expect_refused(connected_and_sent(panel, frame('X', {1})), "refused no-manifest");
+}
+
 }  // namespace
 
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_a_whole_update_in_one_go_switches_and_asks_for_a_restart);
     RUN_TEST(test_the_same_update_a_byte_at_a_time_gives_the_same_lines);
+    RUN_TEST(test_a_manifest_frame_over_the_cap_is_refused_from_its_header);
+    RUN_TEST(test_an_image_chunk_over_the_cap_is_refused_and_nothing_is_written);
+    RUN_TEST(test_a_signature_frame_that_is_not_64_bytes_is_refused);
+    RUN_TEST(test_a_frame_of_an_unknown_type_is_refused);
     return UNITY_END();
 }
