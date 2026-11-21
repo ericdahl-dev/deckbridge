@@ -47,6 +47,9 @@ public struct UpdaterScreen: Sendable, Equatable {
         recover. If you only have a deck panel, you don't need this section.
         """
 
+    /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
+    public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
+
     public init(found: Found, lc6000WarningAccepted: Bool) {
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
@@ -55,6 +58,7 @@ public struct UpdaterScreen: Sendable, Equatable {
         case .onSerial(let build?):
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
             panel = DeviceSection(status: "Deck panel found", detail: "Build \(build.sha)\(development)")
+        case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
                             detail: "Build not read: unplug the panel and plug it back in to read it")
