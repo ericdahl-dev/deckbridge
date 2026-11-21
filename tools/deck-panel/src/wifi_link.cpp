@@ -445,6 +445,8 @@ const char* setup_password() {
     return g_setup_password;
 }
 
+bool setup_up() { return g_state == Network::setup && g_setup_up; }
+
 uint32_t joins() { return g_joins; }
 
 void forget_and_restart() {

@@ -29,6 +29,7 @@
 #include "feed_drain.h"
 #include "feed_udp.h"
 #include "hold_reset.h"
+#include "update_wifi.h"
 #include "wifi_link.h"
 #endif
 
@@ -180,6 +181,7 @@ class PanelBoard : public frame_clock::Board {
 #ifdef DECK_PANEL_TEST_SCREEN
         test_screen::show_touch();
 #else
+        if (update_wifi::hold_render()) return;  // an update is writing flash: the still screen, not the deck (#690)
         // Read after the drain, so a datagram stamped then is never in the future of the render.
         g_core.render(g_screen, millis());
 #endif
@@ -187,6 +189,9 @@ class PanelBoard : public frame_clock::Board {
 
     void refresh() override {
         MARK(refresh);
+#ifndef DECK_PANEL_TEST_SCREEN
+        if (update_wifi::hold_refresh()) return;
+#endif
         display_refresh();
     }
 
@@ -203,6 +208,7 @@ class PanelBoard : public frame_clock::Board {
         MARK(wifi);
         wifi_link::poll(now);
         g_core.set_network(wifi_link::state(), wifi_link::ip());
+        update_wifi::chores(now);
         MARK(udp);
         g_udp.poll(wifi_link::state() == deck_core::Network::connected, wifi_link::joins(), now);
         // Touch only off the deck: the waiting, joining and setup screens, where the hold reset lives. On the deck
@@ -265,6 +271,7 @@ void setup() {
     Serial.println("deck panel: test screen up");
 #else
     wifi_link::begin();  // after the backlight: joining takes seconds and must not hold the first frame
+    update_wifi::begin();
     Serial.println("deck panel: deck view up");
 #endif
 }
