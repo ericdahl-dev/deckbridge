@@ -169,6 +169,8 @@ public struct Catalog: Sendable {
 public struct KnownNumbers: Sendable, Hashable {
     public let display: [UInt32: String]
     public let topPanel: [String: String]
+    /// Nothing known: every version refused for updates, backups still allowed.
+    public static let none = KnownNumbers(display: [:], topPanel: [:])
 }
 
 /// What the app offers a deck panel.
