@@ -26,6 +26,8 @@ public enum FeedError: Error, Equatable {
     case missingAsset(String)
     /// A draft or a pre-release: never fetched.
     case notPublished
+    /// A URL the feed won't ask: not this repo's download URL, or a redirect off GitHub's asset hosts.
+    case refusedURL(String)
 }
 
 /// This project's newest published GitHub release (#704), read over GitHub's public, unauthenticated endpoints. It sends
@@ -35,9 +37,14 @@ public actor GitHubReleaseFeed: ReleaseFeed {
     /// Every request's headers, and only these: no Authorization, no cookies.
     static let headers = ["User-Agent": "DeckBridge-Firmware-Updater", "Accept": "application/vnd.github+json"]
 
+    /// Where an asset's download URL must be: this repo's releases on github.com.
+    static let downloadPrefix = "/ericdahl-dev/deckbridge/releases/download/"
+    /// Where GitHub's download URL redirects for the bytes: one hop, to one of these, https.
+    static let assetHosts: Set<String> = ["objects.githubusercontent.com", "release-assets.githubusercontent.com"]
+
     let http: any HTTPClient
-    /// The release `latest()` read: each asset's download URL, by name.
-    private var assets: [String: URL] = [:]
+    /// The release `latest()` read: each asset's download URL as given, by name; checked when it's fetched.
+    private var assets: [String: String] = [:]
 
     public init(http: any HTTPClient) { self.http = http }
 
@@ -48,20 +55,33 @@ public actor GitHubReleaseFeed: ReleaseFeed {
         // GitHub's "latest" is never a draft or a pre-release; if it ever were, nothing of it is fetched.
         guard !release.draft, !release.prerelease else { throw FeedError.notPublished }
         assets = [:]
-        for asset in release.assets { if let url = URL(string: asset.browser_download_url) { assets[asset.name] = url } }
+        for asset in release.assets { assets[asset.name] = asset.browser_download_url }
         return PublishedRelease(manifest: try await file("manifest.json"), signature: try await file("manifest.sig"))
     }
 
+    /// One asset of the release `latest()` read: from its download URL on github.com, then, if GitHub redirects, from
+    /// the one asset host it names. Any other URL, or a second redirect, is refused before it is asked.
     public func file(_ name: String) async throws -> Data {
-        guard let url = assets[name] else { throw FeedError.missingAsset(name) }
+        guard let given = assets[name] else { throw FeedError.missingAsset(name) }
+        guard let url = URL(string: given), Self.isDownload(url) else { throw FeedError.refusedURL(given) }
         let first = try await http.get(url, headers: Self.headers)
         if first.status == 200 { return first.body }
-        guard (300..<400).contains(first.status), let location = first.location, let stored = URL(string: location) else {
-            throw FeedError.http(first.status)
-        }
+        guard (300..<400).contains(first.status), let location = first.location else { throw FeedError.http(first.status) }
+        guard let stored = URL(string: location), Self.isAssetHost(stored) else { throw FeedError.refusedURL(location) }
         let second = try await http.get(stored, headers: Self.headers)
         guard second.status == 200 else { throw FeedError.http(second.status) }
         return second.body
+    }
+
+    /// https://github.com/ericdahl-dev/deckbridge/releases/download/…, with no "." or ".." parts.
+    static func isDownload(_ url: URL) -> Bool {
+        let path = url.path(percentEncoded: false)
+        return url.scheme == "https" && url.host() == "github.com" && url.port == nil && url.user() == nil
+            && path.hasPrefix(downloadPrefix) && !path.split(separator: "/").contains { $0 == ".." || $0 == "." }
+    }
+
+    static func isAssetHost(_ url: URL) -> Bool {
+        url.scheme == "https" && assetHosts.contains(url.host() ?? "") && url.port == nil && url.user() == nil
     }
 
     private struct Release: Decodable {

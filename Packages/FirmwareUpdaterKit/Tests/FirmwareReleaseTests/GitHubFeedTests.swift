@@ -102,3 +102,55 @@ func anythingWrongTalkingToGitHubIsUnreachableAndTheBuiltInStays(_ fault: String
         .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
     #expect(outcome.refusal == .unknownKey("primary"))
 }
+
+// Where the feed goes is its own rule, not the JSON's: an asset only from this repo's download URL on github.com, and
+// from there exactly one redirect, https, to GitHub's asset host. The manifest's signature is the real guard; this keeps
+// the fetch from going wherever a reply points.
+
+@Test func bothOfGitHubsAssetHostsServeTheBytes() async throws {
+    let github = publishedGitHub()
+    serve("manifest.sig", Data("the signature".utf8), on: github, host: "release-assets.githubusercontent.com")
+    #expect(try await GitHubReleaseFeed(http: github).latest().signature == Data("the signature".utf8))
+}
+
+@Test(arguments: [
+    "http://objects.githubusercontent.com/x",       // not https
+    "https://example.com/x",                        // another host
+    "https://objects.githubusercontent.com.example.com/x",
+    "https://github.com/ericdahl-dev/deckbridge/releases/download/deck-panel-v1.1.0/manifest.sig",  // a loop back
+])
+func aRedirectAnywhereButGitHubsAssetHostIsRefusedAndNotFollowed(location: String) async throws {
+    let github = publishedGitHub()
+    github.answers[downloads + "manifest.sig"] = HTTPResponse(status: 302, location: location, body: Data())
+    await #expect(throws: FeedError.refusedURL(location)) { try await GitHubReleaseFeed(http: github).latest() }
+    #expect(github.asked.filter { $0.url == location }.count == (location.hasPrefix(downloads) ? 1 : 0))
+}
+
+@Test func aSecondRedirectIsRefused() async throws {
+    let github = publishedGitHub()
+    let stored = "https://objects.githubusercontent.com/github-production-release-asset/manifest.sig?sig=x"
+    github.answers[stored] = HTTPResponse(status: 302, location: "https://objects.githubusercontent.com/again", body: Data())
+    await #expect(throws: FeedError.http(302)) { try await GitHubReleaseFeed(http: github).latest() }
+    #expect(!github.asked.contains { $0.url == "https://objects.githubusercontent.com/again" })
+}
+
+@Test(arguments: [
+    "https://example.com/manifest.sig",
+    "http://github.com/ericdahl-dev/deckbridge/releases/download/deck-panel-v1.1.0/manifest.sig",
+    "https://github.com/someone-else/deckbridge/releases/download/deck-panel-v1.1.0/manifest.sig",
+    "https://github.com/ericdahl-dev/deckbridge/releases/download/../../../evil",
+])
+func anAssetWhoseDownloadURLIsNotThisReposIsNeverRequested(url: String) async throws {
+    let github = publishedGitHub()
+    let release = String(decoding: releaseJSON(), as: UTF8.self).replacingOccurrences(of: downloads + "manifest.sig", with: url)
+    github.answers[latestURL] = HTTPResponse(status: 200, body: Data(release.utf8))
+    await #expect(throws: FeedError.refusedURL(url)) { try await GitHubReleaseFeed(http: github).latest() }
+    #expect(!github.asked.contains { $0.url == url })
+}
+
+@Test func onlyAFileTheReleaseListsIsFetched() async throws {
+    let github = publishedGitHub()
+    let feed = GitHubReleaseFeed(http: github)
+    _ = try await feed.latest()
+    await #expect(throws: FeedError.missingAsset("panel.bin")) { try await feed.file("panel.bin") }
+}
