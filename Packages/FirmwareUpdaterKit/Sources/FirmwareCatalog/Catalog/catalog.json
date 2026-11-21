@@ -4,6 +4,7 @@
     {
       "wd": "00.50",
       "tp": "00.31",
+      "known": { "wd_crc": "0x3A7CE2CA", "tp_sha256": null },
       "entries": [
         { "kind": "patch", "chip": "wd", "file": "lc6000/wd-00.50-show-slot-16.patch" },
         { "kind": "patch", "chip": "tp", "file": "lc6000/tp-00.31-no-deck-select-on-hello.patch" }
