@@ -48,11 +48,46 @@ void test_the_updaters_cryptokit_vector_verifies_and_a_one_bit_flip_does_not() {
     TEST_ASSERT_FALSE(release_check::signature_ok(key.data(), message.data(), message.size(), sig.data()));
 }
 
+std::string hex_of(const uint8_t* bytes, size_t length) {
+    std::string out;
+    char pair[3];
+    for (size_t i = 0; i < length; ++i) {
+        std::snprintf(pair, sizeof pair, "%02x", bytes[i]);
+        out += pair;
+    }
+    return out;
+}
+
+// FIPS 180-2 appendix B.1 and B.2, fed in uneven pieces, then the same hasher started again on the empty string.
+void test_sha256_of_an_image_fed_in_pieces_matches_the_fips_vectors_and_start_begins_again() {
+    release_check::Sha256 hasher;
+    uint8_t digest[32];
+    hasher.start();
+    hasher.update(reinterpret_cast<const uint8_t*>("a"), 1);
+    hasher.update(reinterpret_cast<const uint8_t*>("bc"), 2);
+    hasher.finish(digest);
+    TEST_ASSERT_EQUAL_STRING("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", hex_of(digest, 32).c_str());
+
+    const char* two_blocks = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    hasher.start();
+    hasher.update(reinterpret_cast<const uint8_t*>(two_blocks), 7);
+    hasher.update(reinterpret_cast<const uint8_t*>(two_blocks) + 7, 49);
+    hasher.finish(digest);
+    TEST_ASSERT_EQUAL_STRING("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", hex_of(digest, 32).c_str());
+
+    hasher.start();
+    hasher.update(reinterpret_cast<const uint8_t*>("abc"), 3);
+    hasher.start();
+    hasher.finish(digest);
+    TEST_ASSERT_EQUAL_STRING("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hex_of(digest, 32).c_str());
+}
+
 }  // namespace
 
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_the_rfc_8032_test_vector_verifies_and_a_changed_message_does_not);
     RUN_TEST(test_the_updaters_cryptokit_vector_verifies_and_a_one_bit_flip_does_not);
+    RUN_TEST(test_sha256_of_an_image_fed_in_pieces_matches_the_fips_vectors_and_start_begins_again);
     return UNITY_END();
 }
