@@ -7,6 +7,9 @@ images themselves stay out of git (see .gitignore), so a build from the repo car
 has run, the package test theBuiltInCatalogFromTheRepoCarriesNoPanelImage fails, as it should: it pins the repo.
 
     python3 -I Packages/FirmwareUpdaterKit/scripts/add_panel_image.py --image firmware.bin --version 1.0.0 --sha 1d0683f
+
+With the build's bootloader.bin and partitions.bin (--bootloader, --partitions; both or neither), the app can also
+make a blank ESP32-S3 board a deck panel (#687).
 """
 import argparse
 import json
@@ -26,6 +29,9 @@ def main(argv):
     parser.add_argument("--image", type=pathlib.Path, required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--sha", required=True)
+    # The build's bootloader and partition table (#687), both or neither, for making a blank board a deck panel.
+    parser.add_argument("--bootloader", type=pathlib.Path)
+    parser.add_argument("--partitions", type=pathlib.Path)
     args = parser.parse_args(argv)
     catalog_file = args.catalog / "catalog.json"
     catalog = json.loads(catalog_file.read_text())
@@ -35,10 +41,16 @@ def main(argv):
         print(f"refused: {problem}", file=sys.stderr)
         return 1
 
-    name = f"panel/deck-panel-{args.version}-{args.sha}.bin"
+    stem = f"panel/deck-panel-{args.version}-{args.sha}"
+    name = stem + ".bin"
     (args.catalog / "panel").mkdir(exist_ok=True)
     shutil.copyfile(args.image, args.catalog / name)
-    catalog["panel"].append({"version": args.version, "sha": args.sha, "image": name})
+    entry = {"version": args.version, "sha": args.sha, "image": name}
+    if args.bootloader:
+        entry["bootloader"], entry["partitions"] = stem + "-bootloader.bin", stem + "-partitions.bin"
+        shutil.copyfile(args.bootloader, args.catalog / entry["bootloader"])
+        shutil.copyfile(args.partitions, args.catalog / entry["partitions"])
+    catalog["panel"].append(entry)
     catalog_file.write_text(json.dumps(catalog, indent=2) + "\n")
     print(f"added {name}")
     return 0
@@ -55,6 +67,14 @@ def refusal(args, catalog):
     for entry in catalog["panel"]:
         if entry["sha"] == args.sha or entry["version"] == args.version:
             return f"{entry['version']} ({entry['sha']}) is already listed"
+    if (args.bootloader is None) != (args.partitions is None):
+        return "give both --bootloader and --partitions, or neither"
+    if args.bootloader:
+        if args.bootloader.read_bytes()[:1] != bytes([ESP_IMAGE_MAGIC]) or args.bootloader.stat().st_size > 0x8000:
+            return f"{args.bootloader} is not a bootloader: an ESP32 image (first byte e9) that fits below 0x8000"
+        table = args.partitions.read_bytes()
+        if len(table) != 3072 or table[:2] != b"\xaa\x50":
+            return f"{args.partitions} is not a partition table: 3,072 bytes starting aa 50, as gen_esp32part.py writes it"
     head = args.image.read_bytes()[:1]
     if head != bytes([ESP_IMAGE_MAGIC]):
         return f"{args.image} is not an ESP32 app image (first byte {head.hex() or 'missing'}, not e9)"
