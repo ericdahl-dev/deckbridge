@@ -1015,7 +1015,7 @@ public final class Coordinator {
         // Its phase rule reads the deck's PhaseOffset (#462): asked for only while the unit draws.
         if jogController.drawing { needed.insert(.phaseOffset) }
         // The display feed's level and phase read them too (#617).
-        if displayFeed.enabled { needed.formUnion([.mixerMeter, .phaseOffset]) }
+        if displayFeed.enabled || cableFeed.enabled { needed.formUnion([.mixerMeter, .phaseOffset]) }
         // Shift + Needle Drop's relative fader move starts from Syndicate's level (#609).
         if bridges.contains(where: { $0.stripFaderMode == .relative }) { needed.insert(.mixerVolume) }
         return Subscription.allCases.filter(needed.contains)
