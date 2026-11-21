@@ -42,8 +42,14 @@ std::string line(const Reply& reply) {
     return "";
 }
 
-bool Link::accept(int connection, uint32_t, Out&) {
+bool Link::accept(int connection, uint32_t now_ms, Out& out) {
+    if (session_) {
+        out.lines.push_back("refused busy");
+        out.close = true;
+        return false;
+    }
     connection_ = connection;
+    last_ms_ = now_ms;
     session_.emplace(config_);
     header_have_ = 0;
     payload_.clear();
@@ -67,9 +73,10 @@ void Link::handle(const Reply& reply, Out& out) {
     }
 }
 
-Out Link::received(int connection, const uint8_t* bytes, size_t length, uint32_t) {
+Out Link::received(int connection, const uint8_t* bytes, size_t length, uint32_t now_ms) {
     Out out;
     if (connection != connection_ || !session_) return out;
+    last_ms_ = now_ms;
     for (size_t i = 0; i < length && session_;) {
         if (header_have_ < 5) {
             header_[header_have_++] = bytes[i++];
@@ -98,6 +105,21 @@ Out Link::received(int connection, const uint8_t* bytes, size_t length, uint32_t
         }
     }
     return out;
+}
+
+Out Link::tick(uint32_t now_ms) {
+    Out out;
+    if (!session_) return out;
+    const uint32_t limit = session_->receiving_image() ? kIdleMidImageMs : kIdleBeforeManifestMs;
+    if (now_ms - last_ms_ >= limit) handle(session_->stop(Refusal::timeout), out);
+    return out;
+}
+
+void Link::closed(int connection) {
+    if (connection != connection_ || !session_) return;
+    session_->stop(Refusal::timeout);
+    session_.reset();
+    connection_ = -1;
 }
 
 }  // namespace update_link

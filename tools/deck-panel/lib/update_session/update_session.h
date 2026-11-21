@@ -86,6 +86,8 @@ class Session {
     Reply done();
     /// Ends the update for a reason outside the frames (a cap, a timeout, a dropped link): nothing is switched.
     Reply stop(Refusal why) { return refuse(why); }
+    /// Whether the manifest checked out and image bytes are coming.
+    bool receiving_image() const { return state_ == State::image; }
 
   private:
     Reply refuse(Refusal why);

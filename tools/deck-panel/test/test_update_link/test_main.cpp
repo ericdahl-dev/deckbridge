@@ -147,6 +147,61 @@ void test_a_frame_of_an_unknown_type_is_refused() {
     expect_refused(connected_and_sent(panel, frame('X', {1})), "refused no-manifest");
 }
 
+// One update at a time: a second sender is told "busy" and closed, and the first carries on.
+void test_a_second_sender_is_refused_busy_while_one_runs() {
+    Panel panel;
+    Out out;
+    panel.link.accept(1, 0, out);
+    Out second;
+    TEST_ASSERT_FALSE(panel.link.accept(2, 5, second));
+    TEST_ASSERT_EQUAL_STRING("refused busy", second.lines[0].c_str());
+    TEST_ASSERT_TRUE(second.close);
+    const auto bytes = whole_update();
+    TEST_ASSERT_TRUE(panel.link.received(1, bytes.data(), bytes.size(), 10).reboot);
+}
+
+// A connection that sends nothing (or no manifest) is dropped quickly, so a stray one can't hold "busy".
+void test_a_connection_idle_before_its_manifest_times_out_quickly() {
+    Panel panel;
+    Out out;
+    panel.link.accept(1, 0, out);
+    TEST_ASSERT_TRUE(panel.link.tick(update_link::kIdleBeforeManifestMs - 1).lines.empty());
+    const Out late = panel.link.tick(update_link::kIdleBeforeManifestMs);
+    TEST_ASSERT_EQUAL_STRING("refused timeout", late.lines[0].c_str());
+    TEST_ASSERT_TRUE(late.close);
+    Out next;
+    TEST_ASSERT_TRUE(panel.link.accept(2, update_link::kIdleBeforeManifestMs + 1, next));
+}
+
+// Mid-image the link gets longer, but a stalled transfer still ends with nothing switched.
+void test_a_transfer_that_stalls_mid_image_times_out_and_nothing_is_switched() {
+    Panel panel;
+    auto bytes = whole_update();
+    bytes.resize(bytes.size() - 5 - 2);  // through the signature and half the image chunk
+    Out out;
+    panel.link.accept(1, 0, out);
+    panel.link.received(1, bytes.data(), bytes.size(), 100);
+    TEST_ASSERT_TRUE(panel.link.tick(100 + update_link::kIdleBeforeManifestMs).lines.empty());
+    const Out late = panel.link.tick(100 + update_link::kIdleMidImageMs);
+    TEST_ASSERT_EQUAL_STRING("refused timeout", late.lines[0].c_str());
+    TEST_ASSERT_TRUE(panel.slot.aborted);
+    TEST_ASSERT_FALSE(panel.slot.boot);
+}
+
+// The sender going away mid-image (a dropped link, power off at the Mac) leaves the old firmware.
+void test_a_connection_closed_mid_image_leaves_nothing_switched_and_frees_the_link() {
+    Panel panel;
+    auto bytes = whole_update();
+    bytes.resize(bytes.size() - 5 - 2);
+    Out out;
+    panel.link.accept(1, 0, out);
+    panel.link.received(1, bytes.data(), bytes.size(), 100);
+    panel.link.closed(1);
+    TEST_ASSERT_TRUE(panel.slot.aborted);
+    TEST_ASSERT_FALSE(panel.slot.boot);
+    TEST_ASSERT_TRUE(panel.link.accept(2, 200, out));
+}
+
 }  // namespace
 
 int main() {
@@ -157,5 +212,9 @@ int main() {
     RUN_TEST(test_an_image_chunk_over_the_cap_is_refused_and_nothing_is_written);
     RUN_TEST(test_a_signature_frame_that_is_not_64_bytes_is_refused);
     RUN_TEST(test_a_frame_of_an_unknown_type_is_refused);
+    RUN_TEST(test_a_second_sender_is_refused_busy_while_one_runs);
+    RUN_TEST(test_a_connection_idle_before_its_manifest_times_out_quickly);
+    RUN_TEST(test_a_transfer_that_stalls_mid_image_times_out_and_nothing_is_switched);
+    RUN_TEST(test_a_connection_closed_mid_image_leaves_nothing_switched_and_frees_the_link);
     return UNITY_END();
 }

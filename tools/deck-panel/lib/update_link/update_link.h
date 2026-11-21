@@ -35,6 +35,10 @@ class Link {
     bool accept(int connection, uint32_t now_ms, Out& out);
     /// Bytes from `connection`, in any split.
     Out received(int connection, const uint8_t* bytes, size_t length, uint32_t now_ms);
+    /// Time passing with nothing received: ends an idle connection.
+    Out tick(uint32_t now_ms);
+    /// The connection went away.
+    void closed(int connection);
 
   private:
     void handle(const update_session::Reply& reply, Out& out);
@@ -43,6 +47,7 @@ class Link {
     update_session::Config config_;
     std::optional<update_session::Session> session_;
     int connection_ = -1;
+    uint32_t last_ms_ = 0;
     uint8_t header_[5] = {};
     size_t header_have_ = 0;
     std::vector<uint8_t> payload_;
