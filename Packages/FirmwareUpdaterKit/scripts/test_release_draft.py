@@ -48,6 +48,28 @@ class ReleaseDraft(unittest.TestCase):
             self.assertIn("VERSION", result.stderr)
             self.assertFalse(self.out.exists())
 
+    def test_the_draft_holds_the_catalog_and_exactly_the_files_it_names_with_flat_names(self):
+        self.assertEqual(self.run_script().returncode, 0)
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()),
+                         ["catalog.json", "deck-panel-1.1.0-1d0683f.bin", "wd-00.50-show-slot-16.patch"])
+        catalog = json.loads((self.out / "catalog.json").read_text())
+        self.assertIn({"version": "1.1.0", "sha": SHA, "image": "deck-panel-1.1.0-1d0683f.bin"}, catalog["panel"])
+        self.assertEqual(catalog["lc6000"][0]["entries"][0]["file"], "wd-00.50-show-slot-16.patch")
+        self.assertEqual((self.out / "deck-panel-1.1.0-1d0683f.bin").read_bytes(), self.image.read_bytes())
+
+    def test_the_builds_shipped_before_and_the_lc6000_set_are_carried(self):
+        self.assertEqual(self.run_script().returncode, 0)
+        catalog = json.loads((self.out / "catalog.json").read_text())
+        self.assertEqual([p["sha"] for p in catalog["panel"]], ["aaaaaaa", SHA])
+        self.assertEqual(catalog["panel"][0]["image"], "deck-panel-1.0.0-aaaaaaa.bin")
+        self.assertEqual([s["wd"] for s in catalog["lc6000"]], ["00.50"])
+
+    def test_the_repos_catalog_is_left_as_it_was(self):
+        before = (self.catalog / "catalog.json").read_text()
+        self.assertEqual(self.run_script().returncode, 0)
+        self.assertEqual((self.catalog / "catalog.json").read_text(), before)
+        self.assertFalse((self.catalog / "panel").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
