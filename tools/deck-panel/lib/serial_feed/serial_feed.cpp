@@ -31,8 +31,10 @@ size_t SerialFeed::next_size() {
             continue;
         }
         if (length_ < sizeof packet_) packet_[length_++] = byte;
+        else overlong_ = true;
     }
-    return length_;
+    // Too big for the drain's buffer: it skips it whole and counts it.
+    return overlong_ ? sizeof packet_ + 1 : length_;
 }
 
 size_t SerialFeed::read(uint8_t* into, size_t room) {
@@ -45,6 +47,7 @@ size_t SerialFeed::read(uint8_t* into, size_t room) {
 void SerialFeed::skip() {
     length_ = 0;
     complete_ = false;
+    overlong_ = false;
 }
 
 }  // namespace serial_feed

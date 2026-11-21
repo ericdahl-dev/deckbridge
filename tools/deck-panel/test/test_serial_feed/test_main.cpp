@@ -60,8 +60,27 @@ void test_each_shared_example_frame_comes_out_as_its_packet() {
     }
 }
 
+// A frame bigger than a datagram the drain reads is dropped whole and counted as too big, never cut and parsed; the
+// next frame still comes through.
+void test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through() {
+    FakeCable cable;
+    serial_feed::SerialFeed feed(cable);
+    std::vector<uint8_t> big(feed_drain::kMaxDatagram + 1, 0x2f);
+    big.insert(big.begin(), 0xC0);
+    big.push_back(0xC0);
+    cable.add(big);
+    cable.add({0xC0, 0x2f, 0x61, 0xC0});
+    TEST_ASSERT_TRUE(feed.next_size() > feed_drain::kMaxDatagram);
+    feed.skip();
+    const std::vector<uint8_t> got = next_packet(feed);
+    TEST_ASSERT_EQUAL(2, got.size());
+    TEST_ASSERT_EQUAL_HEX8(0x2f, got[0]);
+    TEST_ASSERT_EQUAL_HEX8(0x61, got[1]);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
+    RUN_TEST(test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through);
     return UNITY_END();
 }

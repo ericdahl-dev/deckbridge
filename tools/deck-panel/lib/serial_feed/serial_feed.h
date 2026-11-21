@@ -31,6 +31,7 @@ private:
     uint8_t packet_[feed_drain::kMaxDatagram];
     size_t length_ = 0;
     bool complete_ = false;
+    bool overlong_ = false;  ///< the frame had more than packet_ holds: the rest was dropped
     bool in_frame_ = false;
     bool escaped_ = false;
 };
