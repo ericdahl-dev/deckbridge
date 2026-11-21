@@ -30,6 +30,10 @@ public protocol DFUTransport: Sendable {
 public enum DFUError: Error, Equatable {
     /// The device left update mode during the read.
     case left
+    /// The chip didn't take the read address (read protection, or an address it doesn't have).
+    case addressRefused
+    /// A block came back shorter than asked.
+    case shortBlock
 }
 
 /// Reads a chip's flash in update mode. It has no way to erase or write: the only download it sends is DfuSe's
@@ -51,8 +55,7 @@ public struct DFUReader: Sendable {
         let a = address
         _ = try await control(DFURequest(requestType: 0x21, request: Self.dnload, value: 0, index: interface,
                                          data: [0x21, UInt8(a & 0xFF), UInt8(a >> 8 & 0xFF), UInt8(a >> 16 & 0xFF), UInt8(a >> 24)]))
-        _ = try await status()
-        _ = try await status()
+        try await waitForSetAddress()
         try await abort()
         var bytes: [UInt8] = []
         bytes.reserveCapacity(length)
@@ -62,6 +65,7 @@ public struct DFUReader: Sendable {
             let got = try await control(DFURequest(requestType: 0xA1, request: Self.upload, value: block, index: interface,
                                                    length: UInt16(transferSize)))
             if got.isEmpty { throw DFUError.left }
+            if got.count < want { throw DFUError.shortBlock }
             bytes += got.prefix(want)
             block += 1
         }
@@ -71,7 +75,7 @@ public struct DFUReader: Sendable {
 
     // DFU 1.1 requests.
     static let dnload: UInt8 = 1, upload: UInt8 = 2, getStatus: UInt8 = 3, clrStatus: UInt8 = 4, abortRequest: UInt8 = 6
-    static let stateIdle: UInt8 = 2, stateError: UInt8 = 10
+    static let stateIdle: UInt8 = 2, stateDownloadBusy: UInt8 = 4, stateError: UInt8 = 10
 
     /// As dfu-util starts: an error state is cleared, any other non-idle state aborted.
     private func toIdle() async throws {
@@ -84,10 +88,26 @@ public struct DFUReader: Sendable {
     }
 
     /// GETSTATUS; the state byte.
-    private func status() async throws -> UInt8 {
+    private func status() async throws -> UInt8 { try await statusAnswer()[4] }
+
+    /// GETSTATUS's six bytes: status, poll timeout (3 bytes, ms), state, string index.
+    private func statusAnswer() async throws -> [UInt8] {
         let answer = try await control(DFURequest(requestType: 0xA1, request: Self.getStatus, value: 0, index: interface, length: 6))
         guard answer.count == 6 else { throw DFUError.left }
-        return answer[4]
+        return answer
+    }
+
+    /// As dfu-util's dfuse_special_command: poll, waiting the chip's poll timeout, while it's busy; any error status or
+    /// dfuERROR means it didn't take the address. A bounded wait, never a loop that retries the command.
+    private func waitForSetAddress() async throws {
+        for _ in 0..<50 {
+            let answer = try await statusAnswer()
+            if answer[0] != 0 || answer[4] == Self.stateError { throw DFUError.addressRefused }
+            if answer[4] != Self.stateDownloadBusy { return }
+            let ms = UInt64(answer[1]) | UInt64(answer[2]) << 8 | UInt64(answer[3]) << 16
+            try? await Task.sleep(for: .milliseconds(ms))
+        }
+        throw DFUError.addressRefused
     }
 
     private func abort() async throws {
@@ -104,6 +124,8 @@ extension DFUError {
     public var reason: String {
         switch self {
         case .left: "The unit left update mode during the read. Nothing was saved."
+        case .addressRefused: "The chip refused the read, so nothing was read. It may be read-protected."
+        case .shortBlock: "The chip sent less than asked during the read. Nothing was saved."
         }
     }
 }

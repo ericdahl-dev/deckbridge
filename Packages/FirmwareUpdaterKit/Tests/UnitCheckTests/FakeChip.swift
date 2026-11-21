@@ -12,6 +12,11 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
     var leavesAfterUploads: Int?
     /// From this many UPLOADs on, every block's first byte reads flipped: a flaky read (nil: never).
     var flipsAfterUploads: Int?
+    /// Refuses a set-address, as a read-protected chip or a bad address does: errTARGET, then dfuERROR.
+    var refusesSetAddress = false
+    /// Answers the block at this upload count short by one byte (nil: never).
+    var shortAtUpload: Int?
+    private var refused = false
     private var uploads = 0
     private var state: UInt8 = 2 // dfuIDLE
     private var pointer: UInt32
@@ -41,12 +46,15 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
             if let after = leavesAfterUploads, uploads >= after { throw DFUError.left }
             switch (r.requestType, r.request) {
             case (0x21, 1): // DNLOAD
+                if refusesSetAddress { refused = true; state = 4; busy = true; return [] }
                 if r.value == 0, r.data.count == 5, r.data[0] == 0x21 {
                     pointer = UInt32(r.data[1]) | UInt32(r.data[2]) << 8 | UInt32(r.data[3]) << 16 | UInt32(r.data[4]) << 24
                 }
                 state = 4; busy = true // dfuDNBUSY until the next GETSTATUS
                 return []
             case (0xA1, 3): // GETSTATUS
+                if busy, refused { busy = false; state = 10; return [0, 0, 0, 0, 4, 0] }
+                if refused { return [0x01, 0, 0, 0, 10, 0] } // errTARGET, dfuERROR
                 if busy { busy = false; let s = state; state = 5; return [0, 0, 0, 0, s, 0] }
                 return [0, 0, 0, 0, state, 0]
             case (0x21, 4): state = 2; return [] // CLRSTATUS
@@ -60,6 +68,7 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
                 let end = min(start + Int(r.length), flash.count)
                 var block = start < end ? Array(flash[start..<end]) : []
                 if let after = flipsAfterUploads, uploads > after, !block.isEmpty { block[0] ^= 0xFF }
+                if let at = shortAtUpload, uploads == at, !block.isEmpty { block.removeLast() }
                 return block
             default:
                 return []

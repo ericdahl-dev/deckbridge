@@ -37,3 +37,27 @@ struct LeavesMidReadTests {
         #expect(DFUError.left.reason == "The unit left update mode during the read. Nothing was saved.")
     }
 }
+
+@Suite("Unit check: a chip that won't be read")
+struct ChipRefusesTests {
+    @Test("A chip that refuses the read address: a plain reason, and no block is read")
+    func setAddressRefused() async {
+        let chip = FakeChip(size: 0x10_0000)
+        chip.refusesSetAddress = true
+        await #expect(throws: DFUError.addressRefused) {
+            try await ChipRead.read(.display, from: DFUReader(transport: chip))
+        }
+        #expect(!chip.log.contains { $0.requestType == 0xA1 && $0.request == 2 })
+        #expect(DFUError.addressRefused.reason == "The chip refused the read, so nothing was read. It may be read-protected.")
+    }
+
+    @Test("A block shorter than asked: the read stops, nothing is saved")
+    func shortBlock() async {
+        let chip = FakeChip(size: 0x10_0000)
+        chip.shortAtUpload = 5
+        await #expect(throws: DFUError.shortBlock) {
+            try await ChipRead.read(.display, from: DFUReader(transport: chip))
+        }
+        #expect(DFUError.shortBlock.reason == "The chip sent less than asked during the read. Nothing was saved.")
+    }
+}
