@@ -30,7 +30,7 @@ public enum CatalogError: Error, Equatable {
     case notOurBlock(String)
     /// A panel entry (named by its version) with a bootloader and no partition table, or the other way round.
     case missingBootPart(String)
-    /// Not an ESP32 image that fits below the partition table at 0x8000.
+    /// Not an ESP32 image for 16 MB of flash that fits below the partition table at 0x8000.
     case notABootloader(String)
     /// Not a 3,072-byte partition table whose MD5 row matches its rows, as gen_esp32part.py writes it.
     case notAPartitionTable(String)
@@ -85,7 +85,11 @@ public struct Catalog: Sendable {
         case (let bootloader?, let partitions?):
             let loader = directory.appending(path: bootloader), table = directory.appending(path: partitions)
             let loaderBytes = [UInt8](try Data(contentsOf: loader))
-            guard loaderBytes.first == 0xE9, loaderBytes.count <= 0x8000 else { throw CatalogError.notABootloader(bootloader) }
+            // Its header's flash size (byte 3, high nibble; esptool's FLASH_SIZES) must be 16 MB, the size the panel's
+            // partition table needs, or the panel won't boot.
+            guard loaderBytes.count >= 4, loaderBytes.count <= 0x8000, loaderBytes[0] == 0xE9, loaderBytes[3] >> 4 == 0x4 else {
+                throw CatalogError.notABootloader(bootloader)
+            }
             guard isPartitionTable([UInt8](try Data(contentsOf: table))) else { throw CatalogError.notAPartitionTable(partitions) }
             return BootParts(bootloader: loader, partitions: table)
         default: throw CatalogError.missingBootPart(entry.version)
