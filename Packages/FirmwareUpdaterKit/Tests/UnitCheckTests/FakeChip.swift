@@ -17,6 +17,12 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
     private var pointer: UInt32
     private var busy = false
 
+    init(base: UInt32 = 0x0800_0000, flash: [UInt8]) {
+        self.base = base
+        pointer = base
+        self.flash = flash
+    }
+
     init(base: UInt32 = 0x0800_0000, size: Int, seed: UInt64 = 0x5EED) {
         self.base = base
         pointer = base

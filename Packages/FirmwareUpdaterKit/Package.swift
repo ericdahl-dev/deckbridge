@@ -28,7 +28,7 @@ let package = Package(
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel"]),
         // The LC6000 unit check and backup (#692): reads a chip in ST's update mode (DFU) and writes nothing to it. A
         // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
-        .target(name: "UnitCheck", dependencies: ["FirmwareModel"]),
-        .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel"]),
+        .target(name: "UnitCheck", dependencies: ["FirmwareModel", "DeviceFinder"]),
+        .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel", "DeviceFinder"]),
     ]
 )

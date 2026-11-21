@@ -19,6 +19,12 @@ extension BackupError {
 public enum Backup {
     /// The files, named by chip and `stamp` only: no serial number.
     public static func make(_ kind: ChipKind, reader: DFUReader, into folder: URL, stamp: String) async throws -> [URL] {
+        try await reading(kind, reader: reader, into: folder, stamp: stamp).files
+    }
+
+    /// The backup and the read it saved.
+    static func reading(_ kind: ChipKind, reader: DFUReader, into folder: URL, stamp: String) async throws
+        -> (read: ChipRead, files: [URL]) {
         if insideARepo(folder) { throw BackupError.insideARepo }
         let first = try await ChipRead.read(kind, from: reader)
         let second = try await ChipRead.read(kind, from: reader)
@@ -29,7 +35,7 @@ public enum Backup {
             (folder.appendingPathComponent("lc6000-\(chip)-app-\(stamp).bin"), first.app),
         ]
         for (url, bytes) in files { try Data(bytes).write(to: url, options: .withoutOverwriting) }
-        return files.map(\.0)
+        return (first, files.map(\.0))
     }
 
     /// The folder or any folder above it holds `.git`.
