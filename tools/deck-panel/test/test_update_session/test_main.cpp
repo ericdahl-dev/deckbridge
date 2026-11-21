@@ -137,6 +137,36 @@ void test_an_image_matching_the_manifest_is_written_and_set_to_boot() {
     TEST_ASSERT_TRUE(panel.slot.boot);
 }
 
+void expect_mismatch(Panel& panel, const Reply& reply) {
+    TEST_ASSERT_EQUAL(static_cast<int>(Refusal::mismatch), static_cast<int>(reply.refusal));
+    TEST_ASSERT_TRUE(panel.slot.aborted);
+    TEST_ASSERT_FALSE(panel.slot.boot);
+}
+
+void test_an_altered_image_is_refused_and_never_booted() {
+    Panel panel;
+    panel.send_manifest(manifest_text(), 0x11);
+    const uint8_t altered[] = {1, 2, 3, 5};
+    panel.session.chunk(altered, 4);
+    expect_mismatch(panel, panel.session.done());
+}
+
+void test_an_image_cut_short_is_refused_and_never_booted() {
+    Panel panel;
+    panel.send_manifest(manifest_text(), 0x11);
+    panel.session.chunk(kImage, 3);
+    expect_mismatch(panel, panel.session.done());
+}
+
+void test_an_image_longer_than_the_manifest_says_is_refused_at_the_first_extra_byte() {
+    Panel panel;
+    panel.send_manifest(manifest_text(), 0x11);
+    panel.session.chunk(kImage, 4);
+    const uint8_t extra = 0;
+    expect_mismatch(panel, panel.session.chunk(&extra, 1));
+    TEST_ASSERT_EQUAL(4, panel.slot.written.size());
+}
+
 }  // namespace
 
 int main() {
@@ -149,5 +179,8 @@ int main() {
     RUN_TEST(test_done_or_a_signature_before_a_manifest_is_refused);
     RUN_TEST(test_image_bytes_after_a_refused_manifest_are_refused_too);
     RUN_TEST(test_an_image_matching_the_manifest_is_written_and_set_to_boot);
+    RUN_TEST(test_an_altered_image_is_refused_and_never_booted);
+    RUN_TEST(test_an_image_cut_short_is_refused_and_never_booted);
+    RUN_TEST(test_an_image_longer_than_the_manifest_says_is_refused_at_the_first_extra_byte);
     return UNITY_END();
 }

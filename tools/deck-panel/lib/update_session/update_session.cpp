@@ -5,6 +5,8 @@
 namespace update_session {
 
 Reply Session::refuse(Refusal why) {
+    // Anything written so far is dropped: the running firmware stays the one that boots.
+    if (state_ == State::image) config_.slot->abort();
     state_ = State::over;
     Reply reply;
     reply.kind = Reply::refused;
@@ -40,6 +42,7 @@ Reply Session::signature(const uint8_t* bytes, size_t length) {
 
 Reply Session::chunk(const uint8_t* bytes, size_t length) {
     if (state_ != State::image) return refuse(Refusal::no_manifest);
+    if (length > parsed_.image.size - received_) return refuse(Refusal::mismatch);
     if (!config_.slot->write(bytes, length)) return refuse(Refusal::slot_error);
     config_.hasher->update(bytes, length);
     received_ += static_cast<uint32_t>(length);
@@ -53,7 +56,7 @@ Reply Session::done() {
     if (state_ != State::image) return refuse(Refusal::no_manifest);
     uint8_t hash[32];
     config_.hasher->finish(hash);
-    (void)hash;
+    if (received_ != parsed_.image.size || std::memcmp(hash, parsed_.image.sha256, 32) != 0) return refuse(Refusal::mismatch);
     if (!config_.slot->end() || !config_.slot->set_boot()) return refuse(Refusal::slot_error);
     state_ = State::over;
     Reply reply;
