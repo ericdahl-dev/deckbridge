@@ -104,9 +104,11 @@ void test_past_an_hour_times_show_hours() {
     TEST_ASSERT_EQUAL_STRING("-1:00:00", deck_core::face(v).remaining);
 }
 
+// No known length: DeckBridge sends remaining 0 and progress 0 (it can't place the position without the length).
 void test_with_no_known_length_remaining_is_blank() {
     DeckView v = loaded_deck();
     v.remaining = 0;
+    v.progress = 0;
     TEST_ASSERT_EQUAL_STRING("", deck_core::face(v).remaining);
     TEST_ASSERT_EQUAL_STRING("1:35", deck_core::face(v).elapsed);
 }
@@ -125,7 +127,8 @@ void test_the_progress_fill_is_whole_pixels_of_the_704_px_bar() {
     TEST_ASSERT_EQUAL(1, deck_core::face(v).progress_px);
 }
 
-// The warning: the last 30 seconds, as DJ players flash it, the bar in red. Not with no known length (remaining 0).
+// The warning: the last 30 seconds, as DJ players flash it, the bar in red. Not with no known length (remaining and
+// progress 0); at the end it stays (#682, below).
 void test_the_bar_turns_red_in_the_last_30_seconds() {
     TEST_ASSERT_EQUAL(30, deck_core::kEndWarningSeconds);
     DeckView v = loaded_deck();
@@ -136,6 +139,7 @@ void test_the_bar_turns_red_in_the_last_30_seconds() {
     v.remaining = 1;
     TEST_ASSERT_EQUAL_HEX32(0xFF3B30, deck_core::face(v).progress_color);
     v.remaining = 0;
+    v.progress = 0;
     TEST_ASSERT_EQUAL_HEX32(0xE0E0E0, deck_core::face(v).progress_color);
 }
 
@@ -225,6 +229,42 @@ void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     TEST_ASSERT_EQUAL(0, deck_core::face(v).level_px);
 }
 
+
+// #682: a loaded track at its end shows -0:00 and the bar stays red, as the LC6000 does. At the end is remaining 0
+// with progress above 0: DeckBridge sends progress 0 whenever it doesn't know the length, so this zero is a known
+// length with nothing left, never "not told yet".
+void test_a_loaded_track_at_its_end_shows_minus_0_00_and_a_red_bar() {
+    DeckView v = loaded_deck();
+    v.elapsed = 390;
+    v.remaining = 0;
+    v.progress = 1;
+    Face f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_STRING("-0:00", f.remaining);
+    TEST_ASSERT_EQUAL_HEX32(0xFF3B30, f.progress_color);
+    // The last fraction of a second, still playing: already 0 in whole seconds, so the red never blinks off.
+    v.elapsed = 389;
+    v.progress = 0.999f;
+    f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_STRING("-0:00", f.remaining);
+    TEST_ASSERT_EQUAL_HEX32(0xFF3B30, f.progress_color);
+}
+
+
+// #682: just loaded, no times told yet (everything 0), and no track at all: no remaining time and no red bar.
+void test_not_told_yet_or_no_track_is_no_end() {
+    DeckView v = loaded_deck();
+    v.elapsed = v.remaining = 0;
+    v.progress = 0;
+    Face f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_STRING("", f.remaining);
+    TEST_ASSERT_EQUAL_HEX32(0xE0E0E0, f.progress_color);
+    v.loaded = false;
+    v.progress = 1;  // whatever else came, an empty deck is never at an end
+    f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_STRING("", f.remaining);
+    TEST_ASSERT_EQUAL_HEX32(0xE0E0E0, f.progress_color);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_an_empty_deck_shows_no_track_loaded_and_nothing_else);
@@ -236,6 +276,8 @@ int main(int, char**) {
     RUN_TEST(test_with_no_known_length_remaining_is_blank);
     RUN_TEST(test_the_progress_fill_is_whole_pixels_of_the_704_px_bar);
     RUN_TEST(test_the_bar_turns_red_in_the_last_30_seconds);
+    RUN_TEST(test_a_loaded_track_at_its_end_shows_minus_0_00_and_a_red_bar);
+    RUN_TEST(test_not_told_yet_or_no_track_is_no_end);
     RUN_TEST(test_the_beat_lights_its_block_in_the_deck_color);
     RUN_TEST(test_a_deck_without_a_color_shows_white);
     RUN_TEST(test_the_lamps_light_in_their_colors);

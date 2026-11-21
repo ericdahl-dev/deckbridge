@@ -92,10 +92,12 @@ Face face(const DeckView& view) {
         }
     }
     time_text(f.elapsed, "", view.elapsed);
-    // 0 is no known length.
-    if (view.remaining > 0) time_text(f.remaining, "-", view.remaining);
+    // A known length (#682): remaining above 0, or 0 at the track's end. DeckBridge sends progress 0 whenever it
+    // doesn't know the length, so remaining 0 with progress above 0 is the end, never "not told yet".
+    const bool length_known = view.remaining > 0 || view.progress > 0;
+    if (length_known) time_text(f.remaining, "-", view.remaining);
     f.progress_px = pixels(view.progress, layout::kWidth);
-    if (view.remaining > 0 && view.remaining <= kEndWarningSeconds) f.progress_color = palette::kWarning;
+    if (length_known && view.remaining <= kEndWarningSeconds) f.progress_color = palette::kWarning;
     if (view.beat >= 1 && view.beat <= 4) f.beat_color[view.beat - 1] = f.deck_color;
     const bool lit[kLamps] = {view.playing, view.cue, view.sync, view.master, view.loop};
     for (int i = 0; i < kLamps; ++i) {
