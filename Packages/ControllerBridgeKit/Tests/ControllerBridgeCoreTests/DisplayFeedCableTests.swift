@@ -135,4 +135,18 @@ struct DisplayFeedCableTests {
         for step in 1...300 { rig.clock.now = Double(step) * 0.01; session.tick() }
         #expect(cable.sent == [])
     }
+
+    @Test("In the Debug trace, the cable's lines say they are the cable's")
+    func traceSaysCable() throws {
+        let (rig, _, _) = try Self.realRig()
+        let lines = TraceCoordinatorTests.Lines()
+        rig.coordinator.trace = { category, text in lines.list.append((category, text)) }
+        rig.coordinator.setDisplayFeed(Self.cableOnly)
+        rig.coordinator.cableFeedReady()
+        #expect(lines.of(.displayFeed) == [
+            "cable: on, waiting for its port",
+            "cable: destination open",
+            #"cable: snapshot (destination open): deck 1, loaded 1, "Daybreak", clockBpm 0, 21 messages in 1 bundle"#,
+        ])
+    }
 }

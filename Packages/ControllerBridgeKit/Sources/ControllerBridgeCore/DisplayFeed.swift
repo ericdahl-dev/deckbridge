@@ -117,7 +117,14 @@ final class DisplayFeed {
     /// The hold's line went out for this hold.
     private var holdSaid = false
 
-    private func say(_ text: String) { trace?(.displayFeed, text) }
+    /// The USB cable's feed (#667): its trace lines start "cable: ", and it has a port, not a host and port.
+    let overTheCable: Bool
+
+    init(overTheCable: Bool = false) {
+        self.overTheCable = overTheCable
+    }
+
+    private func say(_ text: String) { trace?(.displayFeed, overTheCable ? "cable: " + text : text) }
 
     /// Where the feed's OSC goes. The app's sender is the display's own UDP destination, off the event path.
     func attach(_ sender: any OSCSender) {
@@ -212,7 +219,7 @@ final class DisplayFeed {
             sent = [:]
             open = false
             lastSnapshot = now
-            say("on: \(new.host):\(new.port), waiting for its destination")
+            say(overTheCable ? "on, waiting for its port" : "on: \(new.host):\(new.port), waiting for its destination")
         } else if !new.enabled && settings.enabled {
             say("off")
             goodbye()

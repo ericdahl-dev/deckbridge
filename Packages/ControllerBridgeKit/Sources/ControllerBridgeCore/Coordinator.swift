@@ -15,6 +15,7 @@ public final class Coordinator {
             (osc as? OSCTap)?.onTrace = trace.map { sink in { [weak self] message in self?.traceOSC(.oscOut, message, sink) } }
             for index in controllers.indices { controllers[index].bridge.trace = trace }
             displayFeed.trace = trace
+            cableFeed.trace = trace
         }
     }
     /// Streaming OSC, both ways, at most 5 a second per address in the trace.
@@ -282,7 +283,7 @@ public final class Coordinator {
     /// The deck in front, as plain OSC, for a display such as the panel. Off until the setting turns it on.
     private let displayFeed = DisplayFeed()
     /// The same feed over the USB cable (#667): a destination of its own, with its own switch and its own snapshot.
-    private let cableFeed = DisplayFeed()
+    private let cableFeed = DisplayFeed(overTheCable: true)
 
     /// Where the cable's feed goes: the app's sender for the panel's serial port.
     public func attachCableFeed(_ sender: any OSCSender) {
