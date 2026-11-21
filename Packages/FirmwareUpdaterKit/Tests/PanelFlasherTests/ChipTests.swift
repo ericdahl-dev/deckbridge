@@ -19,3 +19,14 @@ func anotherChipIsAWrongBoard(id: UInt32?, refusal: FlashError) async throws {
     await #expect(throws: refusal) { try await bootloader.checkChip() }
     #expect(await rom.mode == .app)
 }
+
+/// A command's time is wall-clock time, not a count of reads: on a noisy line every read returns at once with a stray
+/// frame, and an answer 0.3 s away must still be waited for (embedded review, #687).
+@Test func anAnswerThatTakesAWhileIsWaitedForOnANoisyLine() async throws {
+    let rom = FakeROM()
+    let bootloader = Bootloader(line: rom)
+    try await bootloader.connect()
+    await rom.setChatter(true)
+    await rom.setSecurityInfoDelay(.milliseconds(300))
+    try await bootloader.checkChip()
+}

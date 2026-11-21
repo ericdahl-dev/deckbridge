@@ -25,6 +25,13 @@ actor FakeROM: BootloaderLine {
     func setAfterReset(_ f: @escaping @Sendable () -> Void) { afterReset = f }
     /// Called after each FLASH_DATA block the chip takes, with its sequence number.
     var afterBlock: (@Sendable (UInt32) -> Void)?
+    /// A noisy line: every read that has nothing else brings a stray frame (an old SYNC answer).
+    var chatter = false
+    func setChatter(_ on: Bool) { chatter = on }
+    /// How long the chip takes to answer GET_SECURITY_INFO, in real time.
+    var securityInfoDelay: Duration = .zero
+    func setSecurityInfoDelay(_ d: Duration) { securityInfoDelay = d }
+    private var later: [(at: ContinuousClock.Instant, bytes: [UInt8])] = []
     func setAfterBlock(_ f: @escaping @Sendable (UInt32) -> Void) { afterBlock = f }
     func setAnswers(_ on: Bool) { answers = on }
     /// GET_SECURITY_INFO's chip id: 9 is an ESP32-S3 (esptool targets/esp32s3.py IMAGE_CHIP_ID). Nil: a ROM without
@@ -122,7 +129,11 @@ actor FakeROM: BootloaderLine {
         } else if op == 0x14 {
             // flags, flash_crypt_cnt, 7 key purposes, chip id, api version (esptool get_security_info, "<IBBBBBBBBII").
             if let id = chipID {
+                let before = pending
+                pending = []
                 reply(op: op, value: 0, data: [UInt8](repeating: 0, count: 12) + le(id) + le(0))
+                later.append((ContinuousClock.now + securityInfoDelay, pending))
+                pending = before
             } else {
                 reply(op: op, value: 0, data: [], status: 1, reason: 0x05)
             }
@@ -148,6 +159,10 @@ actor FakeROM: BootloaderLine {
     private func le(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(truncatingIfNeeded: v >> (8 * UInt32($0))) } }
 
     func read(timeout: Double) async throws -> [UInt8] {
+        let now = ContinuousClock.now
+        for item in later where item.at <= now { pending += item.bytes }
+        later.removeAll { $0.at <= now }
+        if pending.isEmpty && chatter { reply(op: 0x08, value: 0x2012_0707, data: []) }
         let out = pending
         pending = []
         return out

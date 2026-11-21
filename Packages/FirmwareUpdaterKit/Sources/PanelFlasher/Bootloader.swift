@@ -141,7 +141,7 @@ public actor Bootloader {
             // Erasing takes the ROM a while: esptool allows 30 s per MB (ERASE_REGION_TIMEOUT_PER_MB).
             _ = try await command(.flashBegin, data: Packet.le32(UInt32(padded.count)) + Packet.le32(UInt32(blocks))
                                   + Packet.le32(UInt32(Self.blockSize)) + Packet.le32(offset) + Packet.le32(0),
-                                  timeout: max(3, 30 * Double(padded.count) / 1_048_576))
+                                  timeout: max(3, 30 * Double(padded.count) / 1_000_000))
             for seq in 0..<blocks {
                 var block = Array(padded[(seq * Self.blockSize)..<min(padded.count, (seq + 1) * Self.blockSize)])
                 block += [UInt8](repeating: 0xFF, count: Self.blockSize - block.count)
@@ -243,7 +243,7 @@ public actor Bootloader {
     /// esptool allows 8 s per MB (MD5_TIMEOUT_PER_MB).
     private func flashMD5(at offset: UInt32, size: Int) async throws -> String {
         let answer = try await command(.flashMD5, data: Packet.le32(offset) + Packet.le32(UInt32(size)) + Packet.le32(0)
-                                       + Packet.le32(0), dataLength: 32, timeout: max(3, 8 * Double(size) / 1_048_576))
+                                       + Packet.le32(0), dataLength: 32, timeout: max(3, 8 * Double(size) / 1_000_000))
         return String(decoding: answer.data, as: UTF8.self).lowercased()
     }
 
@@ -279,9 +279,12 @@ public actor Bootloader {
     func command(_ op: Op, data: [UInt8], checksum: UInt32 = 0, dataLength: Int = 0, timeout: Double = 3) async throws -> Response {
         try Task.checkCancellation()
         try await line.write(Packet.command(op, data: data, checksum: checksum))
-        let reads = max(1, Int(timeout / 0.1))
-        for _ in 0..<reads {
-            for frame in reader.feed(try await line.read(timeout: 0.1)) {
+        // Wall-clock time, not a count of reads: a read returns as soon as anything arrives, stray frames included.
+        let deadline = ContinuousClock.now + .seconds(timeout)
+        while ContinuousClock.now < deadline {
+            let left = (deadline - ContinuousClock.now).components
+            let seconds = Double(left.seconds) + Double(left.attoseconds) / 1e18
+            for frame in reader.feed(try await line.read(timeout: min(0.1, max(0, seconds)))) {
                 guard let response = Packet.response(frame, dataLength: dataLength), response.op == op.rawValue else { continue }
                 guard response.ok else { throw FlashError.refused(op: op.rawValue, reason: response.error) }
                 return response
