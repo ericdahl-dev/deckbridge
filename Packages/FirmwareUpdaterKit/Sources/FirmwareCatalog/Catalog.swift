@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import FirmwareModel
 
@@ -14,6 +15,10 @@ public enum CatalogError: Error, Equatable {
     case unnamedFile(String)
     case missingBuiltIn
     case outsideFolder(String)
+    /// A block whose bytes aren't the ones its build record names: A and B from different builds.
+    case differentBuilds(String)
+    /// Block A without block B, or B without A ("a" or "b" names the one missing).
+    case missingBlock(String)
 }
 
 /// The firmware the app ships with, read from a folder holding `catalog.json` and the files it names. No network.
@@ -52,17 +57,34 @@ public struct Catalog: Sendable {
         }
     }
 
-    /// Block A and block B, when the set carries them, with the commit their build record names.
+    /// Block A and block B, when the set carries them, with the commit their build record names. Both or neither,
+    /// and each must be the very bytes the record names, so the two are from one build.
     private static func ownBlocks(in entries: [File.Entry], directory: URL) throws -> OwnBlocks? {
         let blocks = entries.filter { $0.kind == .block }
-        guard let a = blocks.first(where: { $0.part == "a" }), let b = blocks.first(where: { $0.part == "b" }),
-              let recordName = a.record else { return nil }
+        if blocks.isEmpty { return nil }
+        guard let a = blocks.first(where: { $0.part == "a" }) else { throw CatalogError.missingBlock("a") }
+        guard let b = blocks.first(where: { $0.part == "b" }) else { throw CatalogError.missingBlock("b") }
+        guard let recordName = a.record, b.record == recordName else { throw CatalogError.differentBuilds(b.file) }
         let record = try JSONDecoder().decode(BuildRecord.self, from: Data(contentsOf: directory.appending(path: recordName)))
+        for (entry, named) in [(a, record.block_a), (b, record.block_b)] {
+            let bytes = try Data(contentsOf: directory.appending(path: entry.file))
+            guard bytes.count == named.length, sha1(bytes) == named.sha1.lowercased() else {
+                throw CatalogError.differentBuilds(entry.file)
+            }
+        }
         return OwnBlocks(a: directory.appending(path: a.file), b: directory.appending(path: b.file), commit: record.commit)
     }
 
+    private static func sha1(_ data: Data) -> String {
+        Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// What `make arm` writes beside the blocks (tools/lc6000-firmware/build_record.py): each block's sha1 and length.
     private struct BuildRecord: Decodable {
+        struct Block: Decodable { let sha1: String; let length: Int }
         let commit: String
+        let block_a: Block
+        let block_b: Block
     }
 
     /// A plain relative path inside a folder: no leading "/", no "." or ".." parts, no empty parts, no backslashes.
