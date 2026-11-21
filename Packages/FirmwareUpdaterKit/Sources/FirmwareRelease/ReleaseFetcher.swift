@@ -55,6 +55,12 @@ public struct FetchOutcome: Sendable {
     public var refusal: Refusal? = nil
     /// The lowest panel version the used release lets a panel go back to, or nil (the built-in catalog sets none).
     public var lowestAllowedPanel: FirmwareVersion? = nil
+
+    public init(catalog: Catalog, refusal: Refusal? = nil, lowestAllowedPanel: FirmwareVersion? = nil) {
+        self.catalog = catalog
+        self.refusal = refusal
+        self.lowestAllowedPanel = lowestAllowedPanel
+    }
 }
 
 public struct ReleaseFetcher: Sendable {
