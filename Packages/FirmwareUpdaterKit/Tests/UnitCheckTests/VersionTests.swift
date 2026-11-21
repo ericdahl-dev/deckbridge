@@ -62,3 +62,25 @@ struct VersionTests {
         #expect(found.backupAllowed)
     }
 }
+
+@Suite("Unit check: our firmware already there")
+struct OursTests {
+    @Test("A read that matches one of our patched images says so, with the version it was built on")
+    func oursAlreadyThere() {
+        let table = KnownFirmware(display: [0x3A7C_E2CA: "00.50"], topPanel: [:],
+                                  displayOurs: [0x3D49_8706: "00.50"], topPanelOurs: [madeUpTopPanelHash: "00.31"])
+        let display = table.identify(ChipRead(kind: .display, settings: [], app: madeUpDisplayApp()))
+        #expect(display.version == "00.50")
+        #expect(display.ours)
+        #expect(display.refusal == nil)
+        let topPanel = table.identify(ChipRead(kind: .topPanel, settings: [], app: madeUpTopPanelApp()))
+        #expect(topPanel.version == "00.31")
+        #expect(topPanel.ours)
+    }
+
+    @Test("Stock firmware isn't ours")
+    func stockIsNotOurs() {
+        let display = known.identify(ChipRead(kind: .display, settings: [], app: madeUpDisplayApp()))
+        #expect(!display.ours)
+    }
+}
