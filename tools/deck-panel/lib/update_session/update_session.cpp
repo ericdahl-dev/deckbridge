@@ -30,20 +30,36 @@ Reply Session::signature(const uint8_t* bytes, size_t length) {
     if (length != 64 || !config_.verify(key->public_key, reinterpret_cast<const uint8_t*>(manifest_.data()),
                                         manifest_.size(), bytes))
         return refuse(Refusal::bad_signature);
+    if (!config_.slot->begin(parsed_.image.size)) return refuse(Refusal::slot_error);
+    config_.hasher->start();
     state_ = State::image;
     Reply reply;
     reply.kind = Reply::ok_manifest;
     return reply;
 }
 
-Reply Session::chunk(const uint8_t*, size_t) {
+Reply Session::chunk(const uint8_t* bytes, size_t length) {
     if (state_ != State::image) return refuse(Refusal::no_manifest);
-    return {};
+    if (!config_.slot->write(bytes, length)) return refuse(Refusal::slot_error);
+    config_.hasher->update(bytes, length);
+    received_ += static_cast<uint32_t>(length);
+    Reply reply;
+    reply.kind = Reply::progress;
+    reply.bytes = received_;
+    return reply;
 }
 
 Reply Session::done() {
     if (state_ != State::image) return refuse(Refusal::no_manifest);
-    return {};
+    uint8_t hash[32];
+    config_.hasher->finish(hash);
+    (void)hash;
+    if (!config_.slot->end() || !config_.slot->set_boot()) return refuse(Refusal::slot_error);
+    state_ = State::over;
+    Reply reply;
+    reply.kind = Reply::switched;
+    reply.version = parsed_.image.version;
+    return reply;
 }
 
 }  // namespace update_session

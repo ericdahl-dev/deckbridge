@@ -93,6 +93,7 @@ class Session {
     State state_ = State::manifest;
     std::string manifest_;
     update_manifest::Manifest parsed_;
+    uint32_t received_ = 0;
 };
 
 }  // namespace update_session

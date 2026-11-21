@@ -120,6 +120,23 @@ void test_image_bytes_after_a_refused_manifest_are_refused_too() {
     TEST_ASSERT_TRUE(panel.slot.written.empty());
 }
 
+void test_an_image_matching_the_manifest_is_written_and_set_to_boot() {
+    Panel panel;
+    panel.send_manifest(manifest_text(), 0x11);
+    TEST_ASSERT_TRUE(panel.slot.begun);
+    TEST_ASSERT_EQUAL_UINT32(4, panel.slot.erased);  // only the image's own size is erased
+    const Reply first = panel.session.chunk(kImage, 3);
+    TEST_ASSERT_EQUAL(Reply::progress, first.kind);
+    TEST_ASSERT_EQUAL_UINT32(3, first.bytes);
+    TEST_ASSERT_EQUAL_UINT32(4, panel.session.chunk(kImage + 3, 1).bytes);
+    const Reply last = panel.session.done();
+    TEST_ASSERT_EQUAL(Reply::switched, last.kind);
+    TEST_ASSERT_EQUAL_STRING("1.1.0", last.version.c_str());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(kImage, panel.slot.written.data(), 4);
+    TEST_ASSERT_TRUE(panel.slot.ended);
+    TEST_ASSERT_TRUE(panel.slot.boot);
+}
+
 }  // namespace
 
 int main() {
@@ -131,5 +148,6 @@ int main() {
     RUN_TEST(test_image_bytes_before_a_signed_manifest_are_refused_and_never_written);
     RUN_TEST(test_done_or_a_signature_before_a_manifest_is_refused);
     RUN_TEST(test_image_bytes_after_a_refused_manifest_are_refused_too);
+    RUN_TEST(test_an_image_matching_the_manifest_is_written_and_set_to_boot);
     return UNITY_END();
 }
