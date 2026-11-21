@@ -16,12 +16,16 @@
 #include <lvgl.h>
 
 #include "bounce_budget.h"
+#ifdef PANEL_PERF_LOG
+#include "perf_line.h"
+#endif
 #include "scan_watch.h"
 
 #include "board_pins.h"
 
 // Initializes LVGL, brings up the panel and its two framebuffers and registers the LVGL display, with a
-// millis()-backed tick, so the caller only pumps lv_timer_handler(). Does NOT turn the backlight on.
+// millis()-backed tick. Does NOT turn the backlight on. LVGL's own refresh timer is deleted: the frame clock (#663)
+// refreshes with display_refresh(), once a frame, and lv_timer_handler() only runs LVGL's other timers.
 //
 // Returns false if the panel or its PSRAM framebuffers failed: fatal, there is nothing to draw on. Two frames at
 // 800x480x16 bpp are 1.5 MB and can't come from internal SRAM, so a build without octal PSRAM fails here.
@@ -30,7 +34,9 @@ bool display_init();
 // The LVGL display registered by display_init(), or nullptr before it runs.
 lv_display_t* display_lvgl();
 
-// What the panel did since the last call, for a performance log. Call it from LVGL's task (the loop).
+// What the panel did since the last call, for a performance log. Call it from LVGL's task (the loop). This,
+// display_take_scan() and display_take_copy() are parts of one health window (lib/panel_scan, #666): the first of
+// them called again starts the next window, so call each once a window.
 struct DisplayPerf {
     uint32_t vsyncs;          // frames the panel scanned out
     uint32_t swaps;           // frames LVGL finished and handed over
@@ -47,14 +53,43 @@ scan_watch::Report display_take_scan();
 // A bounce chunk's deadline, and (perf build only) the copies timed against it since the last call; no chunks
 // otherwise.
 uint32_t display_copy_budget_us();
-bounce_budget::Report display_take_copy();
+// Of the late copies (#663): those during display_refresh(), and of the rest those that started within 3 ms after a
+// latch (the frame turn). One or the other, never both (#666).
+struct DisplayCopyLate {
+    uint32_t drawing;
+    uint32_t turn;
+};
+bounce_budget::Report display_take_copy(DisplayCopyLate* where = nullptr);
 
 #ifdef PANEL_PERF_LOG
-// The frame ledger's boundaries (#662), perf build only: latches so far, where the panel takes the next frame's
-// buffer (frame end in bounce mode, vsync without), and the last one's time in esp_timer microseconds. Any task.
+// The loop's step, for the copy line (#663), perf build only: the bounce copy files itself under the step its
+// interrupt broke into. Loop task only.
+void display_mark(perf_line::Mark step);
+// The bounce copies since the last call, by eighth of the scan-out after the latch and by loop step.
+perf_line::CopySpread display_take_copy_spread();
+// A print of `bytes` went to Serial: copies while the UART drains it are counted apart. Loop task only.
+void display_note_print(uint32_t bytes);
+#endif
+
+// Latches so far, where the panel takes the next frame's buffer (frame end in bounce mode, vsync without), and the
+// last one's time in esp_timer microseconds (low 32 bits). The frame clock's boundary (#663) and the frame ledger's
+// (#662). Any task.
 struct DisplayLatch {
     uint32_t count;
     uint32_t us;
 };
 DisplayLatch display_latch();
-#endif
+
+// The frame clock's wait (#663), loop task only: blocks until a latch newer than the one current on entry and the
+// vsync after it (about 1.9 ms later in bounce mode; without bounce buffers they're one interrupt), and
+// returns the newest (several since the last call count as one), or false after `timeout_ms` with none. A latch
+// left over from before the call never ends it, so a frame always starts just after a latch, and a swap handed over
+// before the call is always released by the latch that ends it.
+bool display_wait_latch(uint32_t timeout_ms, DisplayLatch& latch);
+
+// One LVGL refresh, loop task only: draws what's invalid and hands the frame to the panel, without waiting for its
+// release (the next frame's first wait collects that). Nothing invalid: no flush, and LVGL's REFR_READY still comes.
+void display_refresh();
+
+// One scan-out, from the pixel clock and porches.
+uint32_t display_frame_us();

@@ -171,12 +171,18 @@ void DeckScreen::build() {
     lv_obj_add_flag(logo_, LV_OBJ_FLAG_HIDDEN);
     headline_ = label(waiting_page_, waiting_w, &geist_semibold_36, lv_color_white(), LV_TEXT_ALIGN_CENTER, 2);
     detail_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_CENTER, 3);
+    // The firmware's version and SHA (#695): floating, bottom right, vertically centered in the bottom margin, so the
+    // column keeps its 400 px.
+    build_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_RIGHT, 1);
+    lv_obj_add_flag(build_, LV_OBJ_FLAG_FLOATING);
+    lv_obj_align(build_, LV_ALIGN_BOTTOM_RIGHT, 0, (kMargin + lv_font_get_line_height(&geist_regular_24)) / 2);
 }
 
 void DeckScreen::show_waiting(const deck_core::WaitingView& view, const deck_core::WaitingChanges& changes) {
     // The view is the core's and stays put until the next call: the labels point at its texts.
     if (changes.headline) lv_label_set_text_static(headline_, view.headline);
     if (changes.detail) lv_label_set_text_static(detail_, view.detail);
+    if (changes.build) lv_label_set_text_static(build_, view.build);
     if (changes.logo_small) lv_image_set_src(logo_, view.logo_small ? &deck_logo_small : &deck_logo);
     if (changes.logo) set_hidden(logo_, !view.logo);
     set_hidden(deck_page_, true);

@@ -173,7 +173,7 @@ const Row kRows[] = {
 
 }  // namespace
 
-void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms) {
+void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     static const char kBundle[8] = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0};
     bool alive = false;
     if (length >= 16 && std::memcmp(bytes, kBundle, 8) == 0) {
@@ -199,6 +199,10 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     }
     if (!alive) return;
     heard_ = true;
+    if (source == Source::cable) {
+        cable_heard_ = true;
+        last_cable_ms_ = now_ms;
+    }
     last_heard_ms_ = now_ms;
 }
 
@@ -225,6 +229,8 @@ void DeckCore::set_network(Network state, const char* ip) {
     std::snprintf(ip_, sizeof ip_, "%s", ip);
 }
 
+void DeckCore::set_build(const char* label) { std::snprintf(build_, sizeof build_, "%s", label); }
+
 void DeckCore::set_setup(const char* name, const char* password) {
     std::snprintf(setup_name_, sizeof setup_name_, "%s", name);
     std::snprintf(setup_password_, sizeof setup_password_, "%s", password);
@@ -234,8 +240,11 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
     // The time since, signed: a clock that wraps round still counts it, and a render that read the clock a moment
     // before the packet's time sees a little under 0, not 49 days.
     const int32_t since = static_cast<int32_t>(now_ms - last_heard_ms_);
-    // Off Wi-Fi the feed can't be coming: waiting at once.
-    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || network_ != Network::connected;
+    // Off Wi-Fi the feed can't be coming, unless it comes on the cable (#667): waiting at once.
+    const bool cable = cable_heard_ && static_cast<int32_t>(now_ms - last_cable_ms_) < static_cast<int32_t>(kWaitAfterMs);
+    // Stale once, forgotten: an old time would come round as recent when the clock's signed range wraps (24.8 days).
+    if (!cable) cable_heard_ = false;
+    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable);
     // Waiting holds until the next message: the old deck never comes back by itself, even when the clock comes round.
     if (waiting) heard_ = false;
     if (waiting) {
@@ -264,6 +273,7 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
 WaitingView DeckCore::waiting_view() const {
     WaitingView view;
     view.logo = true;  // every waiting screen: the logo, the reason and the address beneath (#651)
+    std::snprintf(view.build, sizeof view.build, "%s", build_);  // and the firmware's version (#695)
     switch (network_) {
         case Network::setup:
             std::snprintf(view.headline, sizeof view.headline, "Set up the panel's Wi-Fi");

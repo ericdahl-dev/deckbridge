@@ -16,14 +16,23 @@ struct Report {
     uint32_t chunks = 0;    // copies timed
     uint32_t worst_us = 0;  // the longest
     int32_t margin_us = 0;  // the budget less the longest; below 0 is an underrun
-    uint32_t late = 0;      // copies longer than the budget
+    uint32_t late = 0;      // copies longer than the budget: the margin's count
+    // Copies longer than two budgets (#663): the DMA reads the refilled buffer from one chunk after the fill starts
+    // to two, front to back as the copy writes it, so only these can leave stale pixels on the glass.
+    uint32_t past_glass = 0;
 };
 
 class Meter {
   public:
     explicit Meter(uint32_t budget_ns) : budget_ns_(budget_ns) {}
     // One chunk's copy took this long.
-    void copied(uint32_t took_us);
+    // In the header so the board's IRAM copy wrapper inlines it: no flash call per chunk (#666).
+    void copied(uint32_t took_us) {
+        ++window_.chunks;
+        if (took_us > window_.worst_us) window_.worst_us = took_us;
+        if (static_cast<uint64_t>(took_us) * 1000u > budget_ns_) ++window_.late;
+        if (static_cast<uint64_t>(took_us) * 1000u > 2ull * budget_ns_) ++window_.past_glass;
+    }
     // This window's numbers, and a new window.
     Report take();
 

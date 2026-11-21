@@ -8,12 +8,6 @@ uint32_t chunk_ns(const frame_pacing::Timing& t, uint32_t bounce_px) {
     return static_cast<uint32_t>(lines * line_clocks * 1000000000ull / t.pclk_hz);
 }
 
-void Meter::copied(uint32_t took_us) {
-    ++window_.chunks;
-    if (took_us > window_.worst_us) window_.worst_us = took_us;
-    if (static_cast<uint64_t>(took_us) * 1000u > budget_ns_) ++window_.late;
-}
-
 Report Meter::take() {
     Report r = window_;
     // Floor, so a margin of -0.5 us reads -1, never 0: an underrun never rounds to "fine".
