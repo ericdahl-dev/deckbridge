@@ -8,6 +8,7 @@
 
 #include "deck_core.h"
 #include "deck_face.h"
+#include "hold_reset.h"
 #include "json_mini.h"
 #include "osc_bytes.h"
 #include "screen_stub.h"
@@ -411,6 +412,77 @@ void test_the_waiting_screen_says_why() {
     core.render(screen, 0);
     TEST_ASSERT_EQUAL_STRING("Waiting for DeckBridge", screen.last().headline.c_str());
     TEST_ASSERT_EQUAL_STRING("192.168.1.40  port 9100", screen.last().detail.c_str());
+}
+
+// The feed over the USB cable (#667) needs no Wi-Fi: in setup mode or joining, the cable's deck shows. Wi-Fi's feed off
+// Wi-Fi is still the waiting screen at once.
+void test_the_cables_feed_shows_the_deck_off_wifi() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_setup("DeckPanel-1A2B", "abcd2345");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    const osc_bytes::Bytes deck3 = int_message(prefix + "deck", 3);
+    core.feed(deck3.data(), deck3.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(3, screen.last().deck);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1100);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    // Quiet on the cable for the usual 3 s: waiting, as for Wi-Fi.
+    core.render(screen, 1000 + deck_core::DeckCore::kWaitAfterMs);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+}
+
+// Both feeds on (#667): Wi-Fi's datagram last when Wi-Fi drops, the cable's deck still shows; it doesn't hang on which
+// of the two came last.
+void test_with_both_feeds_losing_wifi_keeps_the_cables_deck() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.feed(deck2.data(), deck2.size(), 1010, deck_core::Source::wifi);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1020);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(2, screen.last().deck);
+}
+
+// Hold-to-reset (#622) counts only on the waiting screen, as before #667: a 5 s hold on the cable's deck while Wi-Fi is
+// joining doesn't forget the network (the owner's decision). To set up Wi-Fi, turn off the cable feed or unplug, then hold.
+void test_a_hold_on_the_cables_deck_while_joining_doesnt_reset_wifi() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    wifi_setup::HoldReset hold;
+    core.set_network(deck_core::Network::joining, "");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    bool reset = false;
+    for (uint32_t now = 1000; now <= 1000 + wifi_setup::HoldReset::kHoldMs + 500; now += 100) {
+        core.feed(deck2.data(), deck2.size(), now, deck_core::Source::cable);
+        core.render(screen, now);
+        reset = hold.update(true, core.waiting(), now) || reset;
+    }
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_FALSE(reset);
+}
+
+// The cable heard once, then Wi-Fi only for longer than the clock's signed range (24.8 days): losing Wi-Fi is still the
+// waiting screen at once, the old cable time doesn't come round as recent.
+void test_a_cable_heard_long_ago_doesnt_come_round_as_recent() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    core.feed(deck2.data(), deck2.size(), 5000, deck_core::Source::wifi);
+    core.render(screen, 5000);
+    const uint32_t later = 1000u + 0x80000000u + 5u;
+    core.feed(deck2.data(), deck2.size(), later, deck_core::Source::wifi);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, later);
+    TEST_ASSERT_TRUE(screen.last().waiting);
 }
 
 // Off Wi-Fi the feed can't be coming: waiting at once, not 3 s later; back on, the next message brings the deck.
@@ -947,6 +1019,10 @@ int main(int, char**) {
     RUN_TEST(test_flags_go_off_with_0_and_phase_takes_minus_1);
     RUN_TEST(test_a_fast_field_change_is_one_redraw_and_the_same_value_none);
     RUN_TEST(test_the_waiting_screen_says_why);
+    RUN_TEST(test_the_cables_feed_shows_the_deck_off_wifi);
+    RUN_TEST(test_with_both_feeds_losing_wifi_keeps_the_cables_deck);
+    RUN_TEST(test_a_hold_on_the_cables_deck_while_joining_doesnt_reset_wifi);
+    RUN_TEST(test_a_cable_heard_long_ago_doesnt_come_round_as_recent);
     RUN_TEST(test_losing_wifi_is_the_waiting_screen_at_once);
     RUN_TEST(test_control_characters_show_as_spaces);
     RUN_TEST(test_a_render_a_moment_before_the_last_packet_still_shows_the_deck);

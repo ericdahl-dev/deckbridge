@@ -13,7 +13,7 @@ enum BridgeHost {
     static func run(
         profiles: [ControllerProfile], midi: any MIDISystem, osc: any OSCSender, log: any LogSink, status: BridgeStatus,
         diagnostics: DiagnosticsLog, jogSimulator: JogSimulatorLog, controllers: [ControllerSettings], ledsEnabled: Bool, jogDisplay: (any JogDisplayPort)?,
-        displayFeed: (any OSCSender)? = nil, events: AsyncStream<PipeEvent>
+        displayFeed: (any OSCSender)? = nil, cableFeed: (any OSCSender)? = nil, events: AsyncStream<PipeEvent>
     ) async {
         let coordinator = Coordinator(profiles: profiles, midi: midi, osc: osc, clock: SystemClock(), log: log)
         #if DEBUG
@@ -46,6 +46,8 @@ enum BridgeHost {
         coordinator.attachJogDisplay(driver)
         // The display feed (#616): off until Settings turns it on, which comes through the pipe.
         if let displayFeed { coordinator.attachDisplayFeed(displayFeed) }
+        // The same feed over the USB cable (#667): off until its own switch turns it on.
+        if let cableFeed { coordinator.attachCableFeed(cableFeed) }
         // Straight onto the saved devices, decks, layers and LEDs switch: nothing unchosen, even for a moment (#105).
         coordinator.start(controllers: controllers, ledsEnabled: ledsEnabled)
         // The demo controller (#64) runs the profile running now (an imported mapping too, #98) against an in-process
