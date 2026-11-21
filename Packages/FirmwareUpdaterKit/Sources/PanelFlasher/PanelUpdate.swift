@@ -69,7 +69,8 @@ public struct PanelUpdate: Sendable {
         } catch {
             await bootloader.release()
             await line.close()
-            return report(.failed(Self.reason(error)))
+            let reason = Self.reason(error), written = await bootloader.hasWritten
+            return report(.failed(reason == .cancelled && written ? .cancelledWhileWriting : reason))
         }
         if case .onSerial(let build) = await finder.find().panel { return report(.done(build)) }
         report(.done(nil))
@@ -116,6 +117,7 @@ extension PanelUpdate.Step {
         case .writeFailed(let address): return "Writing failed at 0x\(String(address, radix: 16, uppercase: true)). \(mayNotStart)"
         case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
         case .cancelled: return "Cancelled. The panel was restarted."
+        case .cancelledWhileWriting: return "Cancelled while writing. \(mayNotStart)"
         case .lineLost: return "The cable was lost. Plug the panel back in and try again."
         case .notAPanelImage: return "The firmware file isn't a deck panel image. Nothing was written."
         }

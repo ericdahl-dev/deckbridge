@@ -23,6 +23,9 @@ actor FakeROM: BootloaderLine {
     var afterReset: (@Sendable () -> Void)?
 
     func setAfterReset(_ f: @escaping @Sendable () -> Void) { afterReset = f }
+    /// Called after each FLASH_DATA block the chip takes, with its sequence number.
+    var afterBlock: (@Sendable (UInt32) -> Void)?
+    func setAfterBlock(_ f: @escaping @Sendable (UInt32) -> Void) { afterBlock = f }
     func setAnswers(_ on: Bool) { answers = on }
     /// GET_SECURITY_INFO's chip id: 9 is an ESP32-S3 (esptool targets/esp32s3.py IMAGE_CHIP_ID). Nil: a ROM without
     /// the command (the original ESP32), which refuses it as an invalid message.
@@ -110,6 +113,7 @@ actor FakeROM: BootloaderLine {
             w.next += 1
             writing = w
             reply(op: op, value: 0, data: [])
+            afterBlock?(seq)
         } else if op == 0x13 {
             // SPI_FLASH_MD5: address, size, 0, 0; the ROM answers with the MD5 as 32 lowercase hex characters.
             let bytes = flashBytes(at: word(frame, 8), count: Int(word(frame, 12)))

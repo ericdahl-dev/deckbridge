@@ -35,6 +35,8 @@ public enum FlashError: Error, Equatable {
     case portBusy
     /// The owner cancelled; the panel was reset into its app.
     case cancelled
+    /// The owner cancelled after writing began: the panel was reset, but what it boots may be half written.
+    case cancelledWhileWriting
     /// The line itself failed: the cable came out, or the port went away.
     case lineLost
     /// The image to write isn't an ESP32-S3 app image that fits app0.
@@ -124,6 +126,8 @@ public actor Bootloader {
     /// and the panel's flash, 16 MB (platformio.ini board_upload.flash_size).
     static let blockSize = 0x400, blockAttempts = 3, flashSize = UInt32(16 * 1024 * 1024)
     private var flashReady = false
+    /// Whether any FLASH_BEGIN has been sent: from then on the flash may hold a half-written region.
+    public private(set) var hasWritten = false
 
     /// Writes `image` at `offset`, as esptool's write_flash does on the ROM (no stub, no compression): SPI_ATTACH and
     /// SPI_SET_PARAMS once, then FLASH_BEGIN (which erases), then FLASH_DATA blocks padded with FF, each with the ROM's
@@ -133,6 +137,7 @@ public actor Bootloader {
             try await prepareFlash()
             let padded = image + [UInt8](repeating: 0xFF, count: (4 - image.count % 4) % 4)
             let blocks = (padded.count + Self.blockSize - 1) / Self.blockSize
+            hasWritten = true
             // Erasing takes the ROM a while: esptool allows 30 s per MB (ERASE_REGION_TIMEOUT_PER_MB).
             _ = try await command(.flashBegin, data: Packet.le32(UInt32(padded.count)) + Packet.le32(UInt32(blocks))
                                   + Packet.le32(UInt32(Self.blockSize)) + Packet.le32(offset) + Packet.le32(0),

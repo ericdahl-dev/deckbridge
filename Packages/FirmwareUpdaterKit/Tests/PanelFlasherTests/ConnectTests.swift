@@ -2,6 +2,7 @@ import Testing
 @testable import PanelFlasher
 
 final class TaskBox: @unchecked Sendable { var task: Task<Void, Error>? }
+final class FlowBox: @unchecked Sendable { var task: Task<Void, Never>? }
 
 @Test func connectingResetsThePanelIntoItsBootloaderAndSyncs() async throws {
     let rom = FakeROM()

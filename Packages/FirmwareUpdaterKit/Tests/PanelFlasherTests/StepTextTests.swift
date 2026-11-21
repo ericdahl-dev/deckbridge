@@ -24,6 +24,7 @@ func eachStepReadsPlainly(step: PanelUpdate.Step, text: String) {
     (.writeFailed(address: 0x10400), "Writing failed at 0x10400. The panel may not start: try again before unplugging it."),
     (.verifyFailed(address: 0x10000), "The written firmware didn't check out. The panel may not start: try again before unplugging it."),
     (.cancelled, "Cancelled. The panel was restarted."),
+    (.cancelledWhileWriting, "Cancelled while writing. The panel may not start: try again before unplugging it."),
     (.lineLost, "The cable was lost. Plug the panel back in and try again."),
     (.notAPanelImage, "The firmware file isn't a deck panel image. Nothing was written."),
 ])
