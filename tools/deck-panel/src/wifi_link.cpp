@@ -384,6 +384,8 @@ bool start_setup() {
     g_server.on("/", HTTP_GET, handle_page);
     g_server.addHandler(&g_save_handler);
     g_server.onNotFound(handle_page);
+    // No 1 ms sleep in handleClient() with no client: the loop's only pause is the frame clock's wait (#663).
+    g_server.enableDelay(false);
     g_server.begin();
     Serial.printf("deck panel: setup network %s up, page at http://%s/\n", g_setup_name, kSetupIp);
     start_scan();

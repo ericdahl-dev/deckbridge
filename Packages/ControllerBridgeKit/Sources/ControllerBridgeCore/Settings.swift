@@ -335,20 +335,39 @@ public enum SettingsField: Hashable, Sendable {
 }
 
 /// The display feed's setting (#616): on/off, and the display's host and port. A bad host or port is a problem only
-/// while it's on.
+/// while it's on. The USB cable (#667) has its own switch, apart from Wi-Fi's.
 public struct DisplayFeedSettings: Codable, Equatable, Sendable {
+    /// Over Wi-Fi, to `host` and `port`.
     public var enabled: Bool
     /// The display's IPv4 address or name.
     public var host: String
     public var port: Int
+    /// Over the USB cable, to the deck panel plugged into this Mac (#667). Off by default.
+    public var cable: Bool
 
     /// The panel listens on 9100 unless told otherwise.
     public static let defaultPort = 9100
 
-    public init(enabled: Bool = false, host: String = "", port: Int = DisplayFeedSettings.defaultPort) {
+    public init(enabled: Bool = false, host: String = "", port: Int = DisplayFeedSettings.defaultPort, cable: Bool = false) {
         self.enabled = enabled
         self.host = host
         self.port = port
+        self.cable = cable
+    }
+
+    private enum CodingKeys: String, CodingKey { case enabled, host, port, cable }
+
+    /// The cable's own feed (#667) as a setting of its own: on with the cable's switch. It has no host or port; the
+    /// cable's feed reads only `enabled`.
+    var overTheCable: DisplayFeedSettings { DisplayFeedSettings(enabled: cable, host: "", port: 0) }
+
+    /// A feed saved before the cable's switch (#667) loads with it off.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        host = try c.decode(String.self, forKey: .host)
+        port = try c.decode(Int.self, forKey: .port)
+        cable = try c.decodeIfPresent(Bool.self, forKey: .cable) ?? false
     }
 
     var problems: [SettingsProblem] {

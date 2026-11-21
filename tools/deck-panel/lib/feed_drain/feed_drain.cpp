@@ -17,7 +17,7 @@ int Drain::run(Socket& socket, deck_core::DeckCore& core, uint32_t now_ms, Clock
             continue;
         }
         const size_t length = socket.read(buffer_, sizeof buffer_);
-        core.feed(buffer_, length, now_ms);
+        core.feed(buffer_, length, now_ms, source_);
         ++fed;
         ++processed_;
     }

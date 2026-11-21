@@ -61,7 +61,7 @@ public struct UpdaterScreen: Sendable, Equatable {
         case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
-                            detail: "Build not read: unplug the panel and plug it back in to read it")
+                            detail: "Build not read")
         }
         guard lc6000WarningAccepted else {
             lc6000 = DeviceSection(status: "Read the warning first", warning: Self.lc6000Warning)

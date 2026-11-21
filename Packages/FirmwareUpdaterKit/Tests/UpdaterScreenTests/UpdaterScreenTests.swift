@@ -42,7 +42,7 @@ struct UpdaterScreenTests {
         #expect(screen.panel.detail == "Build 1d0683f")
     }
 
-    @Test("A panel that didn't boot while the app listened, or gave no real build: unplug and replug to read it",
+    @Test("A panel that didn't boot while the app listened, or gave no real build: build not read, and no unplug advice (#699 owner run: a replug is not seen)",
           arguments: [
               [],
               ["deck panel: waiting"],
@@ -55,7 +55,7 @@ struct UpdaterScreenTests {
         Self.panel(rig, printing: lines)
         let screen = await rig.screen()
         #expect(screen.panel.status == "Deck panel found")
-        #expect(screen.panel.detail == "Build not read: unplug the panel and plug it back in to read it")
+        #expect(screen.panel.detail == "Build not read")
     }
 
     @Test("A development build (uncommitted changes, tools/deck-panel/git_sha.py) shows as one, SHA as printed")
@@ -129,7 +129,7 @@ struct UpdaterScreenTests {
         let rig = Rig()
         Self.panel(rig, printing: [])
         let screen = await rig.screen()
-        #expect(screen.panel.detail == "Build not read: unplug the panel and plug it back in to read it")
+        #expect(screen.panel.detail == "Build not read")
         #expect(rig.serial.bauds == [921_600, 115_200])
         #expect(rig.serial.opened == [Self.port, Self.port])
     }
