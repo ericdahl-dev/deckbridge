@@ -98,10 +98,30 @@ void test_text_between_frames_goes_to_the_text_reader() {
     TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
 }
 
+// A lost END costs at most the frame it belonged to and the one after: the feed is back in step by the next frame.
+void test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame() {
+    FakeCable cable;
+    serial_feed::SerialFeed feed(cable);
+    cable.add({0x01, 0x02, 0xC0});                // the frame's opening END lost
+    cable.add({0xC0, 0x03, 0xC0});
+    std::vector<uint8_t> got = next_packet(feed);
+    TEST_ASSERT_EQUAL(1, got.size());
+    TEST_ASSERT_EQUAL_HEX8(0x03, got[0]);
+    cable.add({0xC0, 0x04});                      // the frame's closing END lost
+    cable.add({0xC0, 0x05, 0xC0});
+    cable.add({0xC0, 0x06, 0xC0});
+    std::vector<std::vector<uint8_t>> rest;
+    for (got = next_packet(feed); !got.empty(); got = next_packet(feed)) rest.push_back(got);
+    TEST_ASSERT_TRUE(rest.size() >= 1);
+    TEST_ASSERT_EQUAL(1, rest.back().size());
+    TEST_ASSERT_EQUAL_HEX8(0x06, rest.back()[0]);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
     RUN_TEST(test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through);
     RUN_TEST(test_text_between_frames_goes_to_the_text_reader);
+    RUN_TEST(test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame);
     return UNITY_END();
 }
