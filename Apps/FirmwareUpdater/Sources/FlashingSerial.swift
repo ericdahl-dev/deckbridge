@@ -58,20 +58,27 @@ actor FlashingSerial: BootloaderLine {
         guard ioctl(fd, TIOCMSET, &bits) == 0 else { throw FlashError.lineLost }
     }
 
+    /// A write that can't finish in this long is a lost line: the largest frame (a 1 KB block, escaped) takes about
+    /// 25 ms at 921600 and 200 ms at 115200.
+    private static let writeDeadline = Duration.seconds(2)
+
     func write(_ bytes: [UInt8]) async throws {
+        let deadline = ContinuousClock.now + Self.writeDeadline
         var sent = 0
         while sent < bytes.count {
+            guard ContinuousClock.now < deadline else { throw FlashError.lineLost }
             let count = bytes[sent...].withUnsafeBufferPointer { Darwin.write(fd, $0.baseAddress, $0.count) }
             if count > 0 {
                 sent += count
-            } else if errno == EAGAIN {
+            } else if count < 0 && errno == EAGAIN {
                 var ready = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
                 _ = poll(&ready, 1, 100)
             } else {
                 throw FlashError.lineLost
             }
         }
-        tcdrain(fd)
+        // tcdrain blocks until sent, with no timeout of its own; the bytes are already in the driver, which a
+        // stuck driver (WCH's after a re-enumeration, tools/deck-panel/README.md) would hold forever. Not called.
     }
 
     func read(timeout: Double) async throws -> [UInt8] {
@@ -82,7 +89,13 @@ actor FlashingSerial: BootloaderLine {
         var buffer = [UInt8](repeating: 0, count: 4096)
         while true {
             let count = Darwin.read(fd, &buffer, buffer.count)
-            if count > 0 { out += buffer[0..<count] } else { break }
+            if count > 0 {
+                out += buffer[0..<count]
+            } else if count < 0 && errno != EAGAIN {
+                throw FlashError.lineLost  // ENXIO after an unplug, say
+            } else {
+                break
+            }
         }
         return out
     }
@@ -92,8 +105,12 @@ actor FlashingSerial: BootloaderLine {
         guard ioctl(fd, Self.iossioSpeed, &speed) == 0 else { throw FlashError.lineLost }
     }
 
+    /// The whole time even when the task is cancelled (BootloaderLine.pause): not Task.sleep, which returns at once
+    /// then and would cut the reset pulse to a millisecond.
     func pause(_ seconds: Double) async {
-        try? await Task.sleep(for: .seconds(seconds))
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { done.resume() }
+        }
     }
 
     func close() async {

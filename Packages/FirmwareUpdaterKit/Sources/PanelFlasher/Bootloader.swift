@@ -9,6 +9,8 @@ public protocol BootloaderLine: Sendable {
     /// Whatever arrived within `timeout` seconds.
     func read(timeout: Double) async throws -> [UInt8]
     func setSpeed(_ baud: Int) async throws
+    /// Waits `seconds`, the whole time even in a cancelled task: the reset pulse that leaves the panel running is
+    /// timed with it, and cutting it short can leave the chip in its bootloader (embedded review, #687).
     func pause(_ seconds: Double) async
     /// Closes the port. The line is unusable after.
     func close() async
