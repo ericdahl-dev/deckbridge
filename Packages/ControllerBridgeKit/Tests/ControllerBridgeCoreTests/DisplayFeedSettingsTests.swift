@@ -28,6 +28,31 @@ struct DisplayFeedSettingsTests {
         #expect(BridgeSettings.load(from: store, defaults: SettingsTests.defaults).displayFeed == DisplayFeedSettings())
     }
 
+    @Test("The USB cable has its own switch, off by default; a display feed saved before it loads with it off (#667)")
+    func cableSwitch() throws {
+        #expect(SettingsTests.defaults.displayFeed.cable == false)
+        let store = Store()
+        var changed = SettingsTests.defaults
+        changed.displayFeed.cable = true
+        try changed.save(to: store)
+        #expect(BridgeSettings.load(from: store, defaults: SettingsTests.defaults).displayFeed.cable == true)
+
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true,
+             "displayFeed":{"enabled":true,"host":"192.168.1.40","port":9200}}
+            """#.utf8)
+        let old = BridgeSettings.load(from: store, defaults: SettingsTests.defaults).displayFeed
+        #expect(old == DisplayFeedSettings(enabled: true, host: "192.168.1.40", port: 9200, cable: false))
+    }
+
+    @Test("The cable on with Wi-Fi off and no host is no problem (#667)")
+    func cableNeedsNoHost() {
+        var settings = SettingsTests.defaults
+        settings.displayFeed = DisplayFeedSettings(enabled: false, host: "", port: 9100, cable: true)
+        #expect(settings.problems.isEmpty)
+    }
+
     @Test("While on, a bad host or port is a problem under its field; while off, it isn't")
     func problemsOnlyWhileOn() {
         var settings = SettingsTests.defaults

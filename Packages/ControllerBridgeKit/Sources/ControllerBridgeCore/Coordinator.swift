@@ -15,6 +15,7 @@ public final class Coordinator {
             (osc as? OSCTap)?.onTrace = trace.map { sink in { [weak self] message in self?.traceOSC(.oscOut, message, sink) } }
             for index in controllers.indices { controllers[index].bridge.trace = trace }
             displayFeed.trace = trace
+            cableFeed.trace = trace
         }
     }
     /// Streaming OSC, both ways, at most 5 a second per address in the trace.
@@ -281,6 +282,20 @@ public final class Coordinator {
 
     /// The deck in front, as plain OSC, for a display such as the panel. Off until the setting turns it on.
     private let displayFeed = DisplayFeed()
+    /// The same feed over the USB cable (#667): a destination of its own, with its own switch and its own snapshot.
+    private let cableFeed = DisplayFeed(overTheCable: true)
+
+    /// Where the cable's feed goes: the app's sender for the panel's serial port.
+    public func attachCableFeed(_ sender: any OSCSender) {
+        cableFeed.attach(sender)
+        updateDisplayFeed()
+    }
+
+    /// The panel's serial port opened (plugged in, or the switch turned on): the full snapshot on the cable.
+    public func cableFeedReady() {
+        cableFeed.resend(at: clock.now)
+        updateDisplayFeed()
+    }
 
     /// Where the display feed goes: the app's UDP destination for the display.
     public func attachDisplayFeed(_ sender: any OSCSender) {
@@ -291,6 +306,7 @@ public final class Coordinator {
     /// Settings' display feed: on sends the deck in front at once.
     public func setDisplayFeed(_ settings: DisplayFeedSettings) {
         displayFeed.set(settings, at: clock.now)
+        cableFeed.set(settings.overTheCable, at: clock.now)
         status.requiredSubscriptions = requiredSubscriptions
         updateDisplayFeed()
     }
@@ -298,21 +314,27 @@ public final class Coordinator {
     /// Takes the display feed and its setting from the real Coordinator, for the demo's while it runs (#625). The
     /// destination is already open, so the first snapshot goes out once the demo's deck is known.
     public func takeDisplayFeed(from real: Coordinator) {
-        guard let (sender, settings, greeted) = real.displayFeed.release() else { return }
-        displayFeed.attach(sender)
-        displayFeed.carryGreeting(greeted)
-        displayFeed.set(settings, at: clock.now)
+        for (mine, theirs) in [(displayFeed, real.displayFeed), (cableFeed, real.cableFeed)] {
+            guard let (sender, settings, greeted) = theirs.release() else { continue }
+            mine.attach(sender)
+            mine.carryGreeting(greeted)
+            mine.set(settings, at: clock.now)
+            mine.resend(at: clock.now)
+        }
         status.requiredSubscriptions = requiredSubscriptions
-        displayFeedReady()
+        updateDisplayFeed()
     }
 
     /// Takes the display feed back from the demo's Coordinator when it ends (#625), with a full snapshot. Its own
     /// setting stays: a change made during the demo waited for the real Coordinator and is already applied.
     public func takeBackDisplayFeed(from demo: Coordinator) {
-        guard let (sender, _, greeted) = demo.displayFeed.release() else { return }
-        displayFeed.attach(sender)
-        displayFeed.carryGreeting(greeted)
-        displayFeedReady()
+        for (mine, theirs) in [(displayFeed, demo.displayFeed), (cableFeed, demo.cableFeed)] {
+            guard let (sender, _, greeted) = theirs.release() else { continue }
+            mine.attach(sender)
+            mine.carryGreeting(greeted)
+            mine.resend(at: clock.now)
+        }
+        updateDisplayFeed()
     }
 
     /// The display's destination opened: the full snapshot again, since what went before it was dropped.
@@ -354,14 +376,16 @@ public final class Coordinator {
     }
 
     private func updateDisplayFeed() {
-        guard displayFeed.on else { return }
+        let feeds = [displayFeed, cableFeed].filter(\.on)
+        guard !feeds.isEmpty else { return }
         let entries = jogEntries
         guard let front = JogDisplayController.front(entries, previewDeck: jogController.previewDeck) else {
-            displayFeed.update(nil, at: clock.now)
+            for feed in feeds { feed.update(nil, at: clock.now) }
             return
         }
         let facts = entries[front].facts
-        displayFeed.update(displayFeedDeck(facts), known: displayFeedKnown(facts), at: clock.now)
+        let deck = displayFeedDeck(facts), known = displayFeedKnown(facts)
+        for feed in feeds { feed.update(deck, known: known, at: clock.now) }
     }
 
     /// Syndicate has answered for the deck: its colors (unless DeckBridge's own are used) and whether it's loaded,
@@ -681,8 +705,8 @@ public final class Coordinator {
     /// The display feed's goodbye, last, and its sends flushed (#651): on quit, from whichever Coordinator holds the feed
     /// (the demo's while it runs).
     public func displayFeedGoodbye() {
-        displayFeed.goodbye()
-        displayFeed.flush()
+        for feed in [displayFeed, cableFeed] { feed.goodbye() }
+        for feed in [displayFeed, cableFeed] { feed.flush() }
     }
 
     /// The Mac is about to sleep: release everything held, since the controller may be gone on wake.
@@ -998,7 +1022,7 @@ public final class Coordinator {
         // Its phase rule reads the deck's PhaseOffset (#462): asked for only while the unit draws.
         if jogController.drawing { needed.insert(.phaseOffset) }
         // The display feed's level and phase read them too (#617).
-        if displayFeed.enabled { needed.formUnion([.mixerMeter, .phaseOffset]) }
+        if displayFeed.enabled || cableFeed.enabled { needed.formUnion([.mixerMeter, .phaseOffset]) }
         // Shift + Needle Drop's relative fader move starts from Syndicate's level (#609).
         if bridges.contains(where: { $0.stripFaderMode == .relative }) { needed.insert(.mixerVolume) }
         return Subscription.allCases.filter(needed.contains)
