@@ -6,28 +6,29 @@ import Foundation
 /// one call so the auto-reset circuit never sees one without the other, and nothing written. At the speed asked:
 /// 921600 since #667, 115200 before. A later ticket may add a version question (#695); this one only reads.
 struct ListeningSerial: PanelSerial {
-    func listen(on port: String, baud: Int, for seconds: Double) async -> [String] {
+    func listen(on port: String, baud: Int, for seconds: Double) async -> Listened {
         await Task.detached { Self.read(port, baud, seconds) }.value
     }
 
     /// IOSSIOSPEED (IOKit/serial/ioss.h, _IOW('T', 2, speed_t)): sets a speed termios has no B constant for.
     private static let ioSSIOSpeed: UInt = 0x8008_5402
 
-    private static func read(_ port: String, _ baud: Int, _ seconds: Double) -> [String] {
+    private static func read(_ port: String, _ baud: Int, _ seconds: Double) -> Listened {
         let fd = open(port, O_RDONLY | O_NOCTTY | O_NONBLOCK)
-        guard fd >= 0 else { return [] }
+        // DeckBridge holds the port with TIOCEXCL while it sends over the USB cable: the open fails busy.
+        guard fd >= 0 else { return errno == EBUSY ? .busy : .lines([]) }
         defer { close(fd) }
         var lines: Int32 = TIOCM_DTR | TIOCM_RTS
         _ = ioctl(fd, TIOCMBIC, &lines)
         var options = termios()
-        guard tcgetattr(fd, &options) == 0 else { return [] }
+        guard tcgetattr(fd, &options) == 0 else { return .lines([]) }
         cfmakeraw(&options)
         options.c_cflag |= tcflag_t(CREAD | CLOCAL)
         options.c_cflag &= ~tcflag_t(HUPCL)  // no DTR drop on close
         cfsetspeed(&options, speed_t(B115200))
-        guard tcsetattr(fd, TCSANOW, &options) == 0 else { return [] }
+        guard tcsetattr(fd, TCSANOW, &options) == 0 else { return .lines([]) }
         var speed = speed_t(baud)
-        guard ioctl(fd, ioSSIOSpeed, &speed) == 0 else { return [] }
+        guard ioctl(fd, ioSSIOSpeed, &speed) == 0 else { return .lines([]) }
 
         var text = Data()
         var buffer = [UInt8](repeating: 0, count: 1024)
@@ -36,8 +37,8 @@ struct ListeningSerial: PanelSerial {
             let count = Darwin.read(fd, &buffer, buffer.count)
             if count > 0 { text.append(contentsOf: buffer[0..<count]) } else { usleep(20_000) }
         }
-        return String(decoding: text, as: UTF8.self)
+        return .lines(String(decoding: text, as: UTF8.self)
             .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: .whitespaces) })
     }
 }

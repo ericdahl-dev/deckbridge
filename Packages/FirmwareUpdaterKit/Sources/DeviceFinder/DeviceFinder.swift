@@ -7,6 +7,8 @@ public enum PanelFound: Sendable, Equatable {
     case driverMissing
     /// On its serial port; the build is nil when its boot line wasn't seen.
     case onSerial(build: PanelBuild?)
+    /// On its serial port, but another app holds it (DeckBridge).
+    case portBusy
 }
 
 /// An LC6000 the finder saw. Its firmware isn't read here: nothing is sent to it (#692 checks the unit).
@@ -60,18 +62,34 @@ public struct DeviceFinder: Sendable {
     /// What is plugged in now. The log gets one line per device found, made only from fixed words, USB ids and the
     /// checked build: never a port path (some drivers name it after the chip's serial number) or a line the panel
     /// printed (it may carry Wi-Fi names, MAC or IP addresses).
+    /// The panel's serial port among `devices`, for the panel flasher (#687): by the finder's own chip ids.
+    public static func panelPort(in devices: [USBDevice]) -> String? { panel(in: devices)?.serialPort }
+
+    private static func panel(in devices: [USBDevice]) -> USBDevice? {
+        devices.first { $0.vendor == panelChip.vendor && $0.product == panelChip.product }
+    }
+
     public func find() async -> Found {
         let devices = await usb.devices()
         var found = Found()
-        if let chip = devices.first(where: { $0.vendor == Self.panelChip.vendor && $0.product == Self.panelChip.product }) {
+        if let chip = Self.panel(in: devices) {
             let usbID = Self.hex(chip)
             if let port = chip.serialPort {
                 var build: PanelBuild?
-                for baud in Self.panelBauds where build == nil {
-                    build = Self.build(in: await serial.listen(on: port, baud: baud, for: Self.listenSeconds))
+                var busy = false
+                for baud in Self.panelBauds where build == nil && !busy {
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds) {
+                    case .lines(let lines): build = Self.build(in: lines)
+                    case .busy: busy = true
+                    }
                 }
-                found.panel = .onSerial(build: build)
-                log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                if busy {
+                    found.panel = .portBusy
+                    log.log("deck panel: on USB \(usbID), serial port busy (another app has it)")
+                } else {
+                    found.panel = .onSerial(build: build)
+                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                }
             } else {
                 found.panel = .driverMissing
                 log.log("deck panel: on USB \(usbID), no serial port (driver missing)")

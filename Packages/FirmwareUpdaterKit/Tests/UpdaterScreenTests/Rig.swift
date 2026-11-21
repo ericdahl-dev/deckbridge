@@ -21,13 +21,16 @@ final class FakeSerial: PanelSerial, @unchecked Sendable {
     /// Every port the finder opened, and at which speed.
     var opened: [String] = []
     var bauds: [Int] = []
-    func listen(on port: String, baud: Int, for seconds: Double) async -> [String] {
+    /// Ports another app holds exclusively (DeckBridge, TIOCEXCL): opening them fails busy.
+    var busy: Set<String> = []
+    func listen(on port: String, baud: Int, for seconds: Double) async -> Listened {
         opened.append(port)
         bauds.append(baud)
+        if busy.contains(port) { return .busy }
         switch baud {
-        case 921_600: return lines[port] ?? []
-        case 115_200: return oldLines[port] ?? []
-        default: return []
+        case 921_600: return .lines(lines[port] ?? [])
+        case 115_200: return .lines(oldLines[port] ?? [])
+        default: return .lines([])
         }
     }
 }

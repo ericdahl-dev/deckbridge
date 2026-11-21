@@ -134,6 +134,19 @@ struct UpdaterScreenTests {
         #expect(rig.serial.opened == [Self.port, Self.port])
     }
 
+    @Test("DeckBridge holds the panel's port: the screen says to turn off Send over the USB cable, and nothing else is tried")
+    func portBusy() async {
+        let rig = Rig()
+        Self.panel(rig, printing: ["deck panel: boot, build 1d0683f"])
+        rig.serial.busy = [Self.port]
+        let screen = await rig.screen()
+        #expect(screen.panel.status == "Deck panel found")
+        #expect(screen.panel.detail == "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again.")
+        #expect(UpdaterScreen.portBusy == screen.panel.detail)
+        #expect(rig.serial.bauds == [921_600])
+        #expect(rig.log.text.contains("deck panel: on USB 1A86:7522, serial port busy (another app has it)"))
+    }
+
     @Test("An LC6000 on MIDI (DeckBridge's port names): found, firmware not checked yet")
     func lc6000OnMIDI() async {
         let rig = Rig()
@@ -210,5 +223,19 @@ struct UpdaterScreenTests {
         for secret in ["AB12CD34", "HomeNet", "hunter22", "24:6F:28", "AA:BB:CC", "192.168"] {
             #expect(!log.contains(secret), "log has \(secret)")
         }
+    }
+}
+
+/// For the panel flasher (#687): the panel's serial port, picked by the same chip ids the finder uses.
+@Suite("Device finder: the panel's port")
+struct PanelPortTests {
+    @Test("The CH340K's port, not another board's; nil when the panel has no port or isn't there")
+    func panelPort() {
+        let other = USBDevice(vendor: 0x0403, product: 0x6001, name: "FT232R USB UART", serialPort: "/dev/cu.usbserial-A1")
+        let panel = USBDevice(vendor: 0x1A86, product: 0x7522, name: "USB Serial", serialPort: "/dev/cu.wchusbserial210")
+        let panelNoPort = USBDevice(vendor: 0x1A86, product: 0x7522, name: "USB Serial")
+        #expect(DeviceFinder.panelPort(in: [other, panel]) == "/dev/cu.wchusbserial210")
+        #expect(DeviceFinder.panelPort(in: [other, panelNoPort]) == nil)
+        #expect(DeviceFinder.panelPort(in: [other]) == nil)
     }
 }
