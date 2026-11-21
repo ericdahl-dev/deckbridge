@@ -59,3 +59,34 @@ public struct PanelUpdate: Sendable {
         return .lineLost
     }
 }
+
+extension PanelUpdate.Step {
+    /// What the owner reads for this step: what is happening, or what went wrong and what to do.
+    public var text: String {
+        switch self {
+        case .connecting: return "Connecting to the deck panel…"
+        case .writing(let share): return "Writing the new firmware: \(Int(share * 100))%"
+        case .restarting: return "Restarting the deck panel…"
+        case .done(let build?):
+            return build.version.map { "Updated: the panel now runs \($0) (build \(build.sha))" }
+                ?? "Updated: the panel now runs build \(build.sha)"
+        case .done(nil): return "Updated. The panel's build wasn't read: unplug it and plug it back in to see it"
+        case .failed(let error): return Self.text(for: error)
+        }
+    }
+
+    static func text(for error: FlashError) -> String {
+        let mayNotStart = "The panel may not start: try again before unplugging it."
+        switch error {
+        case .portBusy:
+            return "DeckBridge is using the panel's cable. Turn off \"Send over the USB cable\" in DeckBridge, then try again."
+        case .wrongBoard(let what): return "This board isn't a deck panel (\(what)). Nothing was written."
+        case .notADeckPanel: return "This board doesn't have the deck panel's layout. Nothing was written."
+        case .noBootloader, .refused, .noAnswer: return "The panel didn't answer. Unplug it, plug it back in, and try again."
+        case .writeFailed(let address): return "Writing failed at 0x\(String(address, radix: 16, uppercase: true)). \(mayNotStart)"
+        case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
+        case .cancelled: return "Cancelled. The panel was restarted."
+        case .lineLost: return "The cable was lost. Plug the panel back in and try again."
+        }
+    }
+}
