@@ -9,6 +9,18 @@ import UnitCheck
 final class BackupModel {
     private(set) var running = false
     private(set) var result: String?
+    var typed = ""
+    private(set) var stepResult: String?
+
+    /// The display chip's step into update mode: only on the owner's typed UPDATE, once.
+    func enterUpdateMode() async {
+        let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(typed: typed)
+        typed = ""
+        switch outcome {
+        case .sent: stepResult = "Sent. The display chip restarts in update mode: give it a few seconds, then back it up. It stays in update mode until it's flashed or the LC6000 is powered off and on."
+        case .refused(let reason): stepResult = reason
+        }
+    }
 
     func backUp() async {
         guard !running else { return }
@@ -69,13 +81,21 @@ private struct Unreachable: DFUTransport {
 }
 
 struct BackupView: View {
-    let model: BackupModel
+    @Bindable var model: BackupModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Back up a chip").font(.headline)
             Text("Put one chip in update mode. Top panel chip: power the LC6000 off, then hold BACK + FWD + VINYL while you power it on.")
                 .fixedSize(horizontal: false, vertical: true)
+            Text("Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware. Type UPDATE to send it.")
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                TextField("Type UPDATE", text: $model.typed).frame(maxWidth: 140)
+                Button("Send the update-mode message") { Task { await model.enterUpdateMode() } }
+                    .disabled(model.typed != "UPDATE" || model.running)
+            }
+            if let stepResult = model.stepResult { Text(stepResult).fixedSize(horizontal: false, vertical: true) }
             Text("Then quit DeckBridge and pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.")
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)
