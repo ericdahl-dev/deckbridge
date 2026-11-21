@@ -73,4 +73,16 @@ struct DisplayFeedCableTests {
         #expect(rig.coordinator.status.requiredSubscriptions.contains(.mixerMeter))
         #expect(rig.coordinator.status.requiredSubscriptions.contains(.phaseOffset))
     }
+
+    @Test("Quitting says goodbye on the cable too, last")
+    func quitSaysGoodbyeOnTheCable() throws {
+        let (rig, _, cable) = try Self.rig()
+        rig.coordinator.start()
+        Feed.load(rig)
+        rig.coordinator.feedback(Feed.factoryPalette)
+        rig.coordinator.setDisplayFeed(Self.cableOnly)
+        rig.coordinator.cableFeedReady()
+        rig.coordinator.quit()
+        #expect(cable.bundles.last == [DisplayFeedGoodbyeTests.goodbye])
+    }
 }

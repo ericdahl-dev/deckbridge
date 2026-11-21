@@ -698,8 +698,8 @@ public final class Coordinator {
     /// The display feed's goodbye, last, and its sends flushed (#651): on quit, from whichever Coordinator holds the feed
     /// (the demo's while it runs).
     public func displayFeedGoodbye() {
-        displayFeed.goodbye()
-        displayFeed.flush()
+        for feed in [displayFeed, cableFeed] { feed.goodbye() }
+        for feed in [displayFeed, cableFeed] { feed.flush() }
     }
 
     /// The Mac is about to sleep: release everything held, since the controller may be gone on wake.
