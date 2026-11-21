@@ -27,6 +27,12 @@ public struct ChipRead: Sendable, Hashable {
     public let settings: [UInt8]
     public let app: [UInt8]
 
+    public init(kind: ChipKind, settings: [UInt8], app: [UInt8]) {
+        self.kind = kind
+        self.settings = settings
+        self.app = app
+    }
+
     public static func read(_ kind: ChipKind, from reader: DFUReader) async throws -> ChipRead {
         let settings = try await reader.read(address: kind.settings.address, length: kind.settings.length)
         let app = try await reader.read(address: kind.app.address, length: kind.app.length)
