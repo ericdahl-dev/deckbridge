@@ -12,6 +12,7 @@ void Meter::copied(uint32_t took_us) {
     ++window_.chunks;
     if (took_us > window_.worst_us) window_.worst_us = took_us;
     if (static_cast<uint64_t>(took_us) * 1000u > budget_ns_) ++window_.late;
+    if (static_cast<uint64_t>(took_us) * 1000u > 2ull * budget_ns_) ++window_.past_glass;
 }
 
 Report Meter::take() {

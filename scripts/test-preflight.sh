@@ -39,6 +39,7 @@ make_app() {
   <key>com.apple.security.app-sandbox</key><true/>
   <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.network.server</key><true/>
+  <key>com.apple.security.device.serial</key><true/>
 </dict></plist>
 PLIST
   echo "$app"
@@ -107,7 +108,8 @@ expect_fail "a manifest without the UserDefaults reason fails" "$app" "UserDefau
 app=$(make_app icon); rm "$app/Contents/Resources/Assets.car"; sign "$app" "$work/icon.entitlements"
 expect_fail "a missing compiled icon fails" "$app" "app icon"
 
-for entitlement in app-sandbox network.client network.server; do
+# The display feed over the USB cable (#667) opens the deck panel's serial port, which the sandbox refuses without it.
+for entitlement in app-sandbox network.client network.server device.serial; do
   name="no-${entitlement}"
   app=$(make_app "$name")
   /usr/libexec/PlistBuddy -c "Delete :com.apple.security.$entitlement" "$work/$name.entitlements"

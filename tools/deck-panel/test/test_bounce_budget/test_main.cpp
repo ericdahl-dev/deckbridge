@@ -37,10 +37,24 @@ void test_a_window_with_room_has_a_positive_margin_and_take_starts_over() {
     TEST_ASSERT_EQUAL_UINT32(0, empty.late);
 }
 
+// The glass deadline (#663): the DMA starts reading the refilled buffer one chunk after the fill starts and reaches
+// its end a chunk later, so a front-to-back copy leaves no stale pixel unless it runs past two chunks.
+void test_a_copy_past_two_chunks_is_past_the_glass_deadline() {
+    bounce_budget::Meter meter(666666);
+    meter.copied(667);   // late, but the DMA never overtakes it
+    meter.copied(1333);  // just inside two chunks
+    meter.copied(1334);  // past them
+    const bounce_budget::Report r = meter.take();
+    TEST_ASSERT_EQUAL_UINT32(3, r.late);
+    TEST_ASSERT_EQUAL_UINT32(1, r.past_glass);
+    TEST_ASSERT_EQUAL_UINT32(0, meter.take().past_glass);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_a_chunk_goes_out_in_its_lines_times_the_line_clocks);
     RUN_TEST(test_the_window_keeps_the_worst_copy_its_margin_and_the_late_ones);
+    RUN_TEST(test_a_copy_past_two_chunks_is_past_the_glass_deadline);
     RUN_TEST(test_a_window_with_room_has_a_positive_margin_and_take_starts_over);
     return UNITY_END();
 }
