@@ -194,11 +194,37 @@ void test_taking_and_draining_datagrams_uses_no_heap() {
     TEST_ASSERT_EQUAL(before, allocations);
 }
 
+/// Records where each drained datagram came from.
+struct Sources {
+    std::vector<deck_core::Source> seen;
+    void feed(const uint8_t*, size_t, uint32_t, deck_core::Source source) { seen.push_back(source); }
+};
+
+// One receive task takes both the UDP socket and the USB cable (#667): each datagram keeps where it came from, in
+// arrival order across the two, and a push or pump without a source is Wi-Fi's.
+void test_each_datagram_keeps_its_source_across_wifi_and_the_cable() {
+    static feed_intake::Intake intake;
+    const auto message = deck_message(2);
+    intake.push(message.data(), message.size(), 1000);
+    FakeSocket cable;
+    cable.waiting.push_back(message);
+    cable.waiting.push_back(message);
+    intake.pump(cable, ticking_us, deck_core::Source::cable);
+    intake.push(message.data(), message.size(), 9000, deck_core::Source::wifi);
+    Sources sink;
+    TEST_ASSERT_EQUAL(4, intake.drain_into(sink).count);
+    TEST_ASSERT_EQUAL(4, sink.seen.size());
+    TEST_ASSERT_TRUE(sink.seen[0] == deck_core::Source::wifi);
+    TEST_ASSERT_TRUE(sink.seen[1] == deck_core::Source::cable);
+    TEST_ASSERT_TRUE(sink.seen[2] == deck_core::Source::cable);
+    TEST_ASSERT_TRUE(sink.seen[3] == deck_core::Source::wifi);
+}
+
 /// Checks what a drain hands over: each datagram's sequence number, in order, and its bytes whole.
 struct Checker {
     uint32_t next = 0;
     uint32_t bad = 0;
-    void feed(const uint8_t* bytes, size_t length, uint32_t) {
+    void feed(const uint8_t* bytes, size_t length, uint32_t, deck_core::Source = deck_core::Source::wifi) {
         uint32_t seq;
         std::memcpy(&seq, bytes, sizeof seq);
         if (seq < next) ++bad;  // out of order, or seen twice
@@ -248,5 +274,6 @@ int main(int, char**) {
     RUN_TEST(test_pumping_a_socket_stamps_each_datagram_as_it_is_taken);
     RUN_TEST(test_taking_and_draining_datagrams_uses_no_heap);
     RUN_TEST(test_two_tasks_at_once_lose_nothing_uncounted_and_tear_nothing);
+    RUN_TEST(test_each_datagram_keeps_its_source_across_wifi_and_the_cable);
     return UNITY_END();
 }

@@ -10,7 +10,7 @@ Intake::Slot* Intake::free_slot() {
     return &slots_[tail % kSlots];
 }
 
-bool Intake::push(const uint8_t* bytes, size_t length, uint64_t at_us) {
+bool Intake::push(const uint8_t* bytes, size_t length, uint64_t at_us, deck_core::Source source) {
     if (length > kMaxDatagram) {
         count(too_big_);
         return false;
@@ -23,11 +23,12 @@ bool Intake::push(const uint8_t* bytes, size_t length, uint64_t at_us) {
     std::memcpy(slot->bytes, bytes, length);
     slot->length = length;
     slot->at_us = at_us;
+    slot->source = source;
     publish();
     return true;
 }
 
-int Intake::pump(feed_drain::Socket& socket, ClockUs clock) {
+int Intake::pump(feed_drain::Socket& socket, ClockUs clock, deck_core::Source source) {
     int kept = 0;
     for (size_t size = socket.next_size(); size > 0; size = socket.next_size()) {
         const uint64_t at_us = clock();
@@ -44,6 +45,7 @@ int Intake::pump(feed_drain::Socket& socket, ClockUs clock) {
         }
         slot->length = socket.read(slot->bytes, sizeof slot->bytes);
         slot->at_us = at_us;
+        slot->source = source;
         publish();
         ++kept;
     }

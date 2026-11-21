@@ -48,14 +48,17 @@ public:
     /// Queues a datagram that arrived at `at_us` (microseconds, esp_timer's clock). False if it wasn't kept: bigger
     /// than kMaxDatagram (counted in too_big), or the queue was full, so the newcomer is dropped and counted (dropped)
     /// and what's queued stays. The producer's.
-    bool push(const uint8_t* bytes, size_t length, uint64_t at_us);
+    bool push(const uint8_t* bytes, size_t length, uint64_t at_us,
+              deck_core::Source source = deck_core::Source::wifi);
     /// Takes every datagram waiting on `socket` into the queue, each stamped by `clock` as it's found, read straight
     /// into its slot; one too big, or one with the queue full, is skipped unread and counted. Returns how many it
-    /// kept. The producer's.
-    int pump(feed_drain::Socket& socket, ClockUs clock);
-    /// Feeds the core every datagram queued, oldest first, each at its arrival (in ms, millis' clock). The consumer's.
+    /// kept. `source` is where they came from: Wi-Fi's UDP socket, or the USB cable's reader (#667), pumped by the same
+    /// receive task so there is still one producer. The producer's.
+    int pump(feed_drain::Socket& socket, ClockUs clock, deck_core::Source source = deck_core::Source::wifi);
+    /// Feeds the core every datagram queued, oldest first, each at its arrival (in ms, millis' clock) and with where it
+    /// came from. The consumer's.
     Drained drain(deck_core::DeckCore& core) { return drain_into(core); }
-    /// The same, into anything with DeckCore's feed(bytes, length, now_ms).
+    /// The same, into anything with DeckCore's feed(bytes, length, now_ms, source).
     template <class Sink>
     Drained drain_into(Sink& sink);
     /// Since boot: datagrams dropped because the queue was full, and because they were bigger than kMaxDatagram.
@@ -66,6 +69,7 @@ private:
     struct Slot {
         uint64_t at_us = 0;
         size_t length = 0;
+        deck_core::Source source = deck_core::Source::wifi;
         uint8_t bytes[kMaxDatagram];
     };
     /// The producer's next free slot, or nullptr when full.
@@ -92,7 +96,7 @@ Drained Intake::drain_into(Sink& sink) {
     // can't hold this frame past kSlots datagrams.
     for (; head != tail; ++head) {
         const Slot& slot = slots_[head % kSlots];
-        sink.feed(slot.bytes, slot.length, static_cast<uint32_t>(slot.at_us / 1000));
+        sink.feed(slot.bytes, slot.length, static_cast<uint32_t>(slot.at_us / 1000), slot.source);
         if (got.count == 0) got.oldest_us = slot.at_us;
         got.newest_us = slot.at_us;
         ++got.count;
