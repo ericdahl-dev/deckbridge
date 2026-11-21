@@ -279,13 +279,13 @@ DisplayPerf display_take_perf() {
 #ifdef PANEL_PERF_LOG
 extern "C" void* __real_memcpy(void* to, const void* from, size_t n);
 
-// In IRAM: memcpy runs everywhere, flash writes included, when the cache is off. Only a copy out of PSRAM, which
-// can't happen then, reaches the Scan's and perf_line's flash code. Before the Scan starts (no budget yet) nothing
-// is timed.
+// In IRAM: memcpy runs everywhere, flash writes included, when the cache is off. The default meter is inline, so a
+// timed copy calls only IRAM and ROM code; only the PANEL_COPY_SCAN arm reaches the Scan's flash code, and only for a
+// copy out of PSRAM, which can't happen then. Before the Scan starts (no budget yet) nothing is timed.
 extern "C" IRAM_ATTR void* __wrap_memcpy(void* to, const void* from, size_t n) {
 #ifdef PANEL_COPY_UNMETERED
     return __real_memcpy(to, from, n);
-#endif
+#else
     if (PANEL_BOUNCE_PX == 0 || n != PANEL_BOUNCE_PX * sizeof(uint16_t) || !esp_ptr_external_ram(from) ||
         esp_ptr_external_ram(to) || g_scan.copy_budget_us() == 0) {
         return __real_memcpy(to, from, n);
@@ -334,5 +334,6 @@ extern "C" IRAM_ATTR void* __wrap_memcpy(void* to, const void* from, size_t n) {
     }
     portEXIT_CRITICAL_SAFE(&g_copy_lock);
     return result;
+#endif
 }
 #endif

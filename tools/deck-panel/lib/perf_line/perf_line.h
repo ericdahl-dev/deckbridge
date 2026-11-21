@@ -69,7 +69,7 @@ struct CopySpread {
 
 // The eighth of a `period_us` scan-out that `since_latch_us` falls in; one period or more is the last.
 // In the header so the board's IRAM copy wrapper inlines it, and 32-bit for a frame's period, so no 64-bit division
-// (a flash libgcc call) per chunk (#666).
+// per chunk (#666; __udivdi3 resolves to ROM here, but the 32-bit path is cheaper still).
 inline int phase(uint32_t since_latch_us, uint32_t period_us) {
     if (period_us == 0 || since_latch_us >= period_us) return kPhases - 1;
     if (period_us <= UINT32_MAX / kPhases) return static_cast<int>(since_latch_us * kPhases / period_us);
