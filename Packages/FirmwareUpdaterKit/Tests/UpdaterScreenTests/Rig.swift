@@ -14,13 +14,21 @@ final class FakeMIDI: MIDIPorts, @unchecked Sendable {
 }
 
 final class FakeSerial: PanelSerial, @unchecked Sendable {
-    /// What the panel prints on each port while the app listens.
+    /// What the panel prints on each port while the app listens at 921600, the speed since #667.
     var lines: [String: [String]] = [:]
-    /// Every port the finder opened.
+    /// What a panel flashed before #667 prints, at 115200.
+    var oldLines: [String: [String]] = [:]
+    /// Every port the finder opened, and at which speed.
     var opened: [String] = []
-    func listen(on port: String, for seconds: Double) async -> [String] {
+    var bauds: [Int] = []
+    func listen(on port: String, baud: Int, for seconds: Double) async -> [String] {
         opened.append(port)
-        return lines[port] ?? []
+        bauds.append(baud)
+        switch baud {
+        case 921_600: return lines[port] ?? []
+        case 115_200: return oldLines[port] ?? []
+        default: return []
+        }
     }
 }
 
