@@ -26,7 +26,12 @@ struct Text {
 
 class SerialFeed : public feed_drain::Socket {
 public:
-    explicit SerialFeed(Bytes& bytes, Text* text = nullptr) : bytes_(bytes), text_(text) {}
+    /// A frame with no byte for this long is dropped: DeckBridge writes each frame whole, so it was cut (#667).
+    static constexpr uint32_t kQuietMs = 100;
+
+    /// `clock`: milliseconds (millis on the board), to drop a cut frame; without one, a cut frame waits for an END.
+    explicit SerialFeed(Bytes& bytes, Text* text = nullptr, feed_drain::Clock clock = nullptr)
+        : bytes_(bytes), text_(text), clock_(clock) {}
 
     size_t next_size() override;
     size_t read(uint8_t* into, size_t room) override;
@@ -35,6 +40,8 @@ public:
 private:
     Bytes& bytes_;
     Text* text_;
+    feed_drain::Clock clock_;
+    uint32_t last_byte_ms_ = 0;
     uint8_t packet_[feed_drain::kMaxDatagram];
     size_t length_ = 0;
     bool complete_ = false;

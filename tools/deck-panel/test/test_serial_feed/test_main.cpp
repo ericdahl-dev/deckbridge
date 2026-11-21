@@ -165,6 +165,24 @@ void test_the_cables_drain_shows_the_deck_in_setup_mode() {
     TEST_ASSERT_EQUAL(2, screen.deck);
 }
 
+static uint32_t g_now_ms = 0;
+static uint32_t fake_clock() { return g_now_ms; }
+
+// A frame cut short with no END after it is dropped once the cable has been quiet kQuietMs, so a "version" question
+// typed later goes to the text reader, not into the dead frame.
+void test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again() {
+    FakeCable cable;
+    Lines lines;
+    g_now_ms = 1000;
+    serial_feed::SerialFeed feed(cable, &lines, fake_clock);
+    cable.add({0xC0, 0x2f, 0x44, 0x65});
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    g_now_ms += serial_feed::SerialFeed::kQuietMs;
+    cable.add({'v', 'e', 'r', 's', 'i', 'o', 'n', 0x0a});
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
@@ -173,5 +191,6 @@ int main() {
     RUN_TEST(test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame);
     RUN_TEST(test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole);
     RUN_TEST(test_the_cables_drain_shows_the_deck_in_setup_mode);
+    RUN_TEST(test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again);
     return UNITY_END();
 }
