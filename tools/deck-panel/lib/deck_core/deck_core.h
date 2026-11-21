@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "beat_clock.h"
 #include "deck_face.h"
 #include "deck_types.h"
 
@@ -60,7 +61,7 @@ public:
 private:
     WaitingView waiting_view() const;
     /// One message: applied if it's one the panel takes; true if it keeps the feed alive.
-    bool apply(const uint8_t* bytes, size_t length);
+    bool apply(const uint8_t* bytes, size_t length, uint32_t now_ms);
 
     DeckView view_;
     bool heard_ = false;
@@ -78,6 +79,8 @@ private:
     bool shown_ = false;
     bool shown_waiting_ = true;
     DeckView shown_view_;
+    int shown_beat_ = 0;  ///< the clock's beat the screen was last told
+    BeatClock clock_;
     /// What the deck page was last told, the face its objects hold; drawn_ once it has been told once.
     Face shown_face_;
     bool drawn_ = false;

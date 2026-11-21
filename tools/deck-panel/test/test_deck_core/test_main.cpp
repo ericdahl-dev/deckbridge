@@ -342,6 +342,7 @@ void test_each_shared_example_shows_its_deck_state() {
         TEST_ASSERT_EQUAL_MESSAGE(flag("master"), v.master, name);
         TEST_ASSERT_EQUAL_MESSAGE(flag("loop"), v.loop, name);
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("loopLength", 0)), v.loop_length, name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("clockBpm", 0)), v.clock_bpm, name);  // #674
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(number("beat", 0)), v.beat, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("elapsed", 0)), v.elapsed, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("remaining", 0)), v.remaining, name);
@@ -540,7 +541,7 @@ void test_every_field_of_the_feed_has_its_row() {
         int_message(prefix + "master", 1), int_message(prefix + "loop", 1), float_message(prefix + "loopLength", 0.25f),
         int_message(prefix + "beat", 3), int_message(prefix + "elapsed", 95), int_message(prefix + "remaining", 212),
         float_message(prefix + "progress", 0.3125f), float_message(prefix + "phase", 0.75f),
-        float_message(prefix + "level", 0.5f),
+        float_message(prefix + "level", 0.5f), float_message(prefix + "clockBpm", 128.0f),
     });
     TEST_ASSERT_TRUE(v.loaded);
     TEST_ASSERT_EQUAL_STRING("11B", v.key);
@@ -554,6 +555,7 @@ void test_every_field_of_the_feed_has_its_row() {
     TEST_ASSERT_EQUAL_FLOAT(0.3125f, v.progress);
     TEST_ASSERT_EQUAL_FLOAT(0.75f, v.phase);
     TEST_ASSERT_EQUAL_FLOAT(0.5f, v.level);
+    TEST_ASSERT_EQUAL_FLOAT(128.0f, v.clock_bpm);
 }
 
 void test_flags_go_off_with_0_and_phase_takes_minus_1() {
@@ -919,6 +921,66 @@ void test_the_waiting_texts_come_fitted_to_the_fonts() {
 }
 
 
+// #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives.
+void test_the_next_beat_box_lights_when_due_before_its_message() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, 1937);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    core.render(screen, 1938);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, lit
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[1]);
+}
+
+
+// #660: the deck in front is the master and stops. The beats stop with it at once: the box shows the last beat heard,
+// never the one the clock had lit ahead of its message.
+void test_the_master_stopping_stops_the_beat_at_once() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "master", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+    feed(core, int_message(prefix + "playing", 0), 1950);
+    core.render(screen, 1950);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // 2, the last heard
+    core.render(screen, 3000);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);
+}
+
+// Not the master: its pause says nothing about the master clock, which runs on.
+void test_a_deck_that_is_not_the_master_stopping_leaves_the_beat() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, int_message(prefix + "playing", 0), 1500);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);
+}
+
+
+// #660 with #674: the feed's clockBpm is the master clock's BPM; with it, the first beat heard is enough.
+void test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, float_message(prefix + "clockBpm", 128.0f), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    core.render(screen, 1469);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // beat 2, due
+}
+
 // #677: the setup screen's logo is half size, so the join instructions have the room; every other waiting screen's is
 // full size. The first screen and a change between them say so.
 void test_the_setup_screen_has_the_small_logo_and_no_other() {
@@ -1008,6 +1070,10 @@ int main(int, char**) {
     RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
     RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);
     RUN_TEST(test_every_field_of_the_feed_has_its_row);
+    RUN_TEST(test_the_next_beat_box_lights_when_due_before_its_message);
+    RUN_TEST(test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge);
+    RUN_TEST(test_the_master_stopping_stops_the_beat_at_once);
+    RUN_TEST(test_a_deck_that_is_not_the_master_stopping_leaves_the_beat);
     RUN_TEST(test_the_waiting_screen_is_told_only_what_changed);
     RUN_TEST(test_the_waiting_screen_is_told_when_the_logo_changes);
     RUN_TEST(test_the_setup_screen_has_the_small_logo_and_no_other);

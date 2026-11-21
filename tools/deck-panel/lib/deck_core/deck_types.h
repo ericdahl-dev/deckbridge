@@ -35,6 +35,7 @@ struct DeckView {
     float progress = 0;  ///< 0-1
     float phase = -1;  ///< 0-1, 0.5 in phase; -1 unknown
     float level = 0;  ///< 0-1
+    float clock_bpm = 0;  ///< the master clock's BPM (#674); 0 none or quiet. Not drawn: it times the beat clock
 
     /// Every field: one added later goes here too, or a change to it won't redraw.
     bool operator==(const DeckView& o) const {
@@ -43,7 +44,7 @@ struct DeckView {
                bpm == o.bpm && tempo == o.tempo && playing == o.playing && cue == o.cue && sync == o.sync &&
                master == o.master && loop == o.loop && loop_length == o.loop_length && beat == o.beat &&
                elapsed == o.elapsed && remaining == o.remaining && progress == o.progress && phase == o.phase &&
-               level == o.level;
+               level == o.level && clock_bpm == o.clock_bpm;
     }
 };
 
