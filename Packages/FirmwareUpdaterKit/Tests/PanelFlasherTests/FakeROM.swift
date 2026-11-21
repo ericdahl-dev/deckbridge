@@ -11,6 +11,8 @@ actor FakeROM: BootloaderLine {
     private(set) var mode: Mode = .app
     private(set) var dtr = false, rts = false
     private(set) var resets = 0
+    /// The speeds the Mac's line and the chip's UART run at; frames between them only get through when they match.
+    private(set) var lineSpeed = 115_200, romSpeed = 115_200
     private(set) var received: [(op: UInt8, data: [UInt8], checksum: UInt32)] = []
     private var pending: [UInt8] = []
     private var incoming: [UInt8] = []
@@ -53,6 +55,7 @@ actor FakeROM: BootloaderLine {
     }
 
     private func handle(_ frame: [UInt8]) {
+        guard lineSpeed == romSpeed else { return }  // garbled at the chip
         let op = frame[1]
         let checksum = UInt32(frame[4]) | UInt32(frame[5]) << 8 | UInt32(frame[6]) << 16 | UInt32(frame[7]) << 24
         received.append((op, Array(frame[8...]), checksum))
@@ -60,6 +63,10 @@ actor FakeROM: BootloaderLine {
         if op == 0x08 {
             // The ROM answers SYNC eight times, with a non-zero value.
             for _ in 0..<8 { reply(op: op, value: 0x2012_0707, data: []) }
+        } else if op == 0x0F {
+            // CHANGE_BAUDRATE: new speed, 0 (the ROM's form); answered at the old speed, then the UART moves.
+            reply(op: op, value: 0, data: [])
+            romSpeed = Int(UInt32(frame[8]) | UInt32(frame[9]) << 8 | UInt32(frame[10]) << 16 | UInt32(frame[11]) << 24)
         } else if op == 0x14 {
             // flags, flash_crypt_cnt, 7 key purposes, chip id, api version (esptool get_security_info, "<IBBBBBBBBII").
             if let id = chipID {
@@ -90,7 +97,7 @@ actor FakeROM: BootloaderLine {
         return out
     }
 
-    func setSpeed(_ baud: Int) async throws {}
+    func setSpeed(_ baud: Int) async throws { lineSpeed = baud }
     func pause(_ seconds: Double) async { await Task.yield() }
 
     var ops: [UInt8] { received.map(\.op) }

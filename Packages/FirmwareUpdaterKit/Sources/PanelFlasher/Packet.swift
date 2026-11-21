@@ -2,6 +2,7 @@
 enum Op: UInt8 {
     case flashData = 0x03
     case sync = 0x08
+    case changeSpeed = 0x0F
     case securityInfo = 0x14
 }
 

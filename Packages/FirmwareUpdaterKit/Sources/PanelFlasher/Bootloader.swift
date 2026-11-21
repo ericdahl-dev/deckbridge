@@ -81,6 +81,24 @@ public actor Bootloader {
         }
     }
 
+    /// The panel's upload speed (tools/deck-panel/platformio.ini upload_speed); the ROM starts at 115200.
+    public static let fastSpeed = 921_600
+
+    /// Moves both ends to 921600, as esptool's change_baud does on the ROM: CHANGE_BAUDRATE (new speed, 0), answered
+    /// at the old speed; then the Mac's line, a 0.05 s wait, and whatever arrived in the change is dropped.
+    public func speedUp() async throws {
+        do {
+            _ = try await command(.changeSpeed, data: Packet.le32(UInt32(Self.fastSpeed)) + Packet.le32(0))
+            try await line.setSpeed(Self.fastSpeed)
+            await line.pause(0.05)
+            _ = try await line.read(timeout: 0)
+            reader = SlipReader()
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
     /// Sends one command and waits for its answer: `dataLength` bytes of data, then the status.
     func command(_ op: Op, data: [UInt8], checksum: UInt32 = 0, dataLength: Int = 0, timeout: Double = 3) async throws -> Response {
         try Task.checkCancellation()
