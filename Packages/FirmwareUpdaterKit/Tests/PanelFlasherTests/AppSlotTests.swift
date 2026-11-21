@@ -5,8 +5,8 @@ import Testing
 // otadata 0xe000+0x2000, app0 0x10000, app1 0x650000, spiffs 0xc90000, coredump 0xff0000.
 
 /// Arduino-ESP32's boot_app0.bin (framework-arduinoespressif32/tools/partitions), what every `pio upload` writes at
-/// 0xe000: otadata whose first entry is sequence 1 with its CRC (0x4743989A), so app0 boots; the second entry is
-/// sequence 0 with no CRC, which the bootloader ignores. Bytes as read from the file.
+/// 0xe000: otadata whose first entry is sequence 1 with its CRC (0x4743989A); the second is sequence 0, whose CRC is
+/// FFFFFFFF. The higher sequence wins, so app0 boots. Bytes as read from the file.
 private let bootApp0: [UInt8] = {
     var bytes = [UInt8](repeating: 0xFF, count: 0x2000)
     bytes.replaceSubrange(0..<4, with: [0x01, 0x00, 0x00, 0x00])

@@ -123,3 +123,11 @@ func anImageThatIsNotAPanelAppIsRefusedBeforeTheCableIsOpened(image: [UInt8]) as
     #expect(await rom.mode == .app)
     #expect(await rom.closed)
 }
+
+/// However an update ends, the panel is reset into its app once, not once per layer that saw the failure.
+@Test func aFailedUpdateResetsThePanelIntoItsAppOnce() async throws {
+    let rom = await deckPanel()
+    await rom.setFailingBlock(1)
+    _ = await run(rom)
+    #expect(await rom.appBoots == 1)
+}

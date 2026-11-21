@@ -76,9 +76,14 @@ public actor Bootloader {
         }
     }
 
+    /// Whether the panel was reset into its app since the lines last moved toward the ROM: release() pulses once.
+    private var released = true
+
     /// Resets the panel into its app: EN low with IO0 high, then both lines off (esptool's HardReset). Never throws:
-    /// it runs on every way out.
+    /// it runs on every way out, and only the first call after a reset into the ROM pulses the lines.
     public func release() async {
+        guard !released else { return }
+        released = true
         try? await line.setLines(dtr: false, rts: true)
         await line.pause(0.1)
         try? await line.setLines(dtr: false, rts: false)
@@ -192,7 +197,8 @@ public actor Bootloader {
     }
 
     /// Arduino-ESP32's boot_app0.bin, which every `pio upload` writes at otadata: the first entry sequence 1 with its
-    /// CRC (0x4743989A), so app0 boots, the second sequence 0 with no CRC, ignored. Built here byte for byte.
+    /// CRC (0x4743989A); the second sequence 0, whose CRC is FFFFFFFF (crc32_le(0xFFFFFFFF) of 0 is that, so it is a
+    /// valid entry). The higher sequence wins: (1 - 1) % 2 = slot 0, app0. Built here byte for byte.
     static let bootApp0: [UInt8] = {
         var bytes = [UInt8](repeating: 0xFF, count: Partition.otadata.size)
         bytes.replaceSubrange(0..<4, with: [0x01, 0x00, 0x00, 0x00])
@@ -308,6 +314,7 @@ public actor Bootloader {
     }
 
     private func resetIntoBootloader(delay: Double) async throws {
+        released = false  // before any line moves: a failure from here on must still release the panel
         try await line.setLines(dtr: false, rts: false)
         try await line.setLines(dtr: true, rts: true)
         try await line.setLines(dtr: false, rts: true)  // IO0 high, EN low: in reset

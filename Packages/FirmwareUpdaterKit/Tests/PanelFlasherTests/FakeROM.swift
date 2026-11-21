@@ -12,6 +12,8 @@ actor FakeROM: BootloaderLine {
     private(set) var mode: Mode = .app
     private(set) var dtr = false, rts = false
     private(set) var resets = 0
+    /// How many times the chip came out of reset into its app.
+    private(set) var appBoots = 0
     /// The speeds the Mac's line and the chip's UART run at; frames between them only get through when they match.
     private(set) var lineSpeed = 115_200, romSpeed = 115_200
     private(set) var received: [(op: UInt8, data: [UInt8], checksum: UInt32)] = []
@@ -62,7 +64,7 @@ actor FakeROM: BootloaderLine {
         self.rts = rts
         if enLow { mode = .reset } else if wasLow {
             mode = io0Low ? .download : .app
-            if mode == .download { resets += 1; afterReset?() }
+            if mode == .download { resets += 1; afterReset?() } else { appBoots += 1 }
         }
     }
 
