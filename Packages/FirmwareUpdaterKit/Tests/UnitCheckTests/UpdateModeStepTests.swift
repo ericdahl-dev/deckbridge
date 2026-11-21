@@ -64,3 +64,13 @@ struct UpdateModeStepTests {
         #expect(midi.sent.isEmpty)
     }
 }
+
+@Suite("Unit check: the update-mode message on the wire")
+struct SysEx7Tests {
+    /// The kit's own selftest vectors (tools/lc6000-firmware/enter-update-mode.swift, `selftest`).
+    @Test("UMP SysEx7 packets as the kit packs them: the update-mode message, and a short SysEx")
+    func kitVectors() throws {
+        #expect(SysEx7.packets(try kitUpdateModeMessage()) == [[0x3016_0002, 0x0B01_1072], [0x3032_0000, 0x0000_0000]])
+        #expect(SysEx7.packets([0xF0, 0x7E, 0x00, 0x06, 0x01, 0xF7]) == [[0x3004_7E00, 0x0601_0000]])
+    }
+}

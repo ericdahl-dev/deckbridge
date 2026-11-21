@@ -15,7 +15,7 @@ struct CoreMIDISend: MIDISend {
         defer { MIDIClientDispose(client) }
         var list = MIDIEventList()
         var packet = MIDIEventListInit(&list, ._1_0)
-        for words in Self.sysex7(bytes) {
+        for words in SysEx7.packets(bytes) {
             packet = MIDIEventListAdd(&list, MemoryLayout<MIDIEventList>.size, packet, 0, words.count, words)
         }
         guard MIDISendEventList(out, destination, &list) == noErr else { return false }
@@ -30,19 +30,6 @@ struct CoreMIDISend: MIDISend {
             guard MIDIObjectGetStringProperty(ref, kMIDIPropertyDisplayName, &name) == noErr,
                   let text = name?.takeRetainedValue() as String? else { return nil }
             return (ref, text)
-        }
-    }
-
-    /// The kit's packing: two words a packet, up to six data bytes, without F0/F7.
-    static func sysex7(_ bytes: [UInt8]) -> [[UInt32]] {
-        let data = Array(bytes.dropFirst().dropLast())
-        let chunks = stride(from: 0, to: max(data.count, 1), by: 6).map { Array(data[$0..<min($0 + 6, data.count)]) }
-        return chunks.enumerated().map { index, chunk in
-            let status: UInt32 = chunks.count == 1 ? 0 : index == 0 ? 1 : index == chunks.count - 1 ? 3 : 2
-            var padded = chunk.map(UInt32.init)
-            padded += Array(repeating: 0, count: 6 - padded.count)
-            return [0x3000_0000 | status << 20 | UInt32(chunk.count) << 16 | padded[0] << 8 | padded[1],
-                    padded[2] << 24 | padded[3] << 16 | padded[4] << 8 | padded[5]]
         }
     }
 }
