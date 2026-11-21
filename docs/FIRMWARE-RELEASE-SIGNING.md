@@ -35,8 +35,12 @@ swift run firmware-release new-key --id backup --out /Volumes/<USB stick>/backup
 
 ## Each release: one command
 
-A **draft** GitHub release must hold `catalog.json` and every file it names, with flat names, and nothing else. CI
-will build that draft on a tag; that job is a follow-up to #689 and doesn't exist yet. Then, on your Mac:
+1. Bump `tools/deck-panel/VERSION` in the release pull request and merge it.
+2. Tag that commit `deck-panel-v<VERSION>` and push the tag. The Deck panel release workflow
+   (`.github/workflows/deck-panel-release.yml`, #703) builds the panel image and leaves it, with the catalog, in an
+   **unsigned draft** release. The draft holds `catalog.json` and the files it names, with flat names, and nothing
+   else. It refuses a tag that doesn't match `VERSION`, and a dirty build. It uses no key and no secrets.
+3. On your Mac:
 
 ```sh
 Packages/FirmwareUpdaterKit/scripts/sign_release.sh <tag> --key ~/.deckbridge-keys/primary.key --lowest <version>
@@ -46,7 +50,11 @@ Packages/FirmwareUpdaterKit/scripts/sign_release.sh <tag> --key ~/.deckbridge-ke
 - The script checks the release is still a draft, downloads it, and shows the manifest (each file's device, version,
   size and SHA-256). It asks for your passphrase only after that. Then it uploads `manifest.json` and
   `manifest.sig` and publishes the release.
-- If anything fails, the release stays a draft.
+- If anything fails before publishing, the release stays a draft.
+- After publishing, it opens a small pull request that records the build in
+  `Packages/FirmwareUpdaterKit/Sources/FirmwareCatalog/Catalog/catalog.json`. **Merge it.** The next release must
+  still list every build shipped, or an app carrying this one refuses it. If the pull request isn't made, add the
+  `record:` line the draft job printed in its log by hand.
 
 ## A lost key
 
