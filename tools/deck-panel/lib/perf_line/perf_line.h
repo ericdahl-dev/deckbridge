@@ -25,6 +25,7 @@ struct Window {
     uint64_t draw_bitmap_us = 0;    // handing frames over
     uint32_t datagrams = 0;         // feed datagrams read; lwIP's own drops aren't visible here
     uint32_t too_big = 0;           // feed datagrams dropped for size
+    uint32_t dropped = 0;           // feed datagrams dropped with the intake full (#664)
     uint32_t internal_free = 0;     // bytes
     scan_watch::Report scan;        // the scan-out's steadiness
     uint32_t copy_budget_us = 0;    // a bounce chunk's deadline

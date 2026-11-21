@@ -179,7 +179,7 @@ pio device monitor -d tools/deck-panel -e crowpanel-perf -p /dev/cu.wchusbserial
 ```
 
 ```text
-perf: 30.0 frames/s, frame avg 22.0 ms max 31.5 ms (swap wait 18.0), draw_bitmap 0.02 ms/frame, 30.0 vsyncs/s, 0 swap timeouts, scan lag 31.6-31.6 ms, vsync 33.3-33.3 ms, 0 resyncs, copy worst 540 of 666 us (margin 126) 0 late, feed 900 datagrams 0 too big, internal free 123456
+perf: 30.0 frames/s, frame avg 22.0 ms max 31.5 ms (swap wait 18.0), draw_bitmap 0.02 ms/frame, 30.0 vsyncs/s, 0 swap timeouts, scan lag 31.6-31.6 ms, vsync 33.3-33.3 ms, 0 resyncs, copy worst 540 of 666 us (margin 126) 0 late, feed 900 datagrams 0 too big 0 dropped, internal free 123456
 ```
 
 - **frames/s:** LVGL's refreshes that drew something, at most 30. With the deck playing it should be close to 30.
@@ -189,7 +189,7 @@ perf: 30.0 frames/s, frame avg 22.0 ms max 31.5 ms (swap wait 18.0), draw_bitmap
 - **swap timeouts:** waits that hit 60 ms. Anything but 0 is a fault.
 - **scan lag, vsync, resyncs:** the scan-out's steadiness. The bounce driver finishes copying each frame at a fixed time after its vsync, and vsyncs come every 33.3 ms (12.3 MHz). A healthy panel shows one value for each, give or take a few µs, and 0 resyncs. A resync is a frame whose copy ended more than 0.5 ms off the last one: the scan-out fell behind or was restarted out of step. A jumping picture should show up here. (Bounce mode only.)
 - **copy:** the bounce copy against its deadline: the longest copy of a 10-line chunk out of PSRAM in the window, the chunk's time on the panel (666 µs at 12.3 MHz, 512 µs at 16), the margin left, and how many copies ran past it. A negative margin or any late copy is an underrun: stale rows every 10 lines. Timed in this build only, by wrapping `memcpy` at link time (`-Wl,--wrap=memcpy`); before raising the clock, this is the number to read.
-- **feed:** datagrams read in the window, and those dropped for being too big. lwIP's own drops, when its 6-deep receive queue is full, can't be seen from here.
+- **feed:** datagrams the frames drained in the window; those dropped for being too big for an intake slot; and those dropped because the intake was full (16 waiting, #664). The receive task empties lwIP's 6-deep queue every millisecond, so lwIP's own drops, which can't be seen from here, need a stall of their own.
 - **internal free:** free internal RAM, in bytes.
 - A still screen prints `perf: no frames (nothing changed)`: LVGL draws only what changes.
 

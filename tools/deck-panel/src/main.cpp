@@ -288,7 +288,7 @@ class PanelBoard : public frame_clock::Board {
         MARK(perf);
         // Serial last, and only with time left; what waits prints at a later frame.
         const bool may_print = time_left(until_us);
-        perf_log::tick(now, g_read, g_intake.too_big(), may_print, g_clock);
+        perf_log::tick(now, g_read, g_intake.too_big(), g_intake.dropped(), may_print, g_clock);
         g_read = 0;
         if (!may_print) return;
         // Read once: the receive task may count another meanwhile.

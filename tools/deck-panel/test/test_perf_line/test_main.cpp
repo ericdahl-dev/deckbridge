@@ -21,6 +21,7 @@ static perf_line::Window window() {
     w.draw_bitmap_us = 3000;   // 0.02 ms a frame
     w.datagrams = 900;
     w.too_big = 1;
+    w.dropped = 2;
     w.internal_free = 123456;
     w.scan.lag_min_us = 20000;
     w.scan.lag_max_us = 20800;
@@ -43,7 +44,7 @@ void test_the_line_has_every_number_in_one_fixed_order() {
     TEST_ASSERT_EQUAL_STRING(
         "perf: 30.0 frames/s, frame avg 22.0 ms max 31.5 ms (swap wait 18.0), draw_bitmap 0.02 ms/frame, "
         "39.0 vsyncs/s, 0 swap timeouts, scan lag 20.0-20.8 ms, vsync 25.6-30.0 ms, 1 resyncs, "
-        "copy worst 540 of 666 us (margin 126) 0 late, 0 past the glass deadline, feed 900 datagrams 1 too big, "
+        "copy worst 540 of 666 us (margin 126) 0 late, 0 past the glass deadline, feed 900 datagrams 1 too big 2 dropped, "
         "no feed frames, clock 150 frames 2 late 3 missed 1 no latch, internal free 123456",
         perf_line::format(window()).c_str());
 }
@@ -59,7 +60,7 @@ void test_a_window_with_no_frames_says_so_without_dividing_by_zero() {
     TEST_ASSERT_EQUAL_STRING(
         "perf: no frames (nothing changed), 39.0 vsyncs/s, 0 swap timeouts, scan lag 20.0-20.8 ms, "
         "vsync 25.6-30.0 ms, 1 resyncs, copy worst 540 of 666 us (margin 126) 0 late, 0 past the glass deadline, "
-        "feed 900 datagrams 1 too big, "
+        "feed 900 datagrams 1 too big 2 dropped, "
         "no feed frames, clock 150 frames 2 late 3 missed 1 no latch, internal free 123456",
         perf_line::format(w).c_str());
 }
@@ -95,7 +96,7 @@ void test_the_feed_lag_and_skipped_frames_follow_the_feed_counts() {
     w.ledger.lag_typical_us = 21340;
     w.ledger.lag_worst_us = 48020;
     w.ledger.skipped = 2;
-    TEST_ASSERT_TRUE(perf_line::format(w).find("1 too big, lag 21.3 worst 48.0 ms, 2 of 150 frames skipped,") !=
+    TEST_ASSERT_TRUE(perf_line::format(w).find("1 too big 2 dropped, lag 21.3 worst 48.0 ms, 2 of 150 frames skipped,") !=
                      std::string::npos);
 }
 
@@ -103,7 +104,7 @@ void test_the_feed_lag_and_skipped_frames_follow_the_feed_counts() {
 void test_a_window_with_no_feed_frames_says_so() {
     perf_line::Window w = window();
     w.ledger = {};
-    TEST_ASSERT_TRUE(perf_line::format(w).find("1 too big, no feed frames,") != std::string::npos);
+    TEST_ASSERT_TRUE(perf_line::format(w).find("1 too big 2 dropped, no feed frames,") != std::string::npos);
 }
 
 // The frame clock's report (#663): frames run on a latch, those whose draw ran past the next one, the latches that
@@ -207,6 +208,18 @@ void test_the_copy_numbers_say_how_many_were_past_the_glass_deadline() {
                      std::string::npos);
 }
 
+// The line goes out through the serial TX buffer in one piece (main.cpp's kSerialTxBytes counts on under 640 B):
+// even with every counter at its widest, it fits.
+void test_the_widest_line_fits_the_serial_buffer() {
+    perf_line::Window w = window();
+    const uint32_t most = 4294967295u;
+    w.swap_timeouts = w.datagrams = w.too_big = w.dropped = w.internal_free = most;
+    w.scan.resyncs = w.copy.late = w.clock.frames = w.clock.late = w.clock.missed = w.clock.no_latch = most;
+    w.ledger.frames = most;
+    w.ledger.skipped = most;
+    TEST_ASSERT_LESS_THAN(640, perf_line::format(w).size());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_the_line_has_every_number_in_one_fixed_order);
@@ -223,5 +236,6 @@ int main() {
     RUN_TEST(test_the_copy_line_counts_copies_outside_an_interrupt_apart);
     RUN_TEST(test_the_copy_line_lists_the_late_copies_it_kept);
     RUN_TEST(test_the_copy_line_counts_copies_while_serial_drains);
+    RUN_TEST(test_the_widest_line_fits_the_serial_buffer);
     return UNITY_END();
 }

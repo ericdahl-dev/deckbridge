@@ -32,11 +32,11 @@ std::string format(const Window& w) {
     char tail[560];
     snprintf(tail, sizeof tail,
              "%.1f vsyncs/s, %u swap timeouts, scan lag %.1f-%.1f ms, vsync %.1f-%.1f ms, %u resyncs, %s, "
-             "feed %u datagrams %u too big, %s, clock %u frames %u late %u missed %u no latch, internal free %u",
+             "feed %u datagrams %u too big %u dropped, %s, clock %u frames %u late %u missed %u no latch, internal free %u",
              w.vsyncs / seconds, static_cast<unsigned>(w.swap_timeouts), w.scan.lag_min_us / 1000.0,
              w.scan.lag_max_us / 1000.0, w.scan.vsync_min_us / 1000.0, w.scan.vsync_max_us / 1000.0,
              static_cast<unsigned>(w.scan.resyncs), copy, static_cast<unsigned>(w.datagrams),
-             static_cast<unsigned>(w.too_big), lag, static_cast<unsigned>(w.clock.frames),
+             static_cast<unsigned>(w.too_big), static_cast<unsigned>(w.dropped), lag, static_cast<unsigned>(w.clock.frames),
              static_cast<unsigned>(w.clock.late), static_cast<unsigned>(w.clock.missed),
              static_cast<unsigned>(w.clock.no_latch), static_cast<unsigned>(w.internal_free));
     if (w.frames == 0) {
