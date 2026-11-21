@@ -225,3 +225,17 @@ struct UpdaterScreenTests {
         }
     }
 }
+
+/// For the panel flasher (#687): the panel's serial port, picked by the same chip ids the finder uses.
+@Suite("Device finder: the panel's port")
+struct PanelPortTests {
+    @Test("The CH340K's port, not another board's; nil when the panel has no port or isn't there")
+    func panelPort() {
+        let other = USBDevice(vendor: 0x0403, product: 0x6001, name: "FT232R USB UART", serialPort: "/dev/cu.usbserial-A1")
+        let panel = USBDevice(vendor: 0x1A86, product: 0x7522, name: "USB Serial", serialPort: "/dev/cu.wchusbserial210")
+        let panelNoPort = USBDevice(vendor: 0x1A86, product: 0x7522, name: "USB Serial")
+        #expect(DeviceFinder.panelPort(in: [other, panel]) == "/dev/cu.wchusbserial210")
+        #expect(DeviceFinder.panelPort(in: [other, panelNoPort]) == nil)
+        #expect(DeviceFinder.panelPort(in: [other]) == nil)
+    }
+}

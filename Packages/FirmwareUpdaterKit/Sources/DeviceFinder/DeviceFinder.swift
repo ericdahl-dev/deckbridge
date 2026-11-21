@@ -62,10 +62,17 @@ public struct DeviceFinder: Sendable {
     /// What is plugged in now. The log gets one line per device found, made only from fixed words, USB ids and the
     /// checked build: never a port path (some drivers name it after the chip's serial number) or a line the panel
     /// printed (it may carry Wi-Fi names, MAC or IP addresses).
+    /// The panel's serial port among `devices`, for the panel flasher (#687): by the finder's own chip ids.
+    public static func panelPort(in devices: [USBDevice]) -> String? { panel(in: devices)?.serialPort }
+
+    private static func panel(in devices: [USBDevice]) -> USBDevice? {
+        devices.first { $0.vendor == panelChip.vendor && $0.product == panelChip.product }
+    }
+
     public func find() async -> Found {
         let devices = await usb.devices()
         var found = Found()
-        if let chip = devices.first(where: { $0.vendor == Self.panelChip.vendor && $0.product == Self.panelChip.product }) {
+        if let chip = Self.panel(in: devices) {
             let usbID = Self.hex(chip)
             if let port = chip.serialPort {
                 var build: PanelBuild?
