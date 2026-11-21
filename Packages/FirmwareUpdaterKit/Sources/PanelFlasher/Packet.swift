@@ -5,6 +5,7 @@ enum Op: UInt8 {
     case flashEnd = 0x04
     case spiSetParams = 0x0B
     case spiAttach = 0x0D
+    case flashMD5 = 0x13
     case sync = 0x08
     case changeSpeed = 0x0F
     case securityInfo = 0x14

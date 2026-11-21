@@ -1,3 +1,6 @@
+import CryptoKit
+import Foundation
+
 /// The serial line to a deck panel, as the flasher drives it. The app's adapter is the real port.
 public protocol BootloaderLine: Sendable {
     /// Sets DTR and RTS together, in one call.
@@ -20,6 +23,8 @@ public enum FlashError: Error, Equatable {
     case noAnswer(op: UInt8)
     /// The chip kept refusing the block at this flash address.
     case writeFailed(address: UInt32)
+    /// What the flash holds at this address isn't the image that was written.
+    case verifyFailed(address: UInt32)
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
@@ -124,6 +129,26 @@ public actor Bootloader {
                 let data = Packet.le32(UInt32(block.count)) + Packet.le32(UInt32(seq)) + Packet.le32(0) + Packet.le32(0) + block
                 try await sendBlock(data, checksum: Self.checksum(block), address: offset + UInt32(seq * Self.blockSize))
                 progress(Double(seq + 1) / Double(blocks))
+            }
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
+    /// Checks the flash holds `image` at `offset`: the chip's own MD5 of that region (SPI_FLASH_MD5, which the ROM
+    /// answers with 32 hex characters) against the image's, padded to 4 bytes as it was written. On failure the panel
+    /// is released.
+    public func verify(_ image: [UInt8], at offset: UInt32) async throws {
+        do {
+            let padded = image + [UInt8](repeating: 0xFF, count: (4 - image.count % 4) % 4)
+            let expected = Insecure.MD5.hash(data: Data(padded)).map { String(format: "%02x", $0) }.joined()
+            // esptool allows 8 s per MB for the ROM's MD5 (MD5_TIMEOUT_PER_MB).
+            let answer = try await command(.flashMD5, data: Packet.le32(offset) + Packet.le32(UInt32(padded.count))
+                                           + Packet.le32(0) + Packet.le32(0),
+                                           dataLength: 32, timeout: max(3, 8 * Double(padded.count) / 1_048_576))
+            guard String(decoding: answer.data, as: UTF8.self).lowercased() == expected else {
+                throw FlashError.verifyFailed(address: offset)
             }
         } catch {
             await release()

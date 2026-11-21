@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 @testable import PanelFlasher
 
@@ -100,6 +101,11 @@ actor FakeROM: BootloaderLine {
             w.next += 1
             writing = w
             reply(op: op, value: 0, data: [])
+        } else if op == 0x13 {
+            // SPI_FLASH_MD5: address, size, 0, 0; the ROM answers with the MD5 as 32 lowercase hex characters.
+            let bytes = flashBytes(at: word(frame, 8), count: Int(word(frame, 12)))
+            let hex = Insecure.MD5.hash(data: Data(bytes)).map { String(format: "%02x", $0) }.joined()
+            reply(op: op, value: 0, data: Array(hex.utf8))
         } else if op == 0x14 {
             // flags, flash_crypt_cnt, 7 key purposes, chip id, api version (esptool get_security_info, "<IBBBBBBBBII").
             if let id = chipID {
