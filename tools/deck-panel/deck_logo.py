@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 SVG = os.path.join(HERE, "..", "..", "design", "icon", "icon-1-deck-ring.svg")
 OUT = os.path.join(HERE, "src", "deck_logo.c")
+SMALL_OUT = os.path.join(HERE, "src", "deck_logo_small.c")
 # The panel's pixels are shorter than wide. Elecrow's spec for the CrowPanel Advance 7.0-HMI gives the active area as
 # 156 x 87 mm for 800 x 480 (https://www.elecrow.com/crowpanel-advance-7-0-hmi-esp32-ai-display-800x480-artificial-
 # intelligent-ips-touch-screen-support-meshtastic-and-arduino-lvgl-micropython.html): 0.195 mm across, 0.18125 mm
@@ -28,6 +29,8 @@ STRETCH = PIXEL_MM_ACROSS / PIXEL_MM_DOWN
 # px. 198 high is the most the waiting column leaves over two headline and three detail lines (deck_view.cpp); 184
 # across times the stretch is 197.96, so the whole logo fits in it.
 WIDTH, HEIGHT = 184, 198
+# The setup screen's (#677): half the width, stretched the same (92 x 1.0759 = 98.98), so its longer text has room.
+SMALL_WIDTH, SMALL_HEIGHT = 92, 99
 SAMPLES = 4  # per side, per pixel
 BACKGROUND = 0x000000  # the waiting page has no style of its own on the black screen
 
@@ -168,7 +171,7 @@ def render(svg_path=SVG, width=WIDTH, height=HEIGHT, stretch=STRETCH):
     return Logo(width, height, scale_x, scale_y, pixels)
 
 
-def c_source(logo):
+def c_source(logo, name="deck_logo"):
     data = []
     for p in logo.pixels:
         data += [p & 0xFF, p >> 8]
@@ -180,11 +183,11 @@ def c_source(logo):
 // RGB565 on black, low byte first. Const, so it stays in flash.
 #include <lvgl.h>
 
-static const uint8_t deck_logo_map[%(n)d] __attribute__((aligned(4))) = {
+static const uint8_t %(name)s_map[%(n)d] __attribute__((aligned(4))) = {
 %(rows)s
 };
 
-const lv_image_dsc_t deck_logo = {
+const lv_image_dsc_t %(name)s = {
     .header = {
         .magic = LV_IMAGE_HEADER_MAGIC,
         .cf = LV_COLOR_FORMAT_RGB565,
@@ -194,13 +197,15 @@ const lv_image_dsc_t deck_logo = {
         .stride = %(stride)d,
     },
     .data_size = %(n)d,
-    .data = deck_logo_map,
+    .data = %(name)s_map,
 };
-""" % {"w": logo.width, "h": logo.height, "stride": logo.width * 2, "n": len(data), "rows": "\n".join(rows)}
+""" % {"w": logo.width, "h": logo.height, "stride": logo.width * 2, "n": len(data), "rows": "\n".join(rows),
+       "name": name}
 
 
 if __name__ == "__main__":
-    text = c_source(render())
-    with open(OUT, "w") as f:
-        f.write(text)
-    print("wrote %s" % os.path.relpath(OUT))
+    for out, logo, name in ((OUT, render(), "deck_logo"),
+                            (SMALL_OUT, render(SVG, SMALL_WIDTH, SMALL_HEIGHT), "deck_logo_small")):
+        with open(out, "w") as f:
+            f.write(c_source(logo, name))
+        print("wrote %s" % os.path.relpath(out))

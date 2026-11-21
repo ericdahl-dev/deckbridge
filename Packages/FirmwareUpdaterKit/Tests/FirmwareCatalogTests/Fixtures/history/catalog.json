@@ -1,0 +1,8 @@
+{
+  "panel": [
+    { "version": "1.2.0", "sha": "aaaaaaa", "image": "deck-panel-aaaaaaa.bin" },
+    { "version": "1.10.0", "sha": "bbbbbbb", "image": "deck-panel-bbbbbbb.bin" },
+    { "version": "1.9.3", "sha": "ccccccc", "image": "deck-panel-ccccccc.bin" }
+  ],
+  "lc6000": []
+}

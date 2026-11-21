@@ -26,6 +26,9 @@ struct Screen {
 /// Not thread-safe: feed() and render() must run on one task. On the board, the UDP task copies each payload into a
 /// fixed-size queue item (dropped if the queue is full) and the loop task drains the queue into feed(), then calls
 /// render() every frame. No heap, no exceptions, no RTTI.
+/// Where a datagram came from: Wi-Fi's UDP, or the USB cable (#667), which needs no Wi-Fi.
+enum class Source { wifi, cable };
+
 class DeckCore {
 public:
     DeckCore() = default;
@@ -39,7 +42,7 @@ public:
     static constexpr uint16_t kFeedPort = 9100;
 
     /// One UDP payload, a message or a bundle of them (#636), received at `now_ms` (any millisecond clock; it may wrap).
-    void feed(const uint8_t* bytes, size_t length, uint32_t now_ms);
+    void feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source = Source::wifi);
     /// What the core holds now, for the perf env's capture (#636); the screen gets it through render().
     const DeckView& view() const { return view_; }
     /// The network's state and the panel's IPv4 address ("" if none), from the board layer.
@@ -48,7 +51,7 @@ public:
     /// The setup network's name and password, for the waiting screen while Network::setup (#622).
     void set_setup(const char* name, const char* password);
     /// Whether the last render() showed the waiting screen (joining and setup included), not the deck: true before the
-    /// first render. Hold-to-reset counts only then (#622).
+    /// first render. Hold-to-reset counts only then (#622), never while a deck shows, cable or Wi-Fi (#667).
     bool waiting() const { return shown_waiting_; }
     /// Tells `screen` what to show at `now_ms`, only when that changed since the last call.
     void render(Screen& screen, uint32_t now_ms);
@@ -62,6 +65,9 @@ private:
     bool heard_ = false;
     bool goodbye_ = false;  ///< the datagram being read had DeckBridge's goodbye
     uint32_t last_heard_ms_ = 0;
+    /// The USB cable's feed (#667), apart from Wi-Fi's: heard on it, and when last. Within kWaitAfterMs it needs no Wi-Fi.
+    bool cable_heard_ = false;
+    uint32_t last_cable_ms_ = 0;
     Network network_ = Network::connected;
     char ip_[16] = "";
     char setup_name_[24] = "";

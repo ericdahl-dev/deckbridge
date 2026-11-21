@@ -10,6 +10,8 @@ LV_FONT_DECLARE(geist_mono_medium_32)
 LV_FONT_DECLARE(geist_mono_semibold_64)
 // The logo (#651), made from the icon's SVG by deck_logo.py into src/deck_logo.c.
 LV_IMAGE_DECLARE(deck_logo);
+// Half size, for the setup screen's longer text (#677). Swapped in whole: no scaling, so still a plain copy.
+LV_IMAGE_DECLARE(deck_logo_small);
 
 namespace {
 
@@ -175,6 +177,7 @@ void DeckScreen::show_waiting(const deck_core::WaitingView& view, const deck_cor
     // The view is the core's and stays put until the next call: the labels point at its texts.
     if (changes.headline) lv_label_set_text_static(headline_, view.headline);
     if (changes.detail) lv_label_set_text_static(detail_, view.detail);
+    if (changes.logo_small) lv_image_set_src(logo_, view.logo_small ? &deck_logo_small : &deck_logo);
     if (changes.logo) set_hidden(logo_, !view.logo);
     set_hidden(deck_page_, true);
     set_hidden(waiting_page_, false);

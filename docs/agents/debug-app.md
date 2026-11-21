@@ -28,3 +28,7 @@ Build with `-scheme ControllerBridge` (scheme 0 is appstore-frames).
   under it, or a second instance, clashes on the OSC ports and gives the LC6000 two hosts.
 - **Check it's alive after 10 s.** A launch that dies early leaves nothing on screen to say so. If it's gone, look at
   launchd's reason: `/usr/bin/log show --last 2m --predicate 'process == "launchd" AND eventMessage CONTAINS "ControllerBridge"'`.
+
+## Starting a deck for a timed run
+
+Use `scripts/syndicate_deck` ([syndicate-deck.md](syndicate-deck.md)), then check that the deck is playing before the clock starts.

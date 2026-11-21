@@ -8,6 +8,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 SVG = os.path.join(HERE, "..", "..", "design", "icon", "icon-1-deck-ring.svg")
 C_FILE = os.path.join(HERE, "src", "deck_logo.c")
+SMALL_C_FILE = os.path.join(HERE, "src", "deck_logo_small.c")
 
 
 def load_generator():
@@ -19,6 +20,7 @@ def load_generator():
 
 gen = load_generator()
 LOGO = gen.render(SVG)
+SMALL = gen.render(SVG, 92, 99)
 
 # The icon's colors as LVGL stores them in RGB565 (lv_color_hex: the top 5, 6, 5 bits), worked out by hand.
 GRAY_ARC, GOLD_ARC, COPPER_ARC, TEAL_ARC = 0x6B8E, 0xEE6C, 0xC3A9, 0x6493
@@ -65,19 +67,39 @@ class DeckLogoTests(unittest.TestCase):
         self.assertEqual(set(edge), {BLACK}, "a shape touches the top or left edge: it is cut off")
         self.assertAlmostEqual(LOGO.scale_x, 184 / 620, places=9)
 
+    def test_the_committed_small_image_is_what_the_svg_makes(self):
+        # The setup screen's (#677): half size, so the join instructions have the room.
+        with open(SMALL_C_FILE) as f:
+            committed = f.read()
+        self.assertEqual(committed, gen.c_source(SMALL, "deck_logo_small"),
+                         "src/deck_logo_small.c is stale: run python3 -I tools/deck-panel/deck_logo.py")
+
+    def test_the_small_one_is_92_wide_99_high_under_its_own_name(self):
+        # 92 x 1.0759 = 98.98: half the width, stretched the same.
+        self.assertEqual((SMALL.width, SMALL.height), (92, 99))
+        with open(SMALL_C_FILE) as f:
+            text = f.read()
+        self.assertIn(".w = 92,", text)
+        self.assertIn(".h = 99,", text)
+        self.assertIn(".stride = 184,", text)
+        self.assertIn(".data_size = 18216,", text)
+        self.assertIn("static const uint8_t deck_logo_small_map[18216]", text)
+        self.assertIn("const lv_image_dsc_t deck_logo_small = {", text)
+
     def test_it_is_stretched_down_so_it_is_round_on_the_glass(self):
         # The panel's pixels are shorter than wide: Elecrow's active area is 156 x 87 mm for 800 x 480, so 0.195 mm
         # across and 0.18125 mm down. Round on the glass takes 0.195 / 0.18125 = 1.0759 rows per column, by hand.
         # The content's box, counting a pixel as the logo's at half the dimmest arc's brightness or more (gray,
         # 0x6C+0x72+0x77 = 341, so 170): the edge at half coverage, not the faint antialiased fringe.
-        def lit(x, y):
-            p = LOGO.pixels[y * LOGO.width + x]
-            return (p >> 11 << 3) + ((p >> 5 & 0x3F) << 2) + ((p & 0x1F) << 3) >= 170
+        for logo in (LOGO, SMALL):
+            def lit(x, y, logo=logo):
+                p = logo.pixels[y * logo.width + x]
+                return (p >> 11 << 3) + ((p >> 5 & 0x3F) << 2) + ((p & 0x1F) << 3) >= 170
 
-        rows = [y for y in range(LOGO.height) if any(lit(x, y) for x in range(LOGO.width))]
-        cols = [x for x in range(LOGO.width) if any(lit(x, y) for y in range(LOGO.height))]
-        content_w, content_h = cols[-1] - cols[0] + 1, rows[-1] - rows[0] + 1
-        self.assertLessEqual(abs(content_h - content_w * 1.0759), 1, (content_w, content_h))
+            rows = [y for y in range(logo.height) if any(lit(x, y) for x in range(logo.width))]
+            cols = [x for x in range(logo.width) if any(lit(x, y) for y in range(logo.height))]
+            content_w, content_h = cols[-1] - cols[0] + 1, rows[-1] - rows[0] + 1
+            self.assertLessEqual(abs(content_h - content_w * 1.0759), 1, (logo.width, content_w, content_h))
 
     def test_the_four_arcs_are_the_svgs_colors_clockwise_from_top_right(self):
         self.assertEqual(at(LOGO, 262, -30), GRAY_ARC)
