@@ -36,3 +36,8 @@ func aCatalogWhoseLC6000PatchIsNotAPatchDescriptionDoesNotLoad(name: String) thr
         try Catalog(directory: fixture("stray-file"))
     }
 }
+
+/// A catalog names only files inside its own folder: it never reads, or offers, a file from elsewhere on the Mac.
+@Test func aCatalogNamingAFileOutsideItsFolderDoesNotLoad() throws {
+    #expect(throws: CatalogError.outsideFolder("../lc6000/wd-one.patch")) { try Catalog(directory: fixture("escaping-name")) }
+}

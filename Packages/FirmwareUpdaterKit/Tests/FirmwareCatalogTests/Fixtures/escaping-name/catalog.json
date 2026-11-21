@@ -1,0 +1,13 @@
+{
+  "panel": [],
+  "lc6000": [
+    {
+      "wd": "00.50",
+      "tp": "00.31",
+      "entries": [
+        { "kind": "patch", "chip": "wd", "file": "../lc6000/wd-one.patch" },
+        { "kind": "patch", "chip": "tp", "file": "tp-one.patch" }
+      ]
+    }
+  ]
+}

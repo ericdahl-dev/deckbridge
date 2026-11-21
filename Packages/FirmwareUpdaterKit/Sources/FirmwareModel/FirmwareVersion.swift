@@ -20,3 +20,7 @@ extension FirmwareVersion: Comparable {
         return false
     }
 }
+
+extension FirmwareVersion: CustomStringConvertible {
+    public var description: String { parts.map(String.init).joined(separator: ".") }
+}
