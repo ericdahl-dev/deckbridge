@@ -1,0 +1,15 @@
+{
+  "about": "The display feed over the USB cable (#667): each OSC packet (a message or a bundle) goes as one SLIP frame (RFC 1055), with END (c0) before and after it, as OSC 1.1 has it for serial. In the packet, c0 is sent as db dc and db as db dd; nothing else is escaped. framed_hex is written by hand from those rules, not by either side's code. Walked by the Kit's SLIP test (Swift) and the panel's serial_feed test, so the two can't drift.",
+  "cases": [
+    { "name": "plain bytes", "packet_hex": "2f61", "framed_hex": "c02f61c0" },
+    { "name": "an END byte", "packet_hex": "c0", "framed_hex": "c0dbdcc0" },
+    { "name": "an ESC byte", "packet_hex": "db", "framed_hex": "c0dbddc0" },
+    { "name": "ESC then the byte its escape uses", "packet_hex": "dbdc", "framed_hex": "c0dbdddcc0" },
+    { "name": "both, between plain bytes", "packet_hex": "01c0db02", "framed_hex": "c001dbdcdbdd02c0" },
+    {
+      "name": "the color message for 0xC0DB00",
+      "packet_hex": "2f4465636b4272696467652f446973706c61792f636f6c6f720000002c69000000c0db00",
+      "framed_hex": "c02f4465636b4272696467652f446973706c61792f636f6c6f720000002c69000000dbdcdbdd00c0"
+    }
+  ]
+}

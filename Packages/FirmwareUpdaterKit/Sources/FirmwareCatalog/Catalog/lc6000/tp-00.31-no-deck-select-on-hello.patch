@@ -1,0 +1,16 @@
+# LC6000 PRIME tp (top panel) firmware 00.31, file jc20_tp_update_00_31_120936.dfu. Issue #439.
+#
+# Don't enter "pick a deck" mode (pads 1-4 blinking) when a host says hello (F0 00 20 7F 01 F7).
+# The hello handler at 0x0800C280 enters that mode only while the deck byte at 0x20000703 is
+# 0xFF, "no deck picked yet", which is its value at power-on. Any other value takes the
+# existing "deck already picked" path: note 51 at 127 on the deck's channel, no blinking.
+#
+# The power-on value comes from the compressed start-up data (decompressor at 0x080081D0,
+# block at 0x08015B78 for RAM 0x20000400). The token at 0x08015CDB is: control 0a, count 14,
+# one literal byte, back-offset 64. That literal lands on 0x20000703 and nowhere else:
+#   0x08015CDD  ff (no deck)  ->  00 (deck 1)
+# One byte changes; the line covers the whole token so the old-bytes check does too. No code
+# changes. The unit starts in the state it is in after pad 1 has been pressed once.
+#
+# Unproven on hardware: nobody has flashed it. Apply it only to the stock 00.31 image.
+0x08015CDB 0a14ff64 0a140064
