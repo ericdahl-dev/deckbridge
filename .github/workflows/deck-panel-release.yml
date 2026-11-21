@@ -43,11 +43,14 @@ jobs:
         run: pio run -d tools/deck-panel -e crowpanel
       - name: Draft folder
         # Refuses a tag that doesn't match tools/deck-panel/VERSION, and a dirty build, before anything is uploaded.
+        # The build's bootloader and partition table ride along, so the app can make a blank board a deck panel (#687).
         run: |
           test -z "$(git status --porcelain)" || { git status --porcelain; echo "the tree changed during the build"; exit 1; }
           python3 -I Packages/FirmwareUpdaterKit/scripts/release_draft.py \
             --tag "$GITHUB_REF_NAME" --version-file tools/deck-panel/VERSION \
             --image tools/deck-panel/.pio/build/crowpanel/firmware.bin \
+            --bootloader tools/deck-panel/.pio/build/crowpanel/bootloader.bin \
+            --partitions tools/deck-panel/.pio/build/crowpanel/partitions.bin \
             --sha "$(git rev-parse --short HEAD)" --out "$RUNNER_TEMP/draft"
       - name: Unsigned draft release
         env:

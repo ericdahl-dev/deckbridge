@@ -24,6 +24,9 @@ def main(argv):
     parser.add_argument("--version-file", type=pathlib.Path, required=True)
     parser.add_argument("--image", type=pathlib.Path, required=True)
     parser.add_argument("--sha", required=True)
+    # The build's bootloader and partition table (#687), both or neither: add_panel_image.py checks them.
+    parser.add_argument("--bootloader", type=pathlib.Path)
+    parser.add_argument("--partitions", type=pathlib.Path)
     parser.add_argument("--catalog", type=pathlib.Path, default=DEFAULT_CATALOG)
     parser.add_argument("--out", type=pathlib.Path, required=True)
     args = parser.parse_args(argv)
@@ -35,17 +38,23 @@ def main(argv):
     with tempfile.TemporaryDirectory() as work:
         staged = pathlib.Path(work) / "Catalog"
         shutil.copytree(args.catalog, staged, ignore=shutil.ignore_patterns("panel", ".DS_Store"))
+        boot = [arg for name, path in (("--bootloader", args.bootloader), ("--partitions", args.partitions)) if path
+                for arg in (name, str(path))]
         added = add_panel_image().main(["--catalog", str(staged), "--image", str(args.image),
-                                        "--version", version, "--sha", args.sha])
+                                        "--version", version, "--sha", args.sha, *boot])
         if added != 0:
             return added
         catalog = json.loads((staged / "catalog.json").read_text())
         # The repo's own entry for this build (nested name, as the app carries it): what the signing step's pull
         # request records, printed in case that isn't made.
-        print("record: " + json.dumps(catalog["panel"][-1]))
+        # Only version, SHA and image: the repo keeps it as history and carries none of its files.
+        newest = catalog["panel"][-1]
+        print("record: " + json.dumps({key: newest[key] for key in ("version", "sha", "image")}))
         args.out.mkdir()
         for entry in catalog["panel"]:
-            entry["image"] = flat(staged, entry["image"], args.out)
+            for key in ("image", "bootloader", "partitions"):
+                if key in entry:
+                    entry[key] = flat(staged, entry[key], args.out)
         for patch_set in catalog["lc6000"]:
             for entry in patch_set["entries"]:
                 entry["file"] = flat(staged, entry["file"], args.out)

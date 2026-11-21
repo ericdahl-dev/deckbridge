@@ -27,14 +27,19 @@ class ReleaseDraft(unittest.TestCase):
         self.image = root / "firmware.bin"
         self.image.write_bytes(b"\xe9" + bytes(1024))
         self.out = root / "draft"
+        self.loader = root / "bootloader.bin"
+        self.loader.write_bytes(b"\xe9" + bytes(64))
+        self.table = root / "partitions.bin"
+        self.table.write_bytes(b"\xaa\x50" + bytes(3070))
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_script(self, tag="deck-panel-v1.1.0", sha=SHA):
+    def run_script(self, tag="deck-panel-v1.1.0", sha=SHA, boot=False):
+        extra = ["--bootloader", str(self.loader), "--partitions", str(self.table)] if boot else []
         return subprocess.run([sys.executable, "-I", str(SCRIPT), "--tag", tag, "--version-file", str(self.version_file),
                                "--image", str(self.image), "--sha", sha, "--catalog", str(self.catalog),
-                               "--out", str(self.out)], capture_output=True, text=True)
+                               "--out", str(self.out), *extra], capture_output=True, text=True)
 
     def test_a_tag_matching_the_panels_version_makes_a_draft_folder(self):
         result = self.run_script()
@@ -78,6 +83,23 @@ class ReleaseDraft(unittest.TestCase):
     def test_it_prints_the_entry_to_record_in_the_repos_catalog(self):
         # The fallback if the signing step's pull request isn't made: the line to add to Catalog/catalog.json.
         result = self.run_script()
+        line = [l for l in result.stdout.splitlines() if l.startswith("record: ")][0]
+        self.assertEqual(json.loads(line[len("record: "):]),
+                         {"version": "1.1.0", "sha": SHA, "image": "panel/deck-panel-1.1.0-1d0683f.bin"})
+
+
+    def test_the_builds_bootloader_and_partition_table_ride_in_the_draft_with_flat_names(self):
+        # For making a blank board a deck panel (#687).
+        result = self.run_script(boot=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        names = sorted(p.name for p in self.out.iterdir())
+        self.assertIn("deck-panel-1.1.0-1d0683f-bootloader.bin", names)
+        self.assertIn("deck-panel-1.1.0-1d0683f-partitions.bin", names)
+        entry = json.loads((self.out / "catalog.json").read_text())["panel"][-1]
+        self.assertEqual((entry["bootloader"], entry["partitions"]),
+                         ("deck-panel-1.1.0-1d0683f-bootloader.bin", "deck-panel-1.1.0-1d0683f-partitions.bin"))
+        self.assertEqual((self.out / entry["partitions"]).read_bytes(), self.table.read_bytes())
+        # The repo records the build as history only: version, SHA and image, never the boot parts.
         line = [l for l in result.stdout.splitlines() if l.startswith("record: ")][0]
         self.assertEqual(json.loads(line[len("record: "):]),
                          {"version": "1.1.0", "sha": SHA, "image": "panel/deck-panel-1.1.0-1d0683f.bin"})
