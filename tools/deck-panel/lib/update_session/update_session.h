@@ -14,6 +14,12 @@
 
 namespace update_session {
 
+/// Whether `text` is a dotted version such as "1.10.0": numbers and single dots, nothing else.
+bool is_version(const std::string& text);
+/// Whether `version` is below `floor`, number by number (a missing part counts as 0). An empty floor is no floor; a
+/// version that isn't one is always below.
+bool below(const std::string& version, const std::string& floor);
+
 struct TrustedKey {
     const char* id;
     uint8_t public_key[32];

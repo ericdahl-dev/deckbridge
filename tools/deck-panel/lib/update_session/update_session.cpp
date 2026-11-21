@@ -29,8 +29,13 @@ bool numbers(const std::string& text, std::vector<unsigned long>& out) {
     return true;
 }
 
-// Whether `version` is below `floor`, number by number (a missing part counts as 0). An empty floor is no floor; a
-// version that isn't one is always below.
+}  // namespace
+
+bool is_version(const std::string& text) {
+    std::vector<unsigned long> parts;
+    return numbers(text, parts);
+}
+
 bool below(const std::string& version, const std::string& floor) {
     if (floor.empty()) return false;
     std::vector<unsigned long> v, f;
@@ -41,8 +46,6 @@ bool below(const std::string& version, const std::string& floor) {
     }
     return false;
 }
-
-}  // namespace
 
 Reply Session::refuse(Refusal why) {
     // Anything written so far is dropped: the running firmware stays the one that boots.
