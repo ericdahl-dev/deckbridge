@@ -1,0 +1,62 @@
+name: Deck panel release
+
+# On a deck panel release tag (deck-panel-v<VERSION>, #695), build the panel image and leave it, with the updater's
+# catalog, in an UNSIGNED DRAFT GitHub release (#703). The maintainer signs and publishes it on their own Mac with
+# Packages/FirmwareUpdaterKit/scripts/sign_release.sh (ADR 0012, docs/FIRMWARE-RELEASE-SIGNING.md).
+# This job never sees a signing key: none exists in the repo or in CI, and it uses no secrets at all. Its only power
+# is the run's own GITHUB_TOKEN with contents: write, to create the draft.
+# The Mac app's release (release.yml) runs on v<version> tags; the two never match the same tag.
+on:
+  push:
+    tags: ['deck-panel-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deck-panel-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: PlatformIO and its platform cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: deck-panel-pio-6.2.0-${{ hashFiles('tools/deck-panel/platformio.ini') }}
+      - name: PlatformIO
+        run: pip install platformio==6.2.0
+      - name: Deck panel host tests
+        run: pio test -d tools/deck-panel -e native
+      # The panel keeps its Wi-Fi in NVS, set from a phone (#622): nothing secret goes into the image.
+      - name: Deck panel firmware build
+        run: pio run -d tools/deck-panel -e crowpanel
+      - name: Draft folder
+        # Refuses a tag that doesn't match tools/deck-panel/VERSION, and a dirty build, before anything is uploaded.
+        # The build's bootloader and partition table ride along, so the app can make a blank board a deck panel (#687).
+        run: |
+          test -z "$(git status --porcelain)" || { git status --porcelain; echo "the tree changed during the build"; exit 1; }
+          python3 -I Packages/FirmwareUpdaterKit/scripts/release_draft.py \
+            --tag "$GITHUB_REF_NAME" --version-file tools/deck-panel/VERSION \
+            --image tools/deck-panel/.pio/build/crowpanel/firmware.bin \
+            --bootloader tools/deck-panel/.pio/build/crowpanel/bootloader.bin \
+            --partitions tools/deck-panel/.pio/build/crowpanel/partitions.bin \
+            --sha "$(git rev-parse --short HEAD)" --out "$RUNNER_TEMP/draft"
+      - name: Unsigned draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "Deck panel $(cat tools/deck-panel/VERSION) (unsigned draft)" \
+            --notes "Unsigned draft. Sign and publish it on the maintainer's Mac: Packages/FirmwareUpdaterKit/scripts/sign_release.sh $GITHUB_REF_NAME --key <key file> --lowest <version>" \
+            "$RUNNER_TEMP"/draft/*
