@@ -23,6 +23,9 @@ struct CableFeedSenderTests {
         let port = FakePort()
         let messages = [OSCMessage("/DeckBridge/Display/deck", [.int(2)]), OSCMessage("/DeckBridge/Display/loaded", [.int(1)])]
         CableFeedSender(port).send(bundle: messages)
-        #expect(port.writes.withLock { $0 } == [SLIP.frame(OSCPacket.bundle(messages))])
+        // Built by hand (Python, from the OSC 1.0 and RFC 1055 rules): "#bundle", time tag 1, each message with its size.
+        let framed = "c02362756e646c65000000000000000001000000242f4465636b4272696467652f446973706c61792f6465636b00000000"
+            + "2c69000000000002000000242f4465636b4272696467652f446973706c61792f6c6f6164656400002c69000000000001c0"
+        #expect(port.writes.withLock { $0 } == [SLIPTests.bytes(framed)])
     }
 }
