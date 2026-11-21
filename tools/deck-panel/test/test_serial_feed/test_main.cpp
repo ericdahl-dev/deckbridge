@@ -178,6 +178,22 @@ void test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again() {
     cable.add({0xC0, 0x2f, 0x44, 0x65});
     TEST_ASSERT_EQUAL(0, feed.next_size());
     g_now_ms += serial_feed::SerialFeed::kQuietMs;
+    TEST_ASSERT_EQUAL(0, feed.next_size());  // the loop asks each frame: the cable is empty and quiet
+    cable.add({'v', 'e', 'r', 's', 'i', 'o', 'n', 0x0a});
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
+}
+
+// Only a frame's opening END came (the rest lost): after the quiet, text reads again; it doesn't wait inside forever.
+void test_an_opening_end_alone_is_dropped_after_quiet() {
+    FakeCable cable;
+    Lines lines;
+    g_now_ms = 5000;
+    serial_feed::SerialFeed feed(cable, &lines, fake_clock);
+    cable.add({0xC0});
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    g_now_ms += serial_feed::SerialFeed::kQuietMs;
+    TEST_ASSERT_EQUAL(0, feed.next_size());
     cable.add({'v', 'e', 'r', 's', 'i', 'o', 'n', 0x0a});
     TEST_ASSERT_EQUAL(0, feed.next_size());
     TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
@@ -192,5 +208,6 @@ int main() {
     RUN_TEST(test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole);
     RUN_TEST(test_the_cables_drain_shows_the_deck_in_setup_mode);
     RUN_TEST(test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again);
+    RUN_TEST(test_an_opening_end_alone_is_dropped_after_quiet);
     return UNITY_END();
 }
