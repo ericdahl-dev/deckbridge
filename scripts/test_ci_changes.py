@@ -88,6 +88,10 @@ class NeedsDeckPanelTests(unittest.TestCase):
         self.assertTrue(ci_changes.needs_deck_panel(["design/icon/icon-1-deck-ring.svg"]))
         self.assertFalse(ci_changes.needs_deck_panel(["design/icon/menubar-deck-ring-16.svg"]))
 
+    def test_the_app_release_keys_run_it(self):
+        # the panel must trust the same keys (#690); test_release_keys.py, run by the Deck panel job, compares them
+        self.assertTrue(ci_changes.needs_deck_panel(["Packages/FirmwareUpdaterKit/Sources/FirmwareRelease/ReleaseKeys.swift"]))
+
     def test_a_change_to_the_ci_workflow_runs_it(self):
         self.assertTrue(ci_changes.needs_deck_panel([".github/workflows/ci.yml"]))
 
