@@ -38,7 +38,7 @@ let package = Package(
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel"]),
         // Flashing a deck panel over its USB cable (#687): the ESP32-S3 ROM's serial bootloader protocol, spoken over a
         // line the app opens. Tested against a fake bootloader; the real port is the app's adapter.
-        .target(name: "PanelFlasher"),
-        .testTarget(name: "PanelFlasherTests", dependencies: ["PanelFlasher"]),
+        .target(name: "PanelFlasher", dependencies: ["DeviceFinder", "FirmwareModel"]),
+        .testTarget(name: "PanelFlasherTests", dependencies: ["PanelFlasher", "DeviceFinder", "FirmwareModel"]),
     ]
 )

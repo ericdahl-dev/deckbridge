@@ -53,7 +53,13 @@ actor FakeROM: BootloaderLine {
     private var enLow: Bool { rts && !dtr }
     private var io0Low: Bool { dtr && !rts }
 
+    struct Unplugged: Error {}
+    /// The cable pulled out: every write fails from now on.
+    var unplugged = false
+    func unplug() { unplugged = true }
+
     func write(_ bytes: [UInt8]) async throws {
+        if unplugged { throw Unplugged() }
         incoming += bytes
         while let start = incoming.firstIndex(of: 0xC0), let end = incoming[(start + 1)...].firstIndex(of: 0xC0) {
             var frame: [UInt8] = []
@@ -145,6 +151,8 @@ actor FakeROM: BootloaderLine {
 
     func setSpeed(_ baud: Int) async throws { lineSpeed = baud }
     func pause(_ seconds: Double) async { await Task.yield() }
+    private(set) var closed = false
+    func close() async { closed = true }
 
     var ops: [UInt8] { received.map(\.op) }
 }

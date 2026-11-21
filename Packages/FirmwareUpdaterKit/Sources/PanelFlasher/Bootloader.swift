@@ -10,6 +10,8 @@ public protocol BootloaderLine: Sendable {
     func read(timeout: Double) async throws -> [UInt8]
     func setSpeed(_ baud: Int) async throws
     func pause(_ seconds: Double) async
+    /// Closes the port. The line is unusable after.
+    func close() async
 }
 
 public enum FlashError: Error, Equatable {
@@ -27,6 +29,12 @@ public enum FlashError: Error, Equatable {
     case verifyFailed(address: UInt32)
     /// An ESP32-S3 without the deck panel's partition table: blank, or another board's layout.
     case notADeckPanel
+    /// Another app holds the panel's cable: DeckBridge, sending over it.
+    case portBusy
+    /// The owner cancelled; the panel was reset into its app.
+    case cancelled
+    /// The line itself failed: the cable came out, or the port went away.
+    case lineLost
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
