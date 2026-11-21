@@ -135,6 +135,19 @@ jobs:
         run: make -s -C tools/lc6000-display-fw arm-size
       - name: Hook and block tests
         run: make -C tools/lc6000-display-fw arm-test PYTHON="$RUNNER_TEMP/fw/bin/python"
+      # The updater ships these blocks (#696): built here, staged into a copy of its catalog, then built again from
+      # scratch; the staged blocks must be that second build byte for byte, so nothing but this repo's build ships.
+      - name: The updater's own blocks
+        run: |
+          fw="$RUNNER_TEMP/fw/bin/python"
+          kit=Packages/FirmwareUpdaterKit
+          make -s -C tools/lc6000-display-fw arm PYTHON="$fw"
+          cp -R "$kit/Sources/FirmwareCatalog/Catalog" "$RUNNER_TEMP/catalog"
+          python3 -I "$kit/scripts/stage_lc6000_blocks.py" --catalog "$RUNNER_TEMP/catalog" \
+            --build tools/lc6000-display-fw/build/arm --wd 00.50 --tp 00.31
+          make -s -C tools/lc6000-display-fw arm PYTHON="$fw" ARM_BUILD=build/arm-again
+          python3 -I "$kit/scripts/check_staged_blocks.py" --catalog "$RUNNER_TEMP/catalog" \
+            --build tools/lc6000-display-fw/build/arm-again
 
   kit:
     name: Kit tests
@@ -152,12 +165,16 @@ jobs:
       - name: Package tests
         working-directory: Packages/ControllerBridgeKit
         run: swift test
-      # The firmware updater's own package (#684): the catalog (#686), and the build step that adds a panel image.
+      # The firmware updater's own package (#684): the catalog (#686), and the build steps that add a panel image and the
+      # drawn display's own blocks (#696).
       - name: Firmware updater package tests
         working-directory: Packages/FirmwareUpdaterKit
         run: |
           swift test
           python3 -I scripts/test_add_panel_image.py
+          python3 -I scripts/test_sign_release.py
+          python3 -I scripts/test_stage_lc6000_blocks.py
+          python3 -I scripts/test_check_staged_blocks.py
       # The release workflow (#28) only runs on tags, so its scripts are tested here on every pull request.
       - name: Release script tests
         run: |
