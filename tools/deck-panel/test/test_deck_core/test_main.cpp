@@ -413,6 +413,26 @@ void test_the_waiting_screen_says_why() {
     TEST_ASSERT_EQUAL_STRING("192.168.1.40  port 9100", screen.last().detail.c_str());
 }
 
+// The feed over the USB cable (#667) needs no Wi-Fi: in setup mode or joining, the cable's deck shows. Wi-Fi's feed off
+// Wi-Fi is still the waiting screen at once.
+void test_the_cables_feed_shows_the_deck_off_wifi() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_setup("DeckPanel-1A2B", "abcd2345");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    const osc_bytes::Bytes deck3 = int_message(prefix + "deck", 3);
+    core.feed(deck3.data(), deck3.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(3, screen.last().deck);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1100);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    // Quiet on the cable for the usual 3 s: waiting, as for Wi-Fi.
+    core.render(screen, 1000 + deck_core::DeckCore::kWaitAfterMs);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+}
+
 // Off Wi-Fi the feed can't be coming: waiting at once, not 3 s later; back on, the next message brings the deck.
 void test_losing_wifi_is_the_waiting_screen_at_once() {
     deck_core::DeckCore core;
@@ -920,6 +940,7 @@ int main(int, char**) {
     RUN_TEST(test_flags_go_off_with_0_and_phase_takes_minus_1);
     RUN_TEST(test_a_fast_field_change_is_one_redraw_and_the_same_value_none);
     RUN_TEST(test_the_waiting_screen_says_why);
+    RUN_TEST(test_the_cables_feed_shows_the_deck_off_wifi);
     RUN_TEST(test_losing_wifi_is_the_waiting_screen_at_once);
     RUN_TEST(test_control_characters_show_as_spaces);
     RUN_TEST(test_a_render_a_moment_before_the_last_packet_still_shows_the_deck);

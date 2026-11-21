@@ -25,6 +25,9 @@ struct Screen {
 /// Not thread-safe: feed() and render() must run on one task. On the board, the UDP task copies each payload into a
 /// fixed-size queue item (dropped if the queue is full) and the loop task drains the queue into feed(), then calls
 /// render() every frame. No heap, no exceptions, no RTTI.
+/// Where a datagram came from: Wi-Fi's UDP, or the USB cable (#667), which needs no Wi-Fi.
+enum class Source { wifi, cable };
+
 class DeckCore {
 public:
     DeckCore() = default;
@@ -38,7 +41,7 @@ public:
     static constexpr uint16_t kFeedPort = 9100;
 
     /// One UDP payload, a message or a bundle of them (#636), received at `now_ms` (any millisecond clock; it may wrap).
-    void feed(const uint8_t* bytes, size_t length, uint32_t now_ms);
+    void feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source = Source::wifi);
     /// What the core holds now, for the perf env's capture (#636); the screen gets it through render().
     const DeckView& view() const { return view_; }
     /// The network's state and the panel's IPv4 address ("" if none), from the board layer.
@@ -61,6 +64,7 @@ private:
     bool heard_ = false;
     bool goodbye_ = false;  ///< the datagram being read had DeckBridge's goodbye
     uint32_t last_heard_ms_ = 0;
+    bool cable_ = false;  ///< the last datagram that kept the feed alive came on the USB cable (#667)
     Network network_ = Network::connected;
     char ip_[16] = "";
     char setup_name_[24] = "";
