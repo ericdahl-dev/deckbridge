@@ -13,6 +13,7 @@ public enum CatalogError: Error, Equatable {
     case notAPatchDescription(String)
     case unnamedFile(String)
     case missingBuiltIn
+    case outsideFolder(String)
 }
 
 /// The firmware the app ships with, read from a folder holding `catalog.json` and the files it names. No network.
@@ -22,6 +23,8 @@ public struct Catalog: Sendable {
 
     public init(directory: URL) throws {
         let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: directory.appending(path: "catalog.json")))
+        let names = file.panel.map(\.image) + file.lc6000.flatMap { $0.entries.map(\.file) }
+        if let outside = names.first(where: { !Self.staysInside($0) }) { throw CatalogError.outsideFolder(outside) }
         panel = try file.panel.map { entry in
             guard let version = FirmwareVersion(entry.version) else { throw CatalogError.badVersion(entry.version) }
             return PanelFirmware(version: version, sha: entry.sha, image: directory.appending(path: entry.image))
@@ -46,6 +49,12 @@ public struct Catalog: Sendable {
         }
     }
 
+    /// A plain relative path inside a folder: no leading "/", no "." or ".." parts, no empty parts, no backslashes.
+    public static func staysInside(_ name: String) -> Bool {
+        let parts = name.split(separator: "/", omittingEmptySubsequences: false)
+        return !name.contains("\\") && parts.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+
     /// Every file under `directory`, as paths relative to it (Finder's .DS_Store aside).
     private static func files(in directory: URL) throws -> [String] {
         let root = directory.standardizedFileURL.path(percentEncoded: false)
@@ -58,6 +67,12 @@ public struct Catalog: Sendable {
             return String(url.path(percentEncoded: false).dropFirst(prefix.count))
         }
     }
+
+    /// The SHA of every panel build the catalog lists, carried or not.
+    public var listedPanelSHAs: [String] { panel.map(\.sha) }
+
+    /// The stock firmware pairs the catalog has an LC6000 patch set for.
+    public var patchSetFirmwares: [LC6000Firmware] { lc6000.map(\.firmware) }
 
     /// The highest panel version whose image the app carries, or nil if it carries none. Entries without their
     /// image are builds shipped before: they still tell an older panel from an unknown one.

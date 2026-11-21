@@ -158,6 +158,7 @@ jobs:
         run: |
           swift test
           python3 -I scripts/test_add_panel_image.py
+          python3 -I scripts/test_sign_release.py
       # The release workflow (#28) only runs on tags, so its scripts are tested here on every pull request.
       - name: Release script tests
         run: |
