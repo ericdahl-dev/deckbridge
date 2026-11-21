@@ -35,6 +35,8 @@ public enum FlashError: Error, Equatable {
     case cancelled
     /// The line itself failed: the cable came out, or the port went away.
     case lineLost
+    /// The image to write isn't an ESP32-S3 app image that fits app0.
+    case notAPanelImage
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).

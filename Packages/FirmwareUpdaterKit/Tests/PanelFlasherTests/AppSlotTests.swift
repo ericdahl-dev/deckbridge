@@ -15,7 +15,7 @@ private let bootApp0: [UInt8] = {
     return bytes
 }()
 
-private let app: [UInt8] = [0xE9] + (1..<5000).map { UInt8(truncatingIfNeeded: $0 * 13) }
+private let app = panelApp(count: 5000, salt: 13)
 private let wifi: [UInt8] = Array("saved Wi-Fi".utf8)
 
 /// A panel that ran an update over Wi-Fi (#690): it boots app1, and has Wi-Fi saved and its other partitions in use.

@@ -30,15 +30,15 @@ final class Steps: @unchecked Sendable {
     var withoutProgress: [PanelUpdate.Step] { seen.filter { if case .writing = $0 { false } else { true } } }
 }
 
-private let app: [UInt8] = [0xE9] + (1..<3000).map { UInt8(truncatingIfNeeded: $0 * 7) }
+private let app = panelApp(count: 3000)
 
-private func run(_ rom: FakeROM, busy: Bool = false) async -> (Steps, FakeOpener) {
+private func run(_ rom: FakeROM, busy: Bool = false, image: [UInt8] = app) async -> (Steps, FakeOpener) {
     let opener = FakeOpener(rom: rom)
     opener.busy = busy
     let plugged = Plugged()
     let update = PanelUpdate(opener: opener, finder: DeviceFinder(usb: plugged, midi: plugged, serial: plugged, log: plugged))
     let steps = Steps()
-    await update.run(app, on: "/dev/cu.panel", wipeWiFi: false) { steps.seen.append($0) }
+    await update.run(image, on: "/dev/cu.panel", wipeWiFi: false) { steps.seen.append($0) }
     return (steps, opener)
 }
 
@@ -91,4 +91,19 @@ private func deckPanel() async -> FakeROM {
     let (steps, _) = await run(rom)
     #expect(steps.seen == [.connecting, .failed(.lineLost)])
     #expect(await rom.closed)
+}
+
+/// The image itself is checked before the cable is opened: an ESP32-S3 app image (magic E9, chip id 9) that fits app0
+/// (0x640000), so a wrong or oversized file can never erase into app1.
+@Test(arguments: [
+    [0x00] + Array(panelApp(count: 3000).dropFirst()),
+    { var b = panelApp(count: 3000); b[12] = 0x05; return b }(),
+    panelApp(count: 0x64_0001),
+    [UInt8](),
+])
+func anImageThatIsNotAPanelAppIsRefusedBeforeTheCableIsOpened(image: [UInt8]) async throws {
+    let rom = await deckPanel()
+    let (steps, opener) = await run(rom, image: image)
+    #expect(steps.seen == [.failed(.notAPanelImage)])
+    #expect(opener.opened.isEmpty)
 }

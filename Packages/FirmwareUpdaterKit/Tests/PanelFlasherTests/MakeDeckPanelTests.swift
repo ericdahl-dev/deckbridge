@@ -7,7 +7,7 @@ import Testing
 // A blank or foreign ESP32-S3 board made a deck panel (#687): only when the owner confirmed it, with the panel build's
 // bootloader and partition table, the whole set `pio upload` writes, and nothing of the board's old settings kept.
 
-private let app: [UInt8] = [0xE9] + (1..<3000).map { UInt8(truncatingIfNeeded: $0 * 7) }
+private let app = panelApp(count: 3000)
 private let loader: [UInt8] = [0xE9] + (1..<1500).map { UInt8(truncatingIfNeeded: $0 * 3) }
 
 private func foreignBoard() async -> FakeROM {

@@ -39,6 +39,7 @@ public struct PanelUpdate: Sendable {
 
     public func run(_ image: [UInt8], on port: String, wipeWiFi: Bool, boot: BootParts? = nil, makeDeckPanel: Bool = false,
                     report: @Sendable (Step) -> Void) async {
+        guard Self.isPanelApp(image) else { return report(.failed(.notAPanelImage)) }
         report(.connecting)
         let line: any BootloaderLine
         do {
@@ -72,6 +73,14 @@ public struct PanelUpdate: Sendable {
         }
         if case .onSerial(let build) = await finder.find().panel { return report(.done(build)) }
         report(.done(nil))
+    }
+
+    /// app0's size (tools/deck-panel/partitions.csv): a bigger image would erase into app1.
+    static let app0Size = 0x64_0000
+
+    /// An ESP32-S3 app image that fits app0: magic E9 and chip id 9 at bytes 12-13 of esp_image_header_t.
+    static func isPanelApp(_ image: [UInt8]) -> Bool {
+        image.count > 13 && image.count <= app0Size && image[0] == 0xE9 && image[12] == 0x09 && image[13] == 0x00
     }
 
     static func reason(_ error: any Error) -> FlashError {
@@ -108,6 +117,7 @@ extension PanelUpdate.Step {
         case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
         case .cancelled: return "Cancelled. The panel was restarted."
         case .lineLost: return "The cable was lost. Plug the panel back in and try again."
+        case .notAPanelImage: return "The firmware file isn't a deck panel image. Nothing was written."
         }
     }
 }

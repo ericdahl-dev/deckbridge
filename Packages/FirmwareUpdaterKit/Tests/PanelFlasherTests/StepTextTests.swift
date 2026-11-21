@@ -25,6 +25,7 @@ func eachStepReadsPlainly(step: PanelUpdate.Step, text: String) {
     (.verifyFailed(address: 0x10000), "The written firmware didn't check out. The panel may not start: try again before unplugging it."),
     (.cancelled, "Cancelled. The panel was restarted."),
     (.lineLost, "The cable was lost. Plug the panel back in and try again."),
+    (.notAPanelImage, "The firmware file isn't a deck panel image. Nothing was written."),
 ])
 func eachFailureSaysWhatHappenedAndWhatToDo(error: FlashError, text: String) {
     #expect(PanelUpdate.Step.failed(error).text == text)
