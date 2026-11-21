@@ -18,9 +18,15 @@ struct Bytes {
     virtual int next() = 0;
 };
 
+/// Where text outside a frame goes, a byte at a time: the "version" question (#695) shares the cable with the feed.
+struct Text {
+    virtual ~Text() = default;
+    virtual void put(char c) = 0;
+};
+
 class SerialFeed : public feed_drain::Socket {
 public:
-    explicit SerialFeed(Bytes& bytes) : bytes_(bytes) {}
+    explicit SerialFeed(Bytes& bytes, Text* text = nullptr) : bytes_(bytes), text_(text) {}
 
     size_t next_size() override;
     size_t read(uint8_t* into, size_t room) override;
@@ -28,6 +34,7 @@ public:
 
 private:
     Bytes& bytes_;
+    Text* text_;
     uint8_t packet_[feed_drain::kMaxDatagram];
     size_t length_ = 0;
     bool complete_ = false;

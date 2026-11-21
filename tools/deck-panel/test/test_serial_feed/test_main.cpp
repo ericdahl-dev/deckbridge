@@ -78,9 +78,30 @@ void test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through() {
     TEST_ASSERT_EQUAL_HEX8(0x61, got[1]);
 }
 
+/// What the feed passed on as text.
+struct Lines : serial_feed::Text {
+    std::string got;
+    void put(char c) override { got += c; }
+};
+
+// Text on the cable outside a frame (a "version" question, #695) goes to the text reader in order; a frame's bytes don't.
+void test_text_between_frames_goes_to_the_text_reader() {
+    FakeCable cable;
+    Lines lines;
+    serial_feed::SerialFeed feed(cable, &lines);
+    cable.add({'v', 'e', 'r'});
+    cable.add({0xC0, 's', 0x0a, 0xC0});
+    cable.add({'s', 'i', 'o', 'n', 0x0a});
+    const std::vector<uint8_t> got = next_packet(feed);
+    TEST_ASSERT_EQUAL(2, got.size());
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
     RUN_TEST(test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through);
+    RUN_TEST(test_text_between_frames_goes_to_the_text_reader);
     return UNITY_END();
 }

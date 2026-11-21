@@ -21,7 +21,10 @@ size_t SerialFeed::next_size() {
             escaped_ = false;
             continue;
         }
-        if (!in_frame_) continue;
+        if (!in_frame_) {
+            if (text_) text_->put(static_cast<char>(byte));
+            continue;
+        }
         if (escaped_) {
             escaped_ = false;
             if (byte == kEscEnd) byte = kEnd;
