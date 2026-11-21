@@ -200,15 +200,34 @@ public actor Bootloader {
 
     /// Refuses a board whose flash doesn't hold the deck panel's partition table, before anything is written: the
     /// chip's MD5 of the table's region against ours.
-    public func checkPartitionTable() async throws {
+    public func checkPartitionTable(_ expected: [UInt8]? = nil) async throws {
         do {
-            try await prepareFlash()
-            let found = try await flashMD5(at: Self.partitionTable.offset, size: Self.partitionTable.size)
-            guard found == Self.partitionTable.md5 else { throw FlashError.notADeckPanel }
+            guard try await isDeckPanel(expected) else { throw FlashError.notADeckPanel }
         } catch {
             await release()
             throw error
         }
+    }
+
+    /// Whether the board holds the deck panel's partition table: `expected` (the panel build's own, from the
+    /// catalog) or, without one, gen_esp32part.py's from partitions.csv. Leaves the panel in its bootloader.
+    public func isDeckPanel(_ expected: [UInt8]? = nil) async throws -> Bool {
+        try await prepareFlash()
+        let ours = expected.map { Insecure.MD5.hash(data: Data($0)).map { String(format: "%02x", $0) }.joined() }
+            ?? Self.partitionTable.md5
+        return try await flashMD5(at: Self.partitionTable.offset, size: Self.partitionTable.size) == ours
+    }
+
+    /// Makes a blank or foreign ESP32-S3 a deck panel, writing what `pio upload` writes: the bootloader at 0x0, the
+    /// partition table at 0x8000, the app at app0 and boot_app0 at otadata, each verified. nvs is wiped: what a foreign
+    /// board kept there isn't the panel's.
+    public func makeDeckPanel(_ image: [UInt8], bootloader: [UInt8], partitions: [UInt8],
+                              progress: @Sendable (Double) -> Void) async throws {
+        try await write(bootloader, at: 0x0) { _ in }
+        try await verify(bootloader, at: 0x0)
+        try await write(partitions, at: Self.partitionTable.offset) { _ in }
+        try await verify(partitions, at: Self.partitionTable.offset)
+        try await flashApp(image, wipeWiFi: true, progress: progress)
     }
 
     /// The chip's MD5 of `size` bytes of flash at `offset` (SPI_FLASH_MD5: the ROM answers with 32 hex characters).

@@ -27,7 +27,18 @@ public struct PanelUpdate: Sendable {
     /// wrong chip or a board without the deck panel's partition table before writing, writes and verifies app0 and
     /// otadata (and wipes nvs only if asked), resets the panel into its new app, then reads the build it now runs.
     /// Every way out leaves the panel running and the line closed. Ends with `.done` or `.failed`.
-    public func run(_ image: [UInt8], on port: String, wipeWiFi: Bool, report: @Sendable (Step) -> Void) async {
+    /// The panel build's bootloader and partition table, for making a blank or foreign board a deck panel.
+    public struct BootParts: Sendable {
+        public let bootloader: [UInt8]
+        public let partitions: [UInt8]
+        public init(bootloader: [UInt8], partitions: [UInt8]) {
+            self.bootloader = bootloader
+            self.partitions = partitions
+        }
+    }
+
+    public func run(_ image: [UInt8], on port: String, wipeWiFi: Bool, boot: BootParts? = nil, makeDeckPanel: Bool = false,
+                    report: @Sendable (Step) -> Void) async {
         report(.connecting)
         let line: any BootloaderLine
         do {
@@ -39,13 +50,23 @@ public struct PanelUpdate: Sendable {
         do {
             try await bootloader.connect()
             try await bootloader.checkChip()
-            try await bootloader.checkPartitionTable()
+            // A board without the deck panel's table is made one only when the owner confirmed it and the catalog has
+            // the panel build's bootloader and table; otherwise it is refused here, before anything is written.
+            let isDeckPanel = try await bootloader.isDeckPanel(boot?.partitions)
+            guard isDeckPanel || (makeDeckPanel && boot != nil) else { throw FlashError.notADeckPanel }
             try await bootloader.speedUp()
-            try await bootloader.flashApp(image, wipeWiFi: wipeWiFi) { report(.writing($0)) }
+            if let boot, !isDeckPanel {
+                try await bootloader.makeDeckPanel(image, bootloader: boot.bootloader, partitions: boot.partitions) {
+                    report(.writing($0))
+                }
+            } else {
+                try await bootloader.flashApp(image, wipeWiFi: wipeWiFi) { report(.writing($0)) }
+            }
             report(.restarting)
             await bootloader.release()
             await line.close()
         } catch {
+            await bootloader.release()
             await line.close()
             return report(.failed(Self.reason(error)))
         }
