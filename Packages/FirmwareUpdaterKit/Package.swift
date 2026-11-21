@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "FirmwareCatalog", targets: ["FirmwareCatalog"]),
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
+        .library(name: "PanelFlasher", targets: ["PanelFlasher"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
         .executable(name: "firmware-release", targets: ["firmware-release"]),
     ],
@@ -35,5 +36,9 @@ let package = Package(
         // The app's two sections, deck panel and LC6000, as plain values: what the owner reads (#685).
         .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel"]),
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel"]),
+        // Flashing a deck panel over its USB cable (#687): the ESP32-S3 ROM's serial bootloader protocol, spoken over a
+        // line the app opens. Tested against a fake bootloader; the real port is the app's adapter.
+        .target(name: "PanelFlasher"),
+        .testTarget(name: "PanelFlasherTests", dependencies: ["PanelFlasher"]),
     ]
 )
