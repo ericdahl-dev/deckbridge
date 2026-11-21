@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import FirmwareModel
 
@@ -14,6 +15,12 @@ public enum CatalogError: Error, Equatable {
     case unnamedFile(String)
     case missingBuiltIn
     case outsideFolder(String)
+    /// A block whose bytes aren't the ones its build record names: A and B from different builds.
+    case differentBuilds(String)
+    /// Block A without block B, or B without A ("a" or "b" names the one missing).
+    case missingBlock(String)
+    /// A block entry that isn't shaped like block A or block B as this repo builds them.
+    case notOurBlock(String)
 }
 
 /// The firmware the app ships with, read from a folder holding `catalog.json` and the files it names. No network.
@@ -23,14 +30,14 @@ public struct Catalog: Sendable {
 
     public init(directory: URL) throws {
         let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: directory.appending(path: "catalog.json")))
-        let names = file.panel.map(\.image) + file.lc6000.flatMap { $0.entries.map(\.file) }
+        let names = file.panel.map(\.image) + file.lc6000.flatMap { $0.entries.flatMap { [$0.file] + [$0.record].compactMap { $0 } } }
         if let outside = names.first(where: { !Self.staysInside($0) }) { throw CatalogError.outsideFolder(outside) }
         panel = try file.panel.map { entry in
             guard let version = FirmwareVersion(entry.version) else { throw CatalogError.badVersion(entry.version) }
             return PanelFirmware(version: version, sha: entry.sha, image: directory.appending(path: entry.image))
         }
         lc6000 = try file.lc6000.map { set in
-            LC6000PatchSet(
+            try LC6000PatchSet(
                 firmware: LC6000Firmware(wd: set.wd, tp: set.tp),
                 entries: try set.entries.map { entry in
                     let url = directory.appending(path: entry.file)
@@ -40,13 +47,49 @@ public struct Catalog: Sendable {
                             throw CatalogError.notAPatchDescription(entry.file)
                         }
                         return LC6000Entry(kind: .patch, chip: entry.chip, file: url, edits: edits)
+                    case .block:
+                        return LC6000Entry(kind: .block, chip: entry.chip, file: url)
                     }
-                })
+                },
+                blocks: Self.ownBlocks(in: set.entries, directory: directory))
         }
-        let named = Set(["catalog.json"] + file.panel.map(\.image) + file.lc6000.flatMap { $0.entries.map(\.file) })
+        let named = Set(["catalog.json"] + names)
         if let stray = try Self.files(in: directory).first(where: { !named.contains($0) }) {
             throw CatalogError.unnamedFile(stray)
         }
+    }
+
+    /// Block A and block B, when the set carries them, with the commit their build record names. Both or neither,
+    /// and each must be the very bytes the record names, so the two are from one build.
+    private static func ownBlocks(in entries: [File.Entry], directory: URL) throws -> OwnBlocks? {
+        let blocks = entries.filter { $0.kind == .block }
+        if blocks.isEmpty { return nil }
+        guard let a = blocks.first(where: { $0.part == "a" }) else { throw CatalogError.missingBlock("a") }
+        guard let b = blocks.first(where: { $0.part == "b" }) else { throw CatalogError.missingBlock("b") }
+        guard let recordName = a.record, b.record == recordName else { throw CatalogError.differentBuilds(b.file) }
+        let record = try JSONDecoder().decode(BuildRecord.self, from: Data(contentsOf: directory.appending(path: recordName)))
+        for (entry, named) in [(a, record.block_a), (b, record.block_b)] {
+            let bytes = try Data(contentsOf: directory.appending(path: entry.file))
+            guard entry.part == "a" ? OwnBlockShape.isBlockA(bytes) : OwnBlockShape.isBlockB(bytes) else {
+                throw CatalogError.notOurBlock(entry.file)
+            }
+            guard bytes.count == named.length, sha1(bytes) == named.sha1.lowercased() else {
+                throw CatalogError.differentBuilds(entry.file)
+            }
+        }
+        return OwnBlocks(a: directory.appending(path: a.file), b: directory.appending(path: b.file), commit: record.commit)
+    }
+
+    private static func sha1(_ data: Data) -> String {
+        Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// What `make arm` writes beside the blocks (tools/lc6000-firmware/build_record.py): each block's sha1 and length.
+    private struct BuildRecord: Decodable {
+        struct Block: Decodable { let sha1: String; let length: Int }
+        let commit: String
+        let block_a: Block
+        let block_b: Block
     }
 
     /// A plain relative path inside a folder: no leading "/", no "." or ".." parts, no empty parts, no backslashes.
@@ -84,7 +127,14 @@ public struct Catalog: Sendable {
     private struct File: Decodable {
         struct Panel: Decodable { let version: String; let sha: String; let image: String }
         struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry] }
-        struct Entry: Decodable { let kind: LC6000Entry.Kind; let chip: Chip; let file: String }
+        struct Entry: Decodable {
+            let kind: LC6000Entry.Kind
+            let chip: Chip
+            let file: String
+            /// Blocks only: "a" or "b", and the build record `make arm` wrote beside them.
+            var part: String? = nil
+            var record: String? = nil
+        }
         let panel: [Panel]
         let lc6000: [Set]
     }
@@ -122,12 +172,58 @@ extension Catalog {
 
 public enum Chip: String, Sendable, Hashable, Decodable { case wd, tp }
 
-/// One thing the app applies to an LC6000 chip. Only patch descriptions for now; a block built from this repo
-/// is a second kind (#696).
+extension CatalogError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .notOurBlock(let file): "\(file) is not one of DeckBridge's own blocks"
+        default: nil
+        }
+    }
+}
+
+/// The shapes of block A and block B as `make arm` builds them (tools/lc6000-display-fw/arm): a check that a block
+/// entry is this repo's code, not Denon's. Shape only; that the bytes are this repo's build is the release build's
+/// job, which rebuilds them.
+enum OwnBlockShape {
+    /// Block A fills the wd padding, 0x0807DC00 up to 0x0807FFE0, and ends in its marker "DFW1" (arm/hook.h).
+    static func isBlockA(_ bytes: Data) -> Bool {
+        let a = [UInt8](bytes)
+        return a.count == 9184 && word(a, 9180) == 0x3157_4644
+    }
+
+    /// Block B's header (arm/upper_header.py): marker "DFWB", version 4, its length (all of B, at most the upper
+    /// flash's 512 KB), and zlib's CRC-32 of B from +16 to that length.
+    static func isBlockB(_ bytes: Data) -> Bool {
+        let b = [UInt8](bytes)
+        guard b.count >= 28, b.count <= 0x80000, word(b, 0) == 0x4257_4644, word(b, 4) == 4,
+              word(b, 8) == UInt32(b.count) else { return false }
+        return crc32(b[16...]) == word(b, 12)
+    }
+
+    private static func word(_ bytes: [UInt8], _ at: Int) -> UInt32 {
+        var value: UInt32 = 0
+        for i in 0..<4 { value |= UInt32(bytes[at + i]) << (8 * UInt32(i)) }
+        return value
+    }
+
+    private static func crc32(_ bytes: ArraySlice<UInt8>) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in bytes {
+            crc ^= UInt32(byte)
+            for _ in 0..<8 { crc = crc & 1 == 1 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
+        }
+        return ~crc
+    }
+}
+
+/// One thing the app applies to an LC6000 chip: a patch description against Denon's firmware, or a block of this
+/// repo's own code (#696).
 public struct LC6000Entry: Sendable, Hashable {
     public enum Kind: String, Sendable, Hashable, Decodable {
         /// Addresses and the few bytes replaced at each, for one stock firmware version. Never a vendor image.
         case patch
+        /// Block A or block B of the drawn jog display, built from this repo's sources by `make arm`.
+        case block
     }
 
     public let kind: Kind
@@ -153,6 +249,16 @@ public struct PatchEdit: Sendable, Hashable {
 public struct LC6000PatchSet: Sendable, Hashable {
     public let firmware: LC6000Firmware
     public let entries: [LC6000Entry]
+    /// The drawn jog display's own code, when the set carries it.
+    public var blocks: OwnBlocks? = nil
+}
+
+/// Block A (the wd padding) and block B (the upper flash), from one build of this repo.
+public struct OwnBlocks: Sendable, Hashable {
+    public let a: URL
+    public let b: URL
+    /// The commit `make arm` built them from, as its build record says.
+    public let commit: String
 }
 
 extension Catalog {
