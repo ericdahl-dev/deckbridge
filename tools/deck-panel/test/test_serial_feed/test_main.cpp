@@ -2,6 +2,7 @@
 // packets, through the same feed_drain::Socket the UDP feed uses.
 #include <unity.h>
 
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <sstream>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "../test_deck_core/json_mini.h"
+#include "deck_core.h"
 #include "serial_feed.h"
 
 void setUp() {}
@@ -117,11 +119,40 @@ void test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame() {
     TEST_ASSERT_EQUAL_HEX8(0x06, rest.back()[0]);
 }
 
+struct Last : deck_core::Screen {
+    int deck = -1;
+    void show_waiting(const deck_core::WaitingView&, const deck_core::WaitingChanges&) override {}
+    void show_deck(const deck_core::Face& f, const deck_core::Changes&) override { deck = std::atoi(f.deck); }
+};
+
+// Through the drain into the core, as on the board: a frame that arrives in two parts shows its deck once it is whole,
+// and the drain doesn't wait for the rest in between.
+void test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole() {
+    // /DeckBridge/Display/deck ,i 3: the 24-byte address padded to 28, the tags, the value.
+    std::vector<uint8_t> message = {'/', 'D', 'e', 'c', 'k', 'B', 'r', 'i', 'd', 'g', 'e', '/', 'D', 'i', 's', 'p',
+                                    'l', 'a', 'y', '/', 'd', 'e', 'c', 'k', 0, 0, 0, 0, ',', 'i', 0, 0, 0, 0, 0, 3};
+    FakeCable cable;
+    serial_feed::SerialFeed feed(cable);
+    deck_core::DeckCore core;
+    core.set_network(deck_core::Network::connected, "10.0.0.2");
+    feed_drain::Drain drain;
+    cable.add({0xC0});
+    cable.add(std::vector<uint8_t>(message.begin(), message.begin() + 20));
+    TEST_ASSERT_EQUAL(0, drain.run(feed, core, 100));
+    cable.add(std::vector<uint8_t>(message.begin() + 20, message.end()));
+    cable.add({0xC0});
+    TEST_ASSERT_EQUAL(1, drain.run(feed, core, 133));
+    Last screen;
+    core.render(screen, 133);
+    TEST_ASSERT_EQUAL(3, screen.deck);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
     RUN_TEST(test_an_overlong_frame_is_dropped_whole_and_the_next_comes_through);
     RUN_TEST(test_text_between_frames_goes_to_the_text_reader);
     RUN_TEST(test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame);
+    RUN_TEST(test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole);
     return UNITY_END();
 }
