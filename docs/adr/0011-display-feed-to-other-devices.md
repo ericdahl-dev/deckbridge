@@ -38,3 +38,13 @@ Every address is under `/DeckBridge/Display/` and carries exactly one value, of 
 **A display must ignore an address it doesn't know**, and a message whose type isn't the one above. That way a newer DeckBridge can add addresses without breaking an older display.
 
 `tools/deck-panel/feed/examples.json` holds worked examples of deck states and the messages sent for them. DeckBridge's tests and the panel core's tests both walk it.
+
+## Over the USB cable (#667)
+
+2026-11-21, by the owner's decisions on #667. The same feed can also go over the USB cable to a deck panel plugged into this Mac, so a panel works with no Wi-Fi set up. DeckBridge stays in the middle: Syndicate never talks to the panel. Everything above holds unchanged: the addresses, the bundles, the 1200-byte ceiling, the snapshot and keepalive rules, and send-only.
+
+- **Its own switch.** Settings' "Send over the USB cable" is off by default and apart from the Wi-Fi switch. Either, both or neither may be on; each destination gets its own snapshot when it opens, and its own goodbye.
+- **Framing.** Each OSC packet (a message or a bundle) goes as one SLIP frame (RFC 1055, as OSC 1.1 has it for serial): END (`0xC0`) before and after, `0xC0` in the packet sent as `0xDB 0xDC` and `0xDB` as `0xDB 0xDD`. `tools/deck-panel/feed/slip.json` holds worked examples, walked by both sides' tests.
+- **The port.** The panel's USB bridge (WCH CH340, `1a86:7522`), found by its USB IDs, not its name. 921600 baud, 8N1. DeckBridge opens it only while the switch is on, exclusively (`TIOCEXCL`), and lets go when the switch goes off or the panel is unplugged. The port opening is the destination opening.
+- **On the panel.** The cable also carries the panel's text: its logs go panel to Mac, and a `version` question (#695) comes Mac to panel outside any frame. Bytes outside a frame are text. A frame with no byte for 100 ms is dropped as cut. A feed heard on the cable shows the deck even off Wi-Fi, in setup mode too.
+- **Not for speed.** The frame ledger (#662) starts at the panel, so it can't show the network's share of the lag. The cable is for setup, not for a faster screen.
