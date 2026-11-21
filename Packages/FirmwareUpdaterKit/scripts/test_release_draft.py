@@ -75,6 +75,13 @@ class ReleaseDraft(unittest.TestCase):
             self.assertNotEqual(self.run_script(sha=sha).returncode, 0, sha)
             self.assertFalse(self.out.exists())
 
+    def test_it_prints_the_entry_to_record_in_the_repos_catalog(self):
+        # The fallback if the signing step's pull request isn't made: the line to add to Catalog/catalog.json.
+        result = self.run_script()
+        line = [l for l in result.stdout.splitlines() if l.startswith("record: ")][0]
+        self.assertEqual(json.loads(line[len("record: "):]),
+                         {"version": "1.1.0", "sha": SHA, "image": "panel/deck-panel-1.1.0-1d0683f.bin"})
+
 
 if __name__ == "__main__":
     unittest.main()

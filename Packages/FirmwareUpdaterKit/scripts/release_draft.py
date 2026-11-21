@@ -40,6 +40,9 @@ def main(argv):
         if added != 0:
             return added
         catalog = json.loads((staged / "catalog.json").read_text())
+        # The repo's own entry for this build (nested name, as the app carries it): what the signing step's pull
+        # request records, printed in case that isn't made.
+        print("record: " + json.dumps(catalog["panel"][-1]))
         args.out.mkdir()
         for entry in catalog["panel"]:
             entry["image"] = flat(staged, entry["image"], args.out)
