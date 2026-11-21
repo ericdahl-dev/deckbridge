@@ -107,3 +107,31 @@ extension DFUError {
         }
     }
 }
+
+/// The guard in front of the app's real USB transport: anything but a read-only request is refused before it is sent.
+public struct ReadOnlyTransport: DFUTransport {
+    public struct Refused: Error {}
+    let inner: any DFUTransport
+
+    public init(_ inner: any DFUTransport) { self.inner = inner }
+
+    public func control(_ request: DFURequest) async throws -> [UInt8] {
+        guard request.isReadOnly else { throw Refused() }
+        return try await inner.control(request)
+    }
+}
+
+extension DFURequest {
+    /// What dfu-util's DfuSe upload sends, and nothing else: GETSTATUS, GETSTATE, CLRSTATUS, ABORT, UPLOAD of a block,
+    /// and the one download that sets the address pointer (DfuSe 0x21 and a 4-byte address, in block 0).
+    var isReadOnly: Bool {
+        switch (requestType, request) {
+        case (0xA1, 3): data.isEmpty && length == 6
+        case (0xA1, 5): data.isEmpty && length == 1
+        case (0x21, 4), (0x21, 6): data.isEmpty && length == 0 && value == 0
+        case (0xA1, 2): data.isEmpty && value >= 2
+        case (0x21, 1): value == 0 && data.count == 5 && data[0] == 0x21
+        default: false
+        }
+    }
+}
