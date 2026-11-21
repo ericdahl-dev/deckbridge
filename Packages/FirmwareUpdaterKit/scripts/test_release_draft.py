@@ -1,5 +1,6 @@
 """Tests for release_draft.py (#703): the unsigned draft release CI builds on a deck panel tag, as a folder of
 flat-named files the maintainer's signing step (sign_release.sh, ADR 0012) signs."""
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -27,16 +28,33 @@ class ReleaseDraft(unittest.TestCase):
         self.image = root / "firmware.bin"
         self.image.write_bytes(b"\xe9" + bytes(1024))
         self.out = root / "draft"
+        # make arm's output (#696, #707): block A, block B and the build record naming them. Made up here, shaped as built.
+        self.arm = root / "arm"
+        self.arm.mkdir()
+        self.block_a, self.block_b = b"\xa5" * 9180 + b"DFW1", b"DFWB" + bytes(60)
+        (self.arm / "block.bin").write_bytes(self.block_a)
+        (self.arm / "upper.bin").write_bytes(self.block_b)
+        self.write_record()
         self.loader = root / "bootloader.bin"
         self.loader.write_bytes(b"\xe9\x03\x02\x4f" + bytes(61))
         self.table = root / "partitions.bin"
         self.table.write_bytes(b"\xaa\x50" + bytes(3070))
 
+    def write_record(self, commit="0123456789ab"):
+        record = {"record": 1, "commit": commit, "built": 1,
+                  "block_a": {"sha1": hashlib.sha1(self.block_a).hexdigest(), "length": len(self.block_a),
+                              "draw": "1", "proven": "1"},
+                  "block_b": {"sha1": hashlib.sha1(self.block_b).hexdigest(), "length": len(self.block_b),
+                              "layout": 1, "header_version": 4}}
+        (self.arm / "build.json").write_text(json.dumps(record))
+
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_script(self, tag="deck-panel-v1.1.0", sha=SHA, boot=False):
+    def run_script(self, tag="deck-panel-v1.1.0", sha=SHA, boot=False, blocks=False):
         extra = ["--bootloader", str(self.loader), "--partitions", str(self.table)] if boot else []
+        if blocks:
+            extra += ["--blocks", str(self.arm), "--blocks-wd", "00.50", "--blocks-tp", "00.31"]
         return subprocess.run([sys.executable, "-I", str(SCRIPT), "--tag", tag, "--version-file", str(self.version_file),
                                "--image", str(self.image), "--sha", sha, "--catalog", str(self.catalog),
                                "--out", str(self.out), *extra], capture_output=True, text=True)
@@ -103,6 +121,29 @@ class ReleaseDraft(unittest.TestCase):
         line = [l for l in result.stdout.splitlines() if l.startswith("record: ")][0]
         self.assertEqual(json.loads(line[len("record: "):]),
                          {"version": "1.1.0", "sha": SHA, "image": "panel/deck-panel-1.1.0-1d0683f.bin"})
+
+
+    def test_the_drawn_displays_blocks_ride_in_the_draft_with_their_record_and_flat_names(self):
+        # #707: blocks A and B and their build record, staged by #696's step, in the deck panel release.
+        result = self.run_script(blocks=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.out / "block-a.bin").read_bytes(), self.block_a)
+        self.assertEqual((self.out / "block-b.bin").read_bytes(), self.block_b)
+        self.assertEqual(json.loads((self.out / "build.json").read_text())["commit"], "0123456789ab")
+        entries = json.loads((self.out / "catalog.json").read_text())["lc6000"][0]["entries"]
+        self.assertEqual([(e["kind"], e["file"], e.get("record")) for e in entries], [
+            ("patch", "wd-00.50-show-slot-16.patch", None),
+            ("block", "block-a.bin", "build.json"),
+            ("block", "block-b.bin", "build.json")])
+        # The repo records the panel build only; it never carries blocks.
+        self.assertFalse((self.catalog / "blocks").exists())
+
+    def test_blocks_the_staging_step_refuses_make_no_draft(self):
+        self.write_record(commit="0123456789ab+changes")
+        result = self.run_script(blocks=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("uncommitted", result.stderr)
+        self.assertFalse(self.out.exists())
 
 
 if __name__ == "__main__":
