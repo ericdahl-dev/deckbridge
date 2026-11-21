@@ -51,3 +51,18 @@ func publishedGitHub() -> FakeGitHub {
     }
     #expect(github.asked.count == 5)  // the release, then each asset's download URL and its redirect
 }
+
+/// GitHub's "latest" never names a draft or a pre-release; should it ever, nothing of that release is fetched.
+@Test(arguments: [(true, false), (false, true)])
+func aDraftOrPreReleaseIsNeverFetched(draft: Bool, prerelease: Bool) async throws {
+    let github = publishedGitHub()
+    github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(draft: draft, prerelease: prerelease))
+    await #expect(throws: FeedError.notPublished) { try await GitHubReleaseFeed(http: github).latest() }
+    #expect(github.asked.map(\.url) == [latestURL])
+}
+
+@Test func aReleaseWithoutItsSignatureGivesNothing() async throws {
+    let github = publishedGitHub()
+    github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: ["manifest.json", "catalog.json"]))
+    await #expect(throws: FeedError.missingAsset("manifest.sig")) { try await GitHubReleaseFeed(http: github).latest() }
+}
