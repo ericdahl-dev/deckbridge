@@ -31,6 +31,8 @@ targets:
         product: UpdaterScreen
       - package: FirmwareUpdaterKit
         product: FirmwareModel
+      - package: FirmwareUpdaterKit
+        product: FirmwareRelease
     info:
       path: Sources/Info.plist
       properties:
