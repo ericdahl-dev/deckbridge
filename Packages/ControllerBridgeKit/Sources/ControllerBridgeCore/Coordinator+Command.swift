@@ -36,6 +36,8 @@ extension Coordinator {
         /// The display feed's destination opened (#616): what was sent before it was dropped, so the full snapshot
         /// goes again.
         case displayFeedReady
+        /// The panel's serial port opened (#667): the cable's snapshot, from whichever Coordinator holds the feed.
+        case cableFeedReady
         /// Start the LED sweep, `delay` seconds per color; or stop it part-way (#26).
         case ledSweep(delay: Double)
         case stopLEDSweep
@@ -71,7 +73,7 @@ extension Coordinator {
             // The meter capture (#582) records what Syndicate sends the real controller.
             case .setCapture, .portRecovered, .jogDisplayRecovered, .startMeterCapture: .real
             // The display feed goes with whichever Coordinator runs (#625), so its destination opening does too.
-            case .ledSweep, .stopLEDSweep, .displayFeedReady: .active
+            case .ledSweep, .stopLEDSweep, .displayFeedReady, .cableFeedReady: .active
             // The preview's deck (#221) holds for the real controller and the demo alike.
             case .setJogPreviewDeck: .realAndDemo
             case .setDeck, .setDevices, .setLEDs, .setDeckColors, .setRingColors, .setColorMessages, .setStripFader, .setLightBrightness, .resync, .setControllers, .setProfiles,
@@ -103,6 +105,7 @@ extension Coordinator {
         case .setJogPreviewDeck(let deck): setJogPreviewDeck(deck)
         case .setDisplayFeed(let settings): setDisplayFeed(settings)
         case .displayFeedReady: displayFeedReady()
+        case .cableFeedReady: cableFeedReady()
         case .ledSweep(let delay): startLEDSweep(delay: delay)
         case .stopLEDSweep: stopLEDSweep()
         case .startMeterCapture(let seconds): startMeterCapture(seconds: seconds)
