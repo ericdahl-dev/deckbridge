@@ -2,6 +2,7 @@
 enum Op: UInt8 {
     case flashData = 0x03
     case sync = 0x08
+    case securityInfo = 0x14
 }
 
 /// One packet to or from the ESP32-S3's ROM serial bootloader: a header (direction, op, data length, a 32-bit value
@@ -28,13 +29,17 @@ enum Packet {
 
     /// A response from an unescaped frame: direction 1, op, length, value, then `dataLength` bytes of data and the
     /// status, 0 for ok or 1 and a reason (esptool's check_command). The ROM's two reserved bytes after the status are
-    /// ignored. Nil when the frame isn't a response or is too short for that data and its status.
+    /// ignored. A frame too short for that data is a refusal if it starts with a failed status, else nil.
     static func response(_ frame: [UInt8], dataLength: Int) -> Response? {
         guard frame.count >= 8, frame[0] == 0x01 else { return nil }
         let length = Int(frame[2]) | Int(frame[3]) << 8
         let body = Array(frame.dropFirst(8).prefix(length))
-        guard body.count >= dataLength + 2 else { return nil }
         let value = UInt32(frame[4]) | UInt32(frame[5]) << 8 | UInt32(frame[6]) << 16 | UInt32(frame[7]) << 24
+        guard body.count >= dataLength + 2 else {
+            // Too short for the data: a refusal when its first two bytes are a failed status, else nothing.
+            guard body.count >= 2, body[0] != 0 else { return nil }
+            return Response(op: frame[1], value: value, data: [], ok: false, error: body[1])
+        }
         return Response(op: frame[1], value: value, data: Array(body[0..<dataLength]), ok: body[dataLength] == 0,
                         error: body[dataLength + 1])
     }

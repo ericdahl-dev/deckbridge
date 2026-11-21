@@ -12,6 +12,12 @@ public protocol BootloaderLine: Sendable {
 public enum FlashError: Error, Equatable {
     /// Nothing answered the bootloader's SYNC after every reset: no ESP32 on the line, or no auto-reset circuit.
     case noBootloader
+    /// Not a deck panel's chip, an ESP32-S3; the text says what it is.
+    case wrongBoard(String)
+    /// The ROM refused a command: its op and the ROM's reason byte.
+    case refused(op: UInt8, reason: UInt8)
+    /// The ROM didn't answer a command in time.
+    case noAnswer(op: UInt8)
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
@@ -52,6 +58,43 @@ public actor Bootloader {
         try? await line.setLines(dtr: false, rts: true)
         await line.pause(0.1)
         try? await line.setLines(dtr: false, rts: false)
+    }
+
+    /// GET_SECURITY_INFO's chip id for an ESP32-S3 (esptool targets/esp32s3.py IMAGE_CHIP_ID).
+    static let esp32S3 = UInt32(9)
+
+    /// Refuses anything but an ESP32-S3, before anything is written: GET_SECURITY_INFO's chip id (the word after the
+    /// flags, crypt count and seven key purposes). A ROM without the command, the original ESP32's, refuses it.
+    public func checkChip() async throws {
+        do {
+            let info: Response
+            do {
+                info = try await command(.securityInfo, data: [], dataLength: 20)
+            } catch FlashError.refused(_, _) {
+                throw FlashError.wrongBoard("an ESP32 without GET_SECURITY_INFO")
+            }
+            let id = UInt32(info.data[12]) | UInt32(info.data[13]) << 8 | UInt32(info.data[14]) << 16 | UInt32(info.data[15]) << 24
+            guard id == Self.esp32S3 else { throw FlashError.wrongBoard("chip id \(id)") }
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
+    /// Sends one command and waits for its answer: `dataLength` bytes of data, then the status.
+    func command(_ op: Op, data: [UInt8], checksum: UInt32 = 0, dataLength: Int = 0, timeout: Double = 3) async throws -> Response {
+        try Task.checkCancellation()
+        try await line.write(Packet.command(op, data: data, checksum: checksum))
+        let reads = max(1, Int(timeout / 0.1))
+        for _ in 0..<reads {
+            for frame in reader.feed(try await line.read(timeout: 0.1)) {
+                guard let response = Packet.response(frame, dataLength: dataLength), response.op == op.rawValue else { continue }
+                guard response.ok else { throw FlashError.refused(op: op.rawValue, reason: response.error) }
+                return response
+            }
+            try Task.checkCancellation()
+        }
+        throw FlashError.noAnswer(op: op.rawValue)
     }
 
     private func resetIntoBootloader() async throws {

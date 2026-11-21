@@ -38,6 +38,10 @@ import Testing
     #expect(failed.error == 0x05)
     // Shorter than the data and status asked for: no response.
     #expect(Packet.response([0x01, 0x13, 0x02, 0x00, 0, 0, 0, 0, 0x00, 0x00], dataLength: 32) == nil)
+    // Shorter, with a failed status first: a refusal (esptool reads the first two bytes as the status then).
+    let short = try #require(Packet.response([0x01, 0x14, 0x04, 0x00, 0, 0, 0, 0, 0x01, 0x05, 0x00, 0x00], dataLength: 20))
+    #expect(!short.ok)
+    #expect(short.error == 0x05)
 }
 
 @Test func slipFramesAreSplitAndUnescapedFromARunOfBytes() {
