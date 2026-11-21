@@ -11,6 +11,24 @@ private func sha1(_ data: Data) -> String {
     Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
 }
 
+/// Block A's shape: the 9,184-byte wd padding, ending in its marker "DFW1" (arm/hook.h), filled with `fill`.
+private func ownA(fill: UInt8 = 0xA5) -> Data {
+    Data(repeating: fill, count: 9180) + Data([0x44, 0x46, 0x57, 0x31])
+}
+
+/// Block B's shape: the worked example in arm/test/test_upper_header.py, its header (marker "DFWB", version 4, length
+/// 37, CRC 0x6ACCA34B worked out apart there, layout, draw, band) and the body "123456789".
+private func ownB() -> Data {
+    let words: [UInt32] = [0x4257_4644, 4, 37, 0x6ACC_A34B, 0x1A2B_3C4D, 0x0808_001D, 0x0808_001F]
+    return Data(words.flatMap { word in (0..<4).map { UInt8(truncatingIfNeeded: word >> (8 * $0)) } }) + Data("123456789".utf8)
+}
+
+private func word(_ data: Data, at offset: Int, _ value: UInt32) -> Data {
+    var out = data
+    for i in 0..<4 { out[offset + i] = UInt8(truncatingIfNeeded: value >> (8 * i)) }
+    return out
+}
+
 /// A catalog folder for wd 00.50 / tp 00.31 holding `a`, `b` and the build record `make arm` writes beside them.
 /// `recordA` and `recordB` are the blocks the record names (by default, `a` and `b` themselves); `parts` are the
 /// blocks the set lists and the folder holds.
@@ -35,7 +53,7 @@ private func catalog(a: Data, b: Data, recordA: Data? = nil, recordB: Data? = ni
 }
 
 @Test func aSetCarryingBlockAAndBlockBFromOneBuildOffersThemAsThePair() throws {
-    let a = Data(repeating: 0xA5, count: 64), b = Data(repeating: 0x5B, count: 64)
+    let a = ownA(), b = ownB()
     let loaded = try Catalog(directory: catalog(a: a, b: b))
     let set = try #require(loaded.patchSet(for: LC6000Firmware(wd: "00.50", tp: "00.31")))
     let blocks = try #require(set.blocks)
@@ -48,8 +66,8 @@ private func catalog(a: Data, b: Data, recordA: Data? = nil, recordB: Data? = ni
 /// A and B from different builds stay silent together (#516): a block whose bytes aren't the ones its build record
 /// names stops the catalog loading.
 @Test func blockAOrBlockBFromAnotherBuildThanTheRecordDoesNotLoad() throws {
-    let a = Data(repeating: 0xA5, count: 64), b = Data(repeating: 0x5B, count: 64)
-    let otherA = Data(repeating: 0xA6, count: 64), otherB = Data(repeating: 0x5C, count: 64)
+    let a = ownA(), b = ownB()
+    let otherA = ownA(fill: 0xA6), otherB = ownB() + Data([0])
     #expect(throws: CatalogError.differentBuilds("lc6000/block.bin")) {
         try Catalog(directory: catalog(a: a, b: b, recordA: otherA))
     }
@@ -61,6 +79,39 @@ private func catalog(a: Data, b: Data, recordA: Data? = nil, recordB: Data? = ni
 /// One block without the other is no drawn display: block A alone, or B alone, stops the catalog loading.
 @Test(arguments: ["a", "b"])
 func aSetWithOnlyOneOfTheTwoBlocksDoesNotLoad(kept: String) throws {
-    let folder = try catalog(a: Data(repeating: 0xA5, count: 64), b: Data(repeating: 0x5B, count: 64), parts: [kept])
+    let folder = try catalog(a: ownA(), b: ownB(), parts: [kept])
     #expect(throws: CatalogError.missingBlock(kept == "a" ? "b" : "a")) { try Catalog(directory: folder) }
+}
+
+/// The app ships only this repo's own code, never Denon's (#684): a block entry must have the shape of block A or
+/// block B as `make arm` builds them. A stock image, a dump or a patched image named as a block stops the catalog
+/// loading, even with a build record that names its bytes.
+@Test(arguments: [
+    ("a: one byte short", Data(ownA().dropLast(5)) + Data([0x44, 0x46, 0x57, 0x31])),
+    ("a: no DFW1 marker", Data(repeating: 0xA5, count: 9184)),
+    ("a: a whole stock-sized image", Data(repeating: 0xFF, count: 0x7_E000)),
+])
+func aBlockANotShapedLikeOursDoesNotLoad(_ case: String, a: Data) throws {
+    #expect(throws: CatalogError.notOurBlock("lc6000/block.bin"), "\(`case`)") {
+        try Catalog(directory: catalog(a: a, b: ownB()))
+    }
+}
+
+@Test(arguments: [
+    ("b: no DFWB marker", word(ownB(), at: 0, 0x2000_5000)),
+    ("b: another header version", word(ownB(), at: 4, 3)),
+    ("b: longer than its header says", ownB() + Data([0])),
+    ("b: its CRC broken", word(ownB(), at: 12, 0x6ACC_A34A)),
+    ("b: a body byte changed", Data(ownB().dropLast()) + Data("0".utf8)),
+    ("b: shorter than its header", Data(ownB().prefix(20))),
+])
+func aBlockBNotShapedLikeOursDoesNotLoad(_ case: String, b: Data) throws {
+    #expect(throws: CatalogError.notOurBlock("lc6000/upper.bin"), "\(`case`)") {
+        try Catalog(directory: catalog(a: ownA(), b: b))
+    }
+}
+
+@Test func theRefusalSaysPlainlyItIsNotOneOfOurBlocks() {
+    #expect(CatalogError.notOurBlock("lc6000/upper.bin").localizedDescription
+        == "lc6000/upper.bin is not one of DeckBridge's own blocks")
 }

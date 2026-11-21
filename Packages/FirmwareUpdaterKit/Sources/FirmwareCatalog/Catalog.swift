@@ -19,6 +19,8 @@ public enum CatalogError: Error, Equatable {
     case differentBuilds(String)
     /// Block A without block B, or B without A ("a" or "b" names the one missing).
     case missingBlock(String)
+    /// A block entry that isn't shaped like block A or block B as this repo builds them.
+    case notOurBlock(String)
 }
 
 /// The firmware the app ships with, read from a folder holding `catalog.json` and the files it names. No network.
@@ -68,6 +70,9 @@ public struct Catalog: Sendable {
         let record = try JSONDecoder().decode(BuildRecord.self, from: Data(contentsOf: directory.appending(path: recordName)))
         for (entry, named) in [(a, record.block_a), (b, record.block_b)] {
             let bytes = try Data(contentsOf: directory.appending(path: entry.file))
+            guard entry.part == "a" ? OwnBlockShape.isBlockA(bytes) : OwnBlockShape.isBlockB(bytes) else {
+                throw CatalogError.notOurBlock(entry.file)
+            }
             guard bytes.count == named.length, sha1(bytes) == named.sha1.lowercased() else {
                 throw CatalogError.differentBuilds(entry.file)
             }
@@ -166,6 +171,50 @@ extension Catalog {
 }
 
 public enum Chip: String, Sendable, Hashable, Decodable { case wd, tp }
+
+extension CatalogError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .notOurBlock(let file): "\(file) is not one of DeckBridge's own blocks"
+        default: nil
+        }
+    }
+}
+
+/// The shapes of block A and block B as `make arm` builds them (tools/lc6000-display-fw/arm): a check that a block
+/// entry is this repo's code, not Denon's. Shape only; that the bytes are this repo's build is the release build's
+/// job, which rebuilds them.
+enum OwnBlockShape {
+    /// Block A fills the wd padding, 0x0807DC00 up to 0x0807FFE0, and ends in its marker "DFW1" (arm/hook.h).
+    static func isBlockA(_ bytes: Data) -> Bool {
+        let a = [UInt8](bytes)
+        return a.count == 9184 && word(a, 9180) == 0x3157_4644
+    }
+
+    /// Block B's header (arm/upper_header.py): marker "DFWB", version 4, its length (all of B, at most the upper
+    /// flash's 512 KB), and zlib's CRC-32 of B from +16 to that length.
+    static func isBlockB(_ bytes: Data) -> Bool {
+        let b = [UInt8](bytes)
+        guard b.count >= 28, b.count <= 0x80000, word(b, 0) == 0x4257_4644, word(b, 4) == 4,
+              word(b, 8) == UInt32(b.count) else { return false }
+        return crc32(b[16...]) == word(b, 12)
+    }
+
+    private static func word(_ bytes: [UInt8], _ at: Int) -> UInt32 {
+        var value: UInt32 = 0
+        for i in 0..<4 { value |= UInt32(bytes[at + i]) << (8 * UInt32(i)) }
+        return value
+    }
+
+    private static func crc32(_ bytes: ArraySlice<UInt8>) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        for byte in bytes {
+            crc ^= UInt32(byte)
+            for _ in 0..<8 { crc = crc & 1 == 1 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
+        }
+        return ~crc
+    }
+}
 
 /// One thing the app applies to an LC6000 chip: a patch description against Denon's firmware, or a block of this
 /// repo's own code (#696).
