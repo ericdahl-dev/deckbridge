@@ -57,9 +57,10 @@ std::string manifest_text(const char* key = "primary", const char* version = "1.
 }
 
 struct Panel {
+    explicit Panel(const char* floor = "1.0.0") : session(Config{kKeys, 2, fake_verify, &hasher, &slot, floor}) {}
     FakeHasher hasher;
     FakeSlot slot;
-    Session session{Config{kKeys, 2, fake_verify, &hasher, &slot, "1.0.0"}};
+    Session session;
 
     Reply send_manifest(const std::string& text, uint8_t key_first) {
         Reply first = session.manifest(reinterpret_cast<const uint8_t*>(text.data()), text.size());
@@ -167,6 +168,45 @@ void test_an_image_longer_than_the_manifest_says_is_refused_at_the_first_extra_b
     TEST_ASSERT_EQUAL(4, panel.slot.written.size());
 }
 
+void expect_refused_untouched(Panel& panel, const std::string& manifest, Refusal why) {
+    const Reply reply = panel.send_manifest(manifest, 0x11);
+    TEST_ASSERT_EQUAL(static_cast<int>(why), static_cast<int>(reply.refusal));
+    TEST_ASSERT_FALSE(panel.slot.begun);
+}
+
+// ADR 0012: an image below the panel's floor (kept in NVS, only ever raised) or the manifest's lowest allowed
+// version is refused, so a validly signed old image can't be sent back after a security fix.
+void test_an_image_below_the_panels_floor_is_refused() {
+    Panel panel("1.5.0");
+    expect_refused_untouched(panel, manifest_text("primary", "1.4.9"), Refusal::too_old);
+}
+
+void test_an_image_below_the_manifests_own_lowest_allowed_version_is_refused() {
+    Panel panel;
+    expect_refused_untouched(panel, manifest_text("primary", "1.1.0", 4, "1.2.0"), Refusal::too_old);
+}
+
+void test_an_image_at_the_floor_is_taken_and_versions_compare_by_number() {
+    Panel at("1.10.0");
+    TEST_ASSERT_EQUAL(Reply::ok_manifest, at.send_manifest(manifest_text("primary", "1.10.0"), 0x11).kind);
+    Panel below("1.10.0");
+    expect_refused_untouched(below, manifest_text("primary", "1.9.99"), Refusal::too_old);
+}
+
+void test_a_manifest_in_another_format_or_without_a_panel_image_is_refused() {
+    Panel a;
+    expect_refused_untouched(a, manifest_text("primary", "1.1.0", 4, "1.0.0", 2), Refusal::unknown_format);
+    std::string lc6000_only = manifest_text();
+    lc6000_only.replace(lc6000_only.find("deck-panel\", \"name"), 10, "lc6000-wd");
+    Panel b;
+    expect_refused_untouched(b, lc6000_only, Refusal::no_image);
+}
+
+void test_an_image_bigger_than_the_spare_slot_is_refused() {
+    Panel panel;
+    expect_refused_untouched(panel, manifest_text("primary", "1.1.0", 6553601), Refusal::too_big);
+}
+
 }  // namespace
 
 int main() {
@@ -182,5 +222,10 @@ int main() {
     RUN_TEST(test_an_altered_image_is_refused_and_never_booted);
     RUN_TEST(test_an_image_cut_short_is_refused_and_never_booted);
     RUN_TEST(test_an_image_longer_than_the_manifest_says_is_refused_at_the_first_extra_byte);
+    RUN_TEST(test_an_image_below_the_panels_floor_is_refused);
+    RUN_TEST(test_an_image_below_the_manifests_own_lowest_allowed_version_is_refused);
+    RUN_TEST(test_an_image_at_the_floor_is_taken_and_versions_compare_by_number);
+    RUN_TEST(test_a_manifest_in_another_format_or_without_a_panel_image_is_refused);
+    RUN_TEST(test_an_image_bigger_than_the_spare_slot_is_refused);
     return UNITY_END();
 }
