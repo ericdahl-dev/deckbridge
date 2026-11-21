@@ -81,11 +81,16 @@ class Session {
 
     Reply manifest(const uint8_t* bytes, size_t length);
     Reply signature(const uint8_t* bytes, size_t length);
+    Reply chunk(const uint8_t* bytes, size_t length);
+    Reply done();
 
   private:
     Reply refuse(Refusal why);
 
+    enum class State { manifest, signature, image, over };
+
     Config config_;
+    State state_ = State::manifest;
     std::string manifest_;
     update_manifest::Manifest parsed_;
 };

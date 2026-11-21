@@ -94,6 +94,32 @@ void test_a_bad_signature_is_refused_and_the_slot_untouched() {
     TEST_ASSERT_FALSE(panel.slot.begun);
 }
 
+const uint8_t kImage[] = {1, 2, 3, 4};
+
+// Nothing reaches the slot unless a signed manifest came first: image bytes, "done" or a lone signature are refused.
+void test_image_bytes_before_a_signed_manifest_are_refused_and_never_written() {
+    Panel panel;
+    TEST_ASSERT_EQUAL(static_cast<int>(Refusal::no_manifest), static_cast<int>(panel.session.chunk(kImage, 4).refusal));
+    TEST_ASSERT_FALSE(panel.slot.begun);
+    TEST_ASSERT_TRUE(panel.slot.written.empty());
+}
+
+void test_done_or_a_signature_before_a_manifest_is_refused() {
+    Panel a;
+    TEST_ASSERT_EQUAL(static_cast<int>(Refusal::no_manifest), static_cast<int>(a.session.done().refusal));
+    Panel b;
+    const auto signature = signed_by(0x11, 0);
+    TEST_ASSERT_EQUAL(static_cast<int>(Refusal::no_manifest), static_cast<int>(b.session.signature(signature.data(), 64).refusal));
+    TEST_ASSERT_FALSE(a.slot.begun || b.slot.begun);
+}
+
+void test_image_bytes_after_a_refused_manifest_are_refused_too() {
+    Panel panel;
+    panel.send_manifest(manifest_text(), 0x22);
+    TEST_ASSERT_EQUAL(static_cast<int>(Refusal::no_manifest), static_cast<int>(panel.session.chunk(kImage, 4).refusal));
+    TEST_ASSERT_TRUE(panel.slot.written.empty());
+}
+
 }  // namespace
 
 int main() {
@@ -102,5 +128,8 @@ int main() {
     RUN_TEST(test_the_backup_key_is_trusted_too);
     RUN_TEST(test_a_manifest_naming_a_key_the_panel_does_not_trust_is_refused_and_the_slot_untouched);
     RUN_TEST(test_a_bad_signature_is_refused_and_the_slot_untouched);
+    RUN_TEST(test_image_bytes_before_a_signed_manifest_are_refused_and_never_written);
+    RUN_TEST(test_done_or_a_signature_before_a_manifest_is_refused);
+    RUN_TEST(test_image_bytes_after_a_refused_manifest_are_refused_too);
     return UNITY_END();
 }
