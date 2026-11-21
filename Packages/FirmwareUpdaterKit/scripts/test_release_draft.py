@@ -70,6 +70,11 @@ class ReleaseDraft(unittest.TestCase):
         self.assertEqual((self.catalog / "catalog.json").read_text(), before)
         self.assertFalse((self.catalog / "panel").exists())
 
+    def test_a_dirty_or_malformed_build_is_refused_and_nothing_is_made(self):
+        for sha in [SHA + "-dirty", "unknown"]:
+            self.assertNotEqual(self.run_script(sha=sha).returncode, 0, sha)
+            self.assertFalse(self.out.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
