@@ -115,3 +115,11 @@ func aBlockBNotShapedLikeOursDoesNotLoad(_ case: String, b: Data) throws {
     #expect(CatalogError.notOurBlock("lc6000/upper.bin").localizedDescription
         == "lc6000/upper.bin is not one of DeckBridge's own blocks")
 }
+
+/// The repo commits no block (#696): they're built and staged at release, so the catalog built from the repo has none.
+/// In a tree where stage_lc6000_blocks.py has run, this fails, as it should: it pins the repo.
+@Test func theBuiltInCatalogFromTheRepoCarriesNoBlocks() throws {
+    let set = try #require(Catalog.builtIn().patchSet(for: LC6000Firmware(wd: "00.50", tp: "00.31")))
+    #expect(set.blocks == nil)
+    #expect(!set.entries.contains { $0.kind == .block })
+}
