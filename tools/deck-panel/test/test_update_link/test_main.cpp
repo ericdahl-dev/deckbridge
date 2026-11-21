@@ -202,6 +202,22 @@ void test_a_connection_closed_mid_image_leaves_nothing_switched_and_frees_the_li
     TEST_ASSERT_TRUE(panel.link.accept(2, 200, out));
 }
 
+// The board erases the slot inside the signature frame's received() (seconds, for a big image), and only then sends
+// "ok manifest". It then passes a zero-length read stamped after the erase: the idle clock runs from there, not from
+// before the erase, so the sender isn't timed out for the panel's own work.
+void test_a_zero_length_read_restarts_the_idle_clock() {
+    Panel panel;
+    auto bytes = whole_update();
+    bytes.resize(bytes.size() - 5 - 2);
+    Out out;
+    panel.link.accept(1, 0, out);
+    panel.link.received(1, bytes.data(), bytes.size(), 100);
+    const uint32_t erased = 100 + 9000;
+    TEST_ASSERT_TRUE(panel.link.received(1, bytes.data(), 0, erased).lines.empty());
+    TEST_ASSERT_TRUE(panel.link.tick(100 + update_link::kIdleMidImageMs).lines.empty());
+    TEST_ASSERT_EQUAL_STRING("refused timeout", panel.link.tick(erased + update_link::kIdleMidImageMs).lines[0].c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -216,5 +232,6 @@ int main() {
     RUN_TEST(test_a_connection_idle_before_its_manifest_times_out_quickly);
     RUN_TEST(test_a_transfer_that_stalls_mid_image_times_out_and_nothing_is_switched);
     RUN_TEST(test_a_connection_closed_mid_image_leaves_nothing_switched_and_frees_the_link);
+    RUN_TEST(test_a_zero_length_read_restarts_the_idle_clock);
     return UNITY_END();
 }
