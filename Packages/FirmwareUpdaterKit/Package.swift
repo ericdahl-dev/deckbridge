@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "FirmwareCatalog", targets: ["FirmwareCatalog"]),
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
+        .library(name: "UnitCheck", targets: ["UnitCheck"]),
     ],
     targets: [
         // Plain values the device finder and the catalog share: what was found, and how versions compare. No logic
@@ -25,5 +26,9 @@ let package = Package(
         // The app's two sections, deck panel and LC6000, as plain values: what the owner reads (#685).
         .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel"]),
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel"]),
+        // The LC6000 unit check and backup (#692): reads a chip in ST's update mode (DFU) and writes nothing to it. A
+        // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
+        .target(name: "UnitCheck", dependencies: ["FirmwareModel"]),
+        .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel"]),
     ]
 )
