@@ -1,5 +1,7 @@
 import Foundation
 import Testing
+import FirmwareCatalog
+import FirmwareModel
 import FirmwareRelease
 
 // The real release feed (#704): this project's newest published GitHub release, read over public endpoints only.
@@ -8,8 +10,11 @@ import FirmwareRelease
 final class FakeGitHub: HTTPClient, @unchecked Sendable {
     var answers: [String: HTTPResponse] = [:]
     var asked: [(url: String, headers: [String: String])] = []
+    /// URLs whose request fails outright: the network is down, or it timed out.
+    var timingOut: Set<String> = []
     func get(_ url: URL, headers: [String: String]) async throws -> HTTPResponse {
         asked.append((url.absoluteString, headers))
+        if timingOut.contains(url.absoluteString) { throw URLError(.timedOut) }
         guard let answer = answers[url.absoluteString] else { return HTTPResponse(status: 404, body: Data()) }
         return answer
     }
@@ -65,4 +70,35 @@ func aDraftOrPreReleaseIsNeverFetched(draft: Bool, prerelease: Bool) async throw
     let github = publishedGitHub()
     github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: ["manifest.json", "catalog.json"]))
     await #expect(throws: FeedError.missingAsset("manifest.sig")) { try await GitHubReleaseFeed(http: github).latest() }
+}
+
+/// GitHub can't be reached, answers with an error, or with something that isn't a release: the fetch is "unreachable",
+/// and the firmware built into the app stays in use.
+@Test(arguments: ["release 404", "release 500", "release timeout", "release not JSON", "asset 403", "asset timeout"])
+func anythingWrongTalkingToGitHubIsUnreachableAndTheBuiltInStays(_ fault: String) async throws {
+    let github = publishedGitHub()
+    let stored = "https://objects.githubusercontent.com/github-production-release-asset/manifest.sig?sig=x"
+    switch fault {
+    case "release 404": github.answers[latestURL] = HTTPResponse(status: 404, body: Data())
+    case "release 500": github.answers[latestURL] = HTTPResponse(status: 500, body: Data())
+    case "release timeout": github.timingOut = [latestURL]
+    case "release not JSON": github.answers[latestURL] = HTTPResponse(status: 200, body: Data("<html>".utf8))
+    case "asset 403": github.answers[stored] = HTTPResponse(status: 403, body: Data())
+    default: github.timingOut = [stored]
+    }
+    let builtIn = try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa")
+    let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
+        .fetch(over: builtIn)
+    #expect(outcome.refusal == .unreachable, "\(fault)")
+    #expect(outcome.catalog.newestPanel()?.version == FirmwareVersion("1.0.0"))
+}
+
+/// Until the owner adds their keys (docs/FIRMWARE-RELEASE-SIGNING.md), the app trusts none: a release that reaches it
+/// whole is refused as signed with a key it doesn't know.
+@Test func withTheAppsKeysStillEmptyEveryReleaseIsAnUnknownKey() async throws {
+    let github = publishedGitHub()
+    serve("manifest.json", Data(#"{"format": 1, "key": "primary", "lowest_allowed": {}, "catalog": {}, "files": []}"#.utf8), on: github)
+    let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
+        .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
+    #expect(outcome.refusal == .unknownKey("primary"))
 }
