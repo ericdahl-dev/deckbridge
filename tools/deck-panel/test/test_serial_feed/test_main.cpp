@@ -147,6 +147,24 @@ void test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole() {
     TEST_ASSERT_EQUAL(3, screen.deck);
 }
 
+// The cable's drain tells the core its datagrams came on the cable, so the deck shows with Wi-Fi still in setup (#667).
+void test_the_cables_drain_shows_the_deck_in_setup_mode() {
+    std::vector<uint8_t> message = {'/', 'D', 'e', 'c', 'k', 'B', 'r', 'i', 'd', 'g', 'e', '/', 'D', 'i', 's', 'p',
+                                    'l', 'a', 'y', '/', 'd', 'e', 'c', 'k', 0, 0, 0, 0, ',', 'i', 0, 0, 0, 0, 0, 2};
+    FakeCable cable;
+    serial_feed::SerialFeed feed(cable);
+    deck_core::DeckCore core;
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    feed_drain::Drain drain(deck_core::Source::cable);
+    cable.add({0xC0});
+    cable.add(message);
+    cable.add({0xC0});
+    TEST_ASSERT_EQUAL(1, drain.run(feed, core, 100));
+    Last screen;
+    core.render(screen, 100);
+    TEST_ASSERT_EQUAL(2, screen.deck);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
@@ -154,5 +172,6 @@ int main() {
     RUN_TEST(test_text_between_frames_goes_to_the_text_reader);
     RUN_TEST(test_after_a_lost_end_the_feed_is_back_in_step_by_the_next_frame);
     RUN_TEST(test_a_frame_arriving_in_two_parts_shows_its_deck_once_whole);
+    RUN_TEST(test_the_cables_drain_shows_the_deck_in_setup_mode);
     return UNITY_END();
 }
