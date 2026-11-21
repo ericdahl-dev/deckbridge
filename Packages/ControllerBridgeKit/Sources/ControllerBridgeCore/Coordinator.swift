@@ -313,21 +313,27 @@ public final class Coordinator {
     /// Takes the display feed and its setting from the real Coordinator, for the demo's while it runs (#625). The
     /// destination is already open, so the first snapshot goes out once the demo's deck is known.
     public func takeDisplayFeed(from real: Coordinator) {
-        guard let (sender, settings, greeted) = real.displayFeed.release() else { return }
-        displayFeed.attach(sender)
-        displayFeed.carryGreeting(greeted)
-        displayFeed.set(settings, at: clock.now)
+        for (mine, theirs) in [(displayFeed, real.displayFeed), (cableFeed, real.cableFeed)] {
+            guard let (sender, settings, greeted) = theirs.release() else { continue }
+            mine.attach(sender)
+            mine.carryGreeting(greeted)
+            mine.set(settings, at: clock.now)
+            mine.resend(at: clock.now)
+        }
         status.requiredSubscriptions = requiredSubscriptions
-        displayFeedReady()
+        updateDisplayFeed()
     }
 
     /// Takes the display feed back from the demo's Coordinator when it ends (#625), with a full snapshot. Its own
     /// setting stays: a change made during the demo waited for the real Coordinator and is already applied.
     public func takeBackDisplayFeed(from demo: Coordinator) {
-        guard let (sender, _, greeted) = demo.displayFeed.release() else { return }
-        displayFeed.attach(sender)
-        displayFeed.carryGreeting(greeted)
-        displayFeedReady()
+        for (mine, theirs) in [(displayFeed, demo.displayFeed), (cableFeed, demo.cableFeed)] {
+            guard let (sender, _, greeted) = theirs.release() else { continue }
+            mine.attach(sender)
+            mine.carryGreeting(greeted)
+            mine.resend(at: clock.now)
+        }
+        updateDisplayFeed()
     }
 
     /// The display's destination opened: the full snapshot again, since what went before it was dropped.

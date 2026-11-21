@@ -85,4 +85,54 @@ struct DisplayFeedCableTests {
         rig.coordinator.quit()
         #expect(cable.bundles.last == [DisplayFeedGoodbyeTests.goodbye])
     }
+
+    /// Runs the Engine over `events` with the real rig, as DisplayFeedDemoTests does.
+    static func run(_ rig: Rig, _ made: DisplayFeedDemoTests.Made, _ events: (EventPipe.Producer) -> Void) async {
+        let pipe = EventPipe()
+        events(pipe.producer)
+        pipe.producer.finish()
+        await Engine(coordinator: rig.coordinator, log: rig.log, makeDemo: DisplayFeedDemoTests.demoMaker(rig, made)).run(pipe.events)
+    }
+
+    static func realRig() throws -> (Rig, wifi: Rig.FakeOSC, cable: Rig.FakeOSC) {
+        let (rig, wifi, cable) = try Self.rig()
+        rig.coordinator.start()
+        Feed.load(rig)
+        rig.coordinator.feedback(Feed.factoryPalette)
+        return (rig, wifi, cable)
+    }
+
+    @Test("The demo takes the cable's feed while it runs: the demo deck goes on the cable")
+    func demoTakesTheCable() async throws {
+        let (rig, wifi, cable) = try Self.realRig()
+        let made = DisplayFeedDemoTests.Made()
+        await Self.run(rig, made) {
+            $0.send(.setDisplayFeed(Self.cableOnly))
+            $0.send(.cableFeedReady)
+            $0.demo(on: true)
+        }
+        cable.sent.removeAll()
+        let session = try #require(made.session)
+        for step in 1...110 { rig.clock.now = Double(step) * 0.01; session.tick() }
+        #expect(DisplayFeedDemoTests.text(cable, "title").first == "Demo Track")
+        #expect(wifi.sent == [])
+    }
+
+    @Test("Demo off: the cable goes back to the real deck with a full snapshot, and the stopped demo sends nothing on it")
+    func demoGivesTheCableBack() async throws {
+        let (rig, _, cable) = try Self.realRig()
+        let made = DisplayFeedDemoTests.Made()
+        await Self.run(rig, made) {
+            $0.send(.setDisplayFeed(Self.cableOnly))
+            $0.send(.cableFeedReady)
+            $0.demo(on: true)
+            $0.demo(on: false)
+        }
+        let daybreak = Feed.snapshot(deck: 1, color: 0xFF0000, title: "Daybreak", artist: "Bill Hamel, Jeremus")
+        #expect(cable.sent == daybreak + daybreak)
+        cable.sent.removeAll()
+        let session = try #require(made.session)
+        for step in 1...300 { rig.clock.now = Double(step) * 0.01; session.tick() }
+        #expect(cable.sent == [])
+    }
 }
