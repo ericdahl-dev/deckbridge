@@ -7,6 +7,8 @@ public enum PanelFound: Sendable, Equatable {
     case driverMissing
     /// On its serial port; the build is nil when its boot line wasn't seen.
     case onSerial(build: PanelBuild?)
+    /// On its serial port, but another app holds it (DeckBridge).
+    case portBusy
 }
 
 /// An LC6000 the finder saw. Its firmware isn't read here: nothing is sent to it (#692 checks the unit).
@@ -67,11 +69,20 @@ public struct DeviceFinder: Sendable {
             let usbID = Self.hex(chip)
             if let port = chip.serialPort {
                 var build: PanelBuild?
-                for baud in Self.panelBauds where build == nil {
-                    build = Self.build(in: await serial.listen(on: port, baud: baud, for: Self.listenSeconds))
+                var busy = false
+                for baud in Self.panelBauds where build == nil && !busy {
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds) {
+                    case .lines(let lines): build = Self.build(in: lines)
+                    case .busy: busy = true
+                    }
                 }
-                found.panel = .onSerial(build: build)
-                log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                if busy {
+                    found.panel = .portBusy
+                    log.log("deck panel: on USB \(usbID), serial port busy (another app has it)")
+                } else {
+                    found.panel = .onSerial(build: build)
+                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                }
             } else {
                 found.panel = .driverMissing
                 log.log("deck panel: on USB \(usbID), no serial port (driver missing)")

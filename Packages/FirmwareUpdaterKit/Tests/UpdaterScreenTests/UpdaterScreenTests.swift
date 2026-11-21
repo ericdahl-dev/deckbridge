@@ -134,6 +134,19 @@ struct UpdaterScreenTests {
         #expect(rig.serial.opened == [Self.port, Self.port])
     }
 
+    @Test("DeckBridge holds the panel's port: the screen says to turn off Send over the USB cable, and nothing else is tried")
+    func portBusy() async {
+        let rig = Rig()
+        Self.panel(rig, printing: ["deck panel: boot, build 1d0683f"])
+        rig.serial.busy = [Self.port]
+        let screen = await rig.screen()
+        #expect(screen.panel.status == "Deck panel found")
+        #expect(screen.panel.detail == "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again.")
+        #expect(UpdaterScreen.portBusy == screen.panel.detail)
+        #expect(rig.serial.bauds == [921_600])
+        #expect(rig.log.text.contains("deck panel: on USB 1A86:7522, serial port busy (another app has it)"))
+    }
+
     @Test("An LC6000 on MIDI (DeckBridge's port names): found, firmware not checked yet")
     func lc6000OnMIDI() async {
         let rig = Rig()
