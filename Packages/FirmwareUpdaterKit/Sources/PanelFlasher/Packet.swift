@@ -34,12 +34,15 @@ enum Packet {
     }
 
     /// A response from an unescaped frame: direction 1, op, length, value, then `dataLength` bytes of data and the
-    /// status, 0 for ok or 1 and a reason (esptool's check_command). The ROM's two reserved bytes after the status are
+    /// status, 0 for ok or 1 and a reason (esptool's check_command); without `dataLength`, all but the ROM's four
+    /// status bytes. The ROM's two reserved bytes after the status are
     /// ignored. A frame too short for that data is a refusal if it starts with a failed status, else nil.
-    static func response(_ frame: [UInt8], dataLength: Int) -> Response? {
+    static func response(_ frame: [UInt8], dataLength asked: Int? = nil) -> Response? {
         guard frame.count >= 8, frame[0] == 0x01 else { return nil }
         let length = Int(frame[2]) | Int(frame[3]) << 8
         let body = Array(frame.dropFirst(8).prefix(length))
+        // Not asked: a ROM reply's data is all but the 4 status bytes after it (2 status, 2 reserved).
+        let dataLength = asked ?? max(0, body.count - 4)
         let value = UInt32(frame[4]) | UInt32(frame[5]) << 8 | UInt32(frame[6]) << 16 | UInt32(frame[7]) << 24
         guard body.count >= dataLength + 2 else {
             // Too short for the data: a refusal when its first two bytes are a failed status, else nothing.

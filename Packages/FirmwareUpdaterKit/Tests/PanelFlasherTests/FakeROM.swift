@@ -38,6 +38,12 @@ actor FakeROM: BootloaderLine {
     /// the command (the original ESP32), which refuses it as an invalid message.
     var chipID: UInt32? = 9
     func setChipID(_ id: UInt32?) { chipID = id }
+    /// An ESP32-S2's ROM: GET_SECURITY_INFO answers with 12 bytes, no chip id.
+    var isS2 = false
+    func setS2() { isS2 = true }
+    /// GET_SECURITY_INFO's flags word and flash_crypt_cnt.
+    var securityFlags: UInt32 = 0, cryptCount: UInt8 = 0
+    func setSecurity(flags: UInt32, cryptCount: UInt8) { securityFlags = flags; self.cryptCount = cryptCount }
     /// The chip's 16 MB flash, all erased (FF) to start; only what is written is kept.
     private(set) var flash: [UInt32: UInt8] = [:]
     func flashBytes(at address: UInt32, count: Int) -> [UInt8] { (0..<count).map { flash[address + UInt32($0)] ?? 0xFF } }
@@ -131,7 +137,8 @@ actor FakeROM: BootloaderLine {
             if let id = chipID {
                 let before = pending
                 pending = []
-                reply(op: op, value: 0, data: [UInt8](repeating: 0, count: 12) + le(id) + le(0))
+                let head = le(securityFlags) + [cryptCount] + [UInt8](repeating: 0, count: 7)
+                reply(op: op, value: 0, data: isS2 ? head : head + le(id) + le(0))
                 later.append((ContinuousClock.now + securityInfoDelay, pending))
                 pending = before
             } else {

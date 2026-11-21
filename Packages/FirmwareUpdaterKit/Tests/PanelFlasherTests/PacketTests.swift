@@ -49,3 +49,11 @@ import Testing
     let frames = reader.feed([0x00, 0xC0, 0x01, 0xDB, 0xDC, 0xDB, 0xDD, 0xC0, 0xC0, 0x02]) + reader.feed([0x03, 0xC0])
     #expect(frames == [[0x01, 0xC0, 0xDB], [0x02, 0x03]])
 }
+
+/// GET_SECURITY_INFO's data is 20 bytes on an S3 and 12 on an S2 (esptool tries both): without a length asked for, a ROM
+/// reply's data is everything before its 4 status bytes.
+@Test func withoutALengthAskedForARomReplysDataIsAllButItsFourStatusBytes() throws {
+    let s2 = try #require(Packet.response([0x01, 0x14, 0x10, 0x00, 0, 0, 0, 0] + [UInt8](repeating: 0x07, count: 12) + [0, 0, 0, 0]))
+    #expect(s2.data.count == 12)
+    #expect(s2.ok)
+}

@@ -93,12 +93,24 @@ public actor Bootloader {
         do {
             let info: Response
             do {
-                info = try await command(.securityInfo, data: [], dataLength: 20)
+                // 20 bytes on an S3, 12 on an S2 (esptool tries both): taken as the ROM sends it.
+                info = try await command(.securityInfo, data: [], dataLength: nil)
             } catch FlashError.refused(_, _) {
                 throw FlashError.wrongBoard("an ESP32 without GET_SECURITY_INFO")
             }
-            let id = UInt32(info.data[12]) | UInt32(info.data[13]) << 8 | UInt32(info.data[14]) << 16 | UInt32(info.data[15]) << 24
+            guard info.data.count != 12 else { throw FlashError.wrongBoard("an ESP32-S2") }
+            guard info.data.count >= 20 else { throw FlashError.wrongBoard("an unknown chip") }
+            let word = { (at: Int) in
+                UInt32(info.data[at]) | UInt32(info.data[at + 1]) << 8 | UInt32(info.data[at + 2]) << 16 | UInt32(info.data[at + 3]) << 24
+            }
+            let id = word(12)
             guard id == Self.esp32S3 else { throw FlashError.wrongBoard("chip id \(id)") }
+            // SECURE_BOOT_EN (bit 0), SECURE_DOWNLOAD_ENABLE (bit 2), and flash encryption on when flash_crypt_cnt has
+            // an odd number of bits set: plain bytes written then wouldn't boot.
+            let flags = word(0), cryptCount = info.data[4]
+            guard flags & 0b101 == 0, cryptCount.nonzeroBitCount % 2 == 0 else {
+                throw FlashError.wrongBoard("an ESP32-S3 with secure boot or flash encryption on")
+            }
         } catch {
             await release()
             throw error
@@ -277,7 +289,7 @@ public actor Bootloader {
     }
 
     /// Sends one command and waits for its answer: `dataLength` bytes of data, then the status.
-    func command(_ op: Op, data: [UInt8], checksum: UInt32 = 0, dataLength: Int = 0, timeout: Double = 3) async throws -> Response {
+    func command(_ op: Op, data: [UInt8], checksum: UInt32 = 0, dataLength: Int? = 0, timeout: Double = 3) async throws -> Response {
         try Task.checkCancellation()
         try await line.write(Packet.command(op, data: data, checksum: checksum))
         // Wall-clock time, not a count of reads: a read returns as soon as anything arrives, stray frames included.
