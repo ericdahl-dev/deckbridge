@@ -47,6 +47,8 @@ targets:
         com.apple.security.network.server: true
         # Mapping import and export (#24): the open and save panels grant access to the file the user picks.
         com.apple.security.files.user-selected.read-write: true
+        # The display feed over the USB cable (#667): the deck panel's serial port.
+        com.apple.security.device.serial: true
     info:
       path: App/Info.plist
       properties:

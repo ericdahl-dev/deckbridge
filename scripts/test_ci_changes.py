@@ -34,7 +34,7 @@ class NeedsMacTests(unittest.TestCase):
     def test_the_lc6000_firmware_tool_skips_the_mac_jobs(self):
         # tools/lc6000-firmware (#430): Python with its own tests, run by the Site check job
         self.assertFalse(ci_changes.needs_mac([
-            "tools/lc6000-firmware/dfupatch.py", "tools/lc6000-firmware/test_dfupatch.py",
+            "tools/lc6000-firmware/build_owner_image.py", "tools/lc6000-firmware/test_dfupatch.py",
             "tools/lc6000-firmware/.gitignore"]))
 
     def test_the_drawn_display_firmware_skips_the_mac_jobs(self):
@@ -55,6 +55,14 @@ class NeedsMacTests(unittest.TestCase):
     def test_the_lc6000_patch_descriptions_run_the_mac_jobs(self):
         # the firmware updater's catalog (#686) carries copies of them, and its Kit tests check the copies match
         self.assertTrue(ci_changes.needs_mac(["tools/lc6000-firmware/patches/wd-00.50-show-slot-16.patch"]))
+
+    def test_the_build_record_reader_and_what_it_imports_run_the_mac_jobs(self):
+        # the updater's block staging step (#696), tested in the Kit job, reads make arm's record through these
+        for path in ["tools/lc6000-firmware/build_record.py", "tools/lc6000-firmware/dfupatch.py",
+                     "tools/lc6000-firmware/drawn_flash.py", "tools/lc6000-firmware/build_upper_dfu.py",
+                     "tools/lc6000-display-fw/arm/upper_header.py"]:
+            self.assertTrue(ci_changes.needs_mac([path]), path)
+        self.assertFalse(ci_changes.needs_mac(["tools/lc6000-firmware/build_owner_image.py"]))
 
     def test_the_deck_panel_firmware_skips_the_mac_jobs(self):
         # tools/deck-panel (#615): PlatformIO with its own tests, run by the Deck panel job on Linux
