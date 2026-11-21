@@ -240,6 +240,8 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
     const int32_t since = static_cast<int32_t>(now_ms - last_heard_ms_);
     // Off Wi-Fi the feed can't be coming, unless it comes on the cable (#667): waiting at once.
     const bool cable = cable_heard_ && static_cast<int32_t>(now_ms - last_cable_ms_) < static_cast<int32_t>(kWaitAfterMs);
+    // Stale once, forgotten: an old time would come round as recent when the clock's signed range wraps (24.8 days).
+    if (!cable) cable_heard_ = false;
     const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable);
     // Waiting holds until the next message: the old deck never comes back by itself, even when the clock comes round.
     if (waiting) heard_ = false;
