@@ -229,6 +229,8 @@ void DeckCore::set_network(Network state, const char* ip) {
     std::snprintf(ip_, sizeof ip_, "%s", ip);
 }
 
+void DeckCore::set_build(const char* label) { std::snprintf(build_, sizeof build_, "%s", label); }
+
 void DeckCore::set_setup(const char* name, const char* password) {
     std::snprintf(setup_name_, sizeof setup_name_, "%s", name);
     std::snprintf(setup_password_, sizeof setup_password_, "%s", password);
@@ -271,6 +273,7 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
 WaitingView DeckCore::waiting_view() const {
     WaitingView view;
     view.logo = true;  // every waiting screen: the logo, the reason and the address beneath (#651)
+    std::snprintf(view.build, sizeof view.build, "%s", build_);  // and the firmware's version (#695)
     switch (network_) {
         case Network::setup:
             std::snprintf(view.headline, sizeof view.headline, "Set up the panel's Wi-Fi");

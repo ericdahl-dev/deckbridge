@@ -42,4 +42,5 @@ private:
     lv_obj_t* logo_ = nullptr;  ///< above the headline, shown when the view asks for it
     lv_obj_t* headline_ = nullptr;
     lv_obj_t* detail_ = nullptr;
+    lv_obj_t* build_ = nullptr;  ///< the firmware's version and SHA, bottom right (#695)
 };

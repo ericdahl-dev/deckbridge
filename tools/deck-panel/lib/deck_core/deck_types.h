@@ -60,10 +60,11 @@ struct WaitingView {
     char detail[96] = "";
     bool logo = false;  ///< the DeckBridge logo above the lines (#651)
     bool logo_small = false;  ///< at half size, for the setup screen's longer text (#677)
+    char build[48] = "";  ///< the firmware's version beside its SHA, on every waiting screen (#695)
 
     bool operator==(const WaitingView& other) const {
         return std::strcmp(headline, other.headline) == 0 && std::strcmp(detail, other.detail) == 0 &&
-               logo == other.logo && logo_small == other.logo_small;
+               logo == other.logo && logo_small == other.logo_small && std::strcmp(build, other.build) == 0;
     }
 };
 
@@ -73,9 +74,10 @@ struct WaitingChanges {
     bool detail = false;
     bool logo = false;  ///< shown or hidden (#651)
     bool logo_small = false;  ///< its size (#677)
+    bool build = false;  ///< the version line (#695)
 
-    bool any() const { return headline || detail || logo || logo_small; }
-    static WaitingChanges all() { return {true, true, true, true}; }
+    bool any() const { return headline || detail || logo || logo_small || build; }
+    static WaitingChanges all() { return {true, true, true, true, true}; }
 };
 
 /// What changed between two waiting views: every field of WaitingView, as its == compares them.
@@ -85,6 +87,7 @@ inline WaitingChanges changed(const WaitingView& was, const WaitingView& now) {
     c.detail = std::strcmp(was.detail, now.detail) != 0;
     c.logo = was.logo != now.logo;
     c.logo_small = was.logo_small != now.logo_small;
+    c.build = std::strcmp(was.build, now.build) != 0;
     return c;
 }
 
