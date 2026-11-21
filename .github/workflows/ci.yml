@@ -152,13 +152,15 @@ jobs:
       - name: Package tests
         working-directory: Packages/ControllerBridgeKit
         run: swift test
-      # The firmware updater's own package (#684): the catalog (#686), and the build step that adds a panel image.
+      # The firmware updater's own package (#684): the catalog (#686), and the build steps that add a panel image and the
+      # drawn display's own blocks (#696).
       - name: Firmware updater package tests
         working-directory: Packages/FirmwareUpdaterKit
         run: |
           swift test
           python3 -I scripts/test_add_panel_image.py
           python3 -I scripts/test_sign_release.py
+          python3 -I scripts/test_stage_lc6000_blocks.py
       # The release workflow (#28) only runs on tags, so its scripts are tested here on every pull request.
       - name: Release script tests
         run: |
