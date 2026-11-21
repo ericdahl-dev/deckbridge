@@ -27,6 +27,15 @@ actor FakeROM: BootloaderLine {
     /// the command (the original ESP32), which refuses it as an invalid message.
     var chipID: UInt32? = 9
     func setChipID(_ id: UInt32?) { chipID = id }
+    /// The chip's 16 MB flash, all erased (FF) to start; only what is written is kept.
+    private(set) var flash: [UInt32: UInt8] = [:]
+    func flashBytes(at address: UInt32, count: Int) -> [UInt8] { (0..<count).map { flash[address + UInt32($0)] ?? 0xFF } }
+    func setFlash(_ bytes: [UInt8], at address: UInt32) { for (i, b) in bytes.enumerated() { flash[address + UInt32(i)] = b } }
+    private var attached = false, flashSize: UInt32 = 0
+    private var writing: (offset: UInt32, blocks: UInt32, blockSize: UInt32, next: UInt32)?
+    /// A FLASH_DATA sequence number the chip refuses every time (a failed write).
+    var failingBlock: UInt32?
+    func setFailingBlock(_ seq: UInt32?) { failingBlock = seq }
 
     func setLines(dtr: Bool, rts: Bool) async throws {
         let wasLow = enLow
@@ -67,6 +76,30 @@ actor FakeROM: BootloaderLine {
             // CHANGE_BAUDRATE: new speed, 0 (the ROM's form); answered at the old speed, then the UART moves.
             reply(op: op, value: 0, data: [])
             romSpeed = Int(UInt32(frame[8]) | UInt32(frame[9]) << 8 | UInt32(frame[10]) << 16 | UInt32(frame[11]) << 24)
+        } else if op == 0x0D {
+            attached = true  // SPI_ATTACH: the ROM's flash pins
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x0B {
+            flashSize = word(frame, 12)  // SPI_SET_PARAMS: fl_id, total size, …
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x02 {
+            // FLASH_BEGIN: erase size, blocks, block size, offset, encrypted. The ROM erases up front.
+            let erase = word(frame, 8), offset = word(frame, 20)
+            guard attached, flashSize == 16 * 1024 * 1024, word(frame, 24) == 0 else { return reply(op: op, value: 0, data: [], status: 1, reason: 0x08) }
+            for a in offset..<(offset + erase) { flash[a] = nil }
+            writing = (offset, word(frame, 12), word(frame, 16), 0)
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x03 {
+            // FLASH_DATA: length, sequence, 0, 0, then the block; the checksum is 0xEF xor every block byte.
+            let length = word(frame, 8), seq = word(frame, 12)
+            let block = Array(frame[24...])
+            let sum = block.reduce(UInt8(0xEF)) { $0 ^ $1 }
+            guard var w = writing, seq == w.next, Int(length) == block.count, length == w.blockSize,
+                  checksum == UInt32(sum), seq != failingBlock else { return reply(op: op, value: 0, data: [], status: 1, reason: 0x07) }
+            for (i, b) in block.enumerated() { flash[w.offset + seq * w.blockSize + UInt32(i)] = b == 0xFF ? nil : b }
+            w.next += 1
+            writing = w
+            reply(op: op, value: 0, data: [])
         } else if op == 0x14 {
             // flags, flash_crypt_cnt, 7 key purposes, chip id, api version (esptool get_security_info, "<IBBBBBBBBII").
             if let id = chipID {
@@ -87,6 +120,10 @@ actor FakeROM: BootloaderLine {
             if b == 0xC0 { pending += [0xDB, 0xDC] } else if b == 0xDB { pending += [0xDB, 0xDD] } else { pending.append(b) }
         }
         pending.append(0xC0)
+    }
+
+    private func word(_ frame: [UInt8], _ at: Int) -> UInt32 {
+        UInt32(frame[at]) | UInt32(frame[at + 1]) << 8 | UInt32(frame[at + 2]) << 16 | UInt32(frame[at + 3]) << 24
     }
 
     private func le(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(truncatingIfNeeded: v >> (8 * UInt32($0))) } }

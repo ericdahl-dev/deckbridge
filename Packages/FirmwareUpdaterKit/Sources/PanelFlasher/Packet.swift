@@ -1,6 +1,10 @@
 /// The ROM bootloader's commands the flasher sends (esptool/loader.py, ESP_CMDS).
 enum Op: UInt8 {
+    case flashBegin = 0x02
     case flashData = 0x03
+    case flashEnd = 0x04
+    case spiSetParams = 0x0B
+    case spiAttach = 0x0D
     case sync = 0x08
     case changeSpeed = 0x0F
     case securityInfo = 0x14

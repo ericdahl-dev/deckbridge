@@ -18,6 +18,8 @@ public enum FlashError: Error, Equatable {
     case refused(op: UInt8, reason: UInt8)
     /// The ROM didn't answer a command in time.
     case noAnswer(op: UInt8)
+    /// The chip kept refusing the block at this flash address.
+    case writeFailed(address: UInt32)
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
@@ -97,6 +99,64 @@ public actor Bootloader {
             await release()
             throw error
         }
+    }
+
+    /// The ROM's flash block (esptool FLASH_WRITE_SIZE), how often a refused block is tried (WRITE_BLOCK_ATTEMPTS),
+    /// and the panel's flash, 16 MB (platformio.ini board_upload.flash_size).
+    static let blockSize = 0x400, blockAttempts = 3, flashSize = UInt32(16 * 1024 * 1024)
+    private var flashReady = false
+
+    /// Writes `image` at `offset`, as esptool's write_flash does on the ROM (no stub, no compression): SPI_ATTACH and
+    /// SPI_SET_PARAMS once, then FLASH_BEGIN (which erases), then FLASH_DATA blocks padded with FF, each with the ROM's
+    /// checksum. `progress` gets the share written after each block. On failure the panel is released.
+    public func write(_ image: [UInt8], at offset: UInt32, progress: @Sendable (Double) -> Void) async throws {
+        do {
+            try await prepareFlash()
+            let padded = image + [UInt8](repeating: 0xFF, count: (4 - image.count % 4) % 4)
+            let blocks = (padded.count + Self.blockSize - 1) / Self.blockSize
+            // Erasing takes the ROM a while: esptool allows 30 s per MB (ERASE_REGION_TIMEOUT_PER_MB).
+            _ = try await command(.flashBegin, data: Packet.le32(UInt32(padded.count)) + Packet.le32(UInt32(blocks))
+                                  + Packet.le32(UInt32(Self.blockSize)) + Packet.le32(offset) + Packet.le32(0),
+                                  timeout: max(3, 30 * Double(padded.count) / 1_048_576))
+            for seq in 0..<blocks {
+                var block = Array(padded[(seq * Self.blockSize)..<min(padded.count, (seq + 1) * Self.blockSize)])
+                block += [UInt8](repeating: 0xFF, count: Self.blockSize - block.count)
+                let data = Packet.le32(UInt32(block.count)) + Packet.le32(UInt32(seq)) + Packet.le32(0) + Packet.le32(0) + block
+                try await sendBlock(data, checksum: Self.checksum(block), address: offset + UInt32(seq * Self.blockSize))
+                progress(Double(seq + 1) / Double(blocks))
+            }
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
+    private func prepareFlash() async throws {
+        guard !flashReady else { return }
+        _ = try await command(.spiAttach, data: Packet.le32(0) + [0, 0, 0, 0])
+        _ = try await command(.spiSetParams, data: Packet.le32(0) + Packet.le32(Self.flashSize) + Packet.le32(64 * 1024)
+                              + Packet.le32(4 * 1024) + Packet.le32(256) + Packet.le32(0xFFFF))
+        flashReady = true
+    }
+
+    private func sendBlock(_ data: [UInt8], checksum: UInt32, address: UInt32) async throws {
+        for attempt in 1...Self.blockAttempts {
+            do {
+                _ = try await command(.flashData, data: data, checksum: checksum)
+                return
+            } catch FlashError.refused(_, _) where attempt < Self.blockAttempts {
+                continue
+            } catch FlashError.refused(_, _), FlashError.noAnswer(_) {
+                throw FlashError.writeFailed(address: address)
+            }
+        }
+    }
+
+    /// The ROM's checksum of a block: 0xEF xor every byte (esptool ESP_CHECKSUM_MAGIC).
+    static func checksum(_ block: [UInt8]) -> UInt32 {
+        var state: UInt8 = 0xEF
+        for byte in block { state ^= byte }
+        return UInt32(state)
     }
 
     /// Sends one command and waits for its answer: `dataLength` bytes of data, then the status.
