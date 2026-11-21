@@ -169,7 +169,12 @@ actor FakeROM: BootloaderLine {
     }
 
     func setSpeed(_ baud: Int) async throws { lineSpeed = baud }
-    func pause(_ seconds: Double) async { await Task.yield() }
+    /// Every pause the flasher asked for, with the lines as they stood.
+    private(set) var pauses: [(seconds: Double, dtr: Bool, rts: Bool)] = []
+    func pause(_ seconds: Double) async {
+        pauses.append((seconds, dtr, rts))
+        await Task.yield()
+    }
     private(set) var closed = false
     func close() async { closed = true }
 

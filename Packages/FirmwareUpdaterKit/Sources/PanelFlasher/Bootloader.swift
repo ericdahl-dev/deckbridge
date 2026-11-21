@@ -51,8 +51,9 @@ public actor Bootloader {
 
     /// esptool's defaults (loader.py): 7 connect attempts of a reset then up to 5 SYNCs, each read for 0.1 s.
     static let attempts = 7, syncsPerAttempt = 5, syncTimeout = 0.1
-    /// esptool's DEFAULT_RESET_DELAY: the chip's time to come out of reset before the first SYNC.
-    static let resetDelay = 0.05
+    /// The chip's time to come out of reset before the first SYNC, alternating as esptool's connect does
+    /// (DEFAULT_RESET_DELAY 0.05 s, then 0.55 s for slower EN circuits).
+    static let resetDelays = [0.05, 0.55]
 
     public init(line: any BootloaderLine) { self.line = line }
 
@@ -60,9 +61,9 @@ public actor Bootloader {
     /// set together, so the circuit never sees one move alone). On failure or cancellation the panel is released.
     public func connect() async throws {
         do {
-            for _ in 0..<Self.attempts {
+            for attempt in 0..<Self.attempts {
                 try Task.checkCancellation()
-                try await resetIntoBootloader()
+                try await resetIntoBootloader(delay: Self.resetDelays[attempt % Self.resetDelays.count])
                 for _ in 0..<Self.syncsPerAttempt {
                     try Task.checkCancellation()
                     if try await sync() { return }
@@ -294,13 +295,13 @@ public actor Bootloader {
         throw FlashError.noAnswer(op: op.rawValue)
     }
 
-    private func resetIntoBootloader() async throws {
+    private func resetIntoBootloader(delay: Double) async throws {
         try await line.setLines(dtr: false, rts: false)
         try await line.setLines(dtr: true, rts: true)
         try await line.setLines(dtr: false, rts: true)  // IO0 high, EN low: in reset
         await line.pause(0.1)
         try await line.setLines(dtr: true, rts: false)  // IO0 low, EN high: out of reset into the ROM
-        await line.pause(Self.resetDelay)
+        await line.pause(delay)
         try await line.setLines(dtr: false, rts: false)  // IO0 high again
         _ = try await line.read(timeout: 0)  // the ROM's boot text
         reader = SlipReader()

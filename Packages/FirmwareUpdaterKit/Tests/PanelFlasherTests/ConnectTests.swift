@@ -36,3 +36,14 @@ final class FlowBox: @unchecked Sendable { var task: Task<Void, Never>? }
     #expect(await (rom.dtr, rom.rts) == (false, false))
     #expect(await rom.resets == 1)
 }
+
+/// esptool's connect alternates how long it lets the chip come out of reset, 0.05 s then 0.55 s (loader.py
+/// _construct_reset_strategy_sequence), since boards' EN circuits differ.
+@Test func eachAttemptAlternatesAShortAndALongResetDelay() async throws {
+    let rom = FakeROM()
+    await rom.setAnswers(false)
+    let bootloader = Bootloader(line: rom)
+    await #expect(throws: FlashError.noBootloader) { try await bootloader.connect() }
+    let delays = await rom.pauses.filter { $0.dtr && !$0.rts }.map(\.seconds)
+    #expect(delays == [0.05, 0.55, 0.05, 0.55, 0.05, 0.55, 0.05])
+}
