@@ -156,6 +156,38 @@ public actor Bootloader {
         }
     }
 
+    /// The deck panel's partitions (tools/deck-panel/partitions.csv).
+    public enum Partition {
+        public static let nvs = (offset: UInt32(0x9000), size: 0x5000)
+        public static let otadata = (offset: UInt32(0xE000), size: 0x2000)
+        public static let app0 = UInt32(0x10000)
+    }
+
+    /// Arduino-ESP32's boot_app0.bin, which every `pio upload` writes at otadata: the first entry sequence 1 with its
+    /// CRC (0x4743989A), so app0 boots, the second sequence 0 with no CRC, ignored. Built here byte for byte.
+    static let bootApp0: [UInt8] = {
+        var bytes = [UInt8](repeating: 0xFF, count: Partition.otadata.size)
+        bytes.replaceSubrange(0..<4, with: [0x01, 0x00, 0x00, 0x00])
+        bytes.replaceSubrange(0x1C..<0x20, with: [0x9A, 0x98, 0x43, 0x47])
+        bytes.replaceSubrange(0x1000..<0x1004, with: [0x00, 0x00, 0x00, 0x00])
+        return bytes
+    }()
+
+    /// Puts a deck panel app on the panel the way `pio upload` does: the image at app0, verified, then boot_app0 at
+    /// otadata, so app0 boots even on a panel an update over Wi-Fi left on app1 (#690). Saved Wi-Fi in nvs is kept
+    /// unless the owner asks to wipe it; app1, spiffs and coredump are never touched. `progress` follows the app.
+    public func flashApp(_ image: [UInt8], wipeWiFi: Bool, progress: @Sendable (Double) -> Void) async throws {
+        try await write(image, at: Partition.app0, progress: progress)
+        try await verify(image, at: Partition.app0)
+        try await write(Self.bootApp0, at: Partition.otadata.offset) { _ in }
+        try await verify(Self.bootApp0, at: Partition.otadata.offset)
+        if wipeWiFi {
+            let erased = [UInt8](repeating: 0xFF, count: Partition.nvs.size)
+            try await write(erased, at: Partition.nvs.offset) { _ in }
+            try await verify(erased, at: Partition.nvs.offset)
+        }
+    }
+
     private func prepareFlash() async throws {
         guard !flashReady else { return }
         _ = try await command(.spiAttach, data: Packet.le32(0) + [0, 0, 0, 0])

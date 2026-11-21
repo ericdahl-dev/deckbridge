@@ -33,6 +33,8 @@ actor FakeROM: BootloaderLine {
     func flashBytes(at address: UInt32, count: Int) -> [UInt8] { (0..<count).map { flash[address + UInt32($0)] ?? 0xFF } }
     func setFlash(_ bytes: [UInt8], at address: UInt32) { for (i, b) in bytes.enumerated() { flash[address + UInt32(i)] = b } }
     private var attached = false, flashSize: UInt32 = 0
+    /// Every FLASH_BEGIN's offset and erase size: the regions the flasher erased and wrote.
+    private(set) var begun: [(offset: UInt32, size: UInt32)] = []
     private var writing: (offset: UInt32, blocks: UInt32, blockSize: UInt32, next: UInt32)?
     /// A FLASH_DATA sequence number the chip refuses every time (a failed write).
     var failingBlock: UInt32?
@@ -89,6 +91,7 @@ actor FakeROM: BootloaderLine {
             guard attached, flashSize == 16 * 1024 * 1024, word(frame, 24) == 0 else { return reply(op: op, value: 0, data: [], status: 1, reason: 0x08) }
             for a in offset..<(offset + erase) { flash[a] = nil }
             writing = (offset, word(frame, 12), word(frame, 16), 0)
+            begun.append((offset, erase))
             reply(op: op, value: 0, data: [])
         } else if op == 0x03 {
             // FLASH_DATA: length, sequence, 0, 0, then the block; the checksum is 0xEF xor every block byte.
