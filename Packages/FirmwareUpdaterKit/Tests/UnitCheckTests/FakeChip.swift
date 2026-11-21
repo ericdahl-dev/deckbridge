@@ -10,6 +10,8 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
     private(set) var requests: [DFURequest] = []
     /// Leaves update mode after this many UPLOADs (nil: never).
     var leavesAfterUploads: Int?
+    /// From this many UPLOADs on, every block's first byte reads flipped: a flaky read (nil: never).
+    var flipsAfterUploads: Int?
     private var uploads = 0
     private var state: UInt8 = 2 // dfuIDLE
     private var pointer: UInt32
@@ -50,7 +52,9 @@ final class FakeChip: DFUTransport, @unchecked Sendable {
                 guard pointer >= base, r.value >= 2 else { return [] }
                 let start = Int(pointer - base) + (Int(r.value) - 2) * Int(r.length)
                 let end = min(start + Int(r.length), flash.count)
-                return start < end ? Array(flash[start..<end]) : []
+                var block = start < end ? Array(flash[start..<end]) : []
+                if let after = flipsAfterUploads, uploads > after, !block.isEmpty { block[0] ^= 0xFF }
+                return block
             default:
                 return []
             }
