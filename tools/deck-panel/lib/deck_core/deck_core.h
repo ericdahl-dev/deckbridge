@@ -52,6 +52,8 @@ public:
     /// Whether the last render() showed the waiting screen (joining and setup included), not the deck: true before the
     /// first render. Hold-to-reset counts only then (#622).
     bool waiting() const { return shown_waiting_; }
+    /// Whether hold-to-reset counts (#622): on the waiting screen, and off Wi-Fi even with the cable's deck up (#667).
+    bool hold_resets_wifi() const { return shown_waiting_ || network_ != Network::connected; }
     /// Tells `screen` what to show at `now_ms`, only when that changed since the last call.
     void render(Screen& screen, uint32_t now_ms);
 

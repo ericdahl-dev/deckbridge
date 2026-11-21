@@ -448,6 +448,22 @@ void test_with_both_feeds_losing_wifi_keeps_the_cables_deck() {
     TEST_ASSERT_EQUAL(2, screen.last().deck);
 }
 
+// Hold-to-reset (#622) counts on the waiting screen, and off Wi-Fi even while the cable's deck shows (#667): the touch
+// hold still sets up Wi-Fi. On Wi-Fi with the deck up it doesn't, so a DJ's touch never forgets the network.
+void test_hold_to_reset_counts_off_wifi_with_the_cables_deck_up() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_TRUE(core.hold_resets_wifi());
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 1010);
+    TEST_ASSERT_FALSE(core.hold_resets_wifi());
+}
+
 // Off Wi-Fi the feed can't be coming: waiting at once, not 3 s later; back on, the next message brings the deck.
 void test_losing_wifi_is_the_waiting_screen_at_once() {
     deck_core::DeckCore core;
@@ -957,6 +973,7 @@ int main(int, char**) {
     RUN_TEST(test_the_waiting_screen_says_why);
     RUN_TEST(test_the_cables_feed_shows_the_deck_off_wifi);
     RUN_TEST(test_with_both_feeds_losing_wifi_keeps_the_cables_deck);
+    RUN_TEST(test_hold_to_reset_counts_off_wifi_with_the_cables_deck_up);
     RUN_TEST(test_losing_wifi_is_the_waiting_screen_at_once);
     RUN_TEST(test_control_characters_show_as_spaces);
     RUN_TEST(test_a_render_a_moment_before_the_last_packet_still_shows_the_deck);
