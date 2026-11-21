@@ -28,7 +28,7 @@ class ReleaseDraft(unittest.TestCase):
         self.image.write_bytes(b"\xe9" + bytes(1024))
         self.out = root / "draft"
         self.loader = root / "bootloader.bin"
-        self.loader.write_bytes(b"\xe9" + bytes(64))
+        self.loader.write_bytes(b"\xe9\x03\x02\x4f" + bytes(61))
         self.table = root / "partitions.bin"
         self.table.write_bytes(b"\xaa\x50" + bytes(3070))
 

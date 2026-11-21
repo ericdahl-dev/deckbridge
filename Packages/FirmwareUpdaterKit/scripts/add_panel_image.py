@@ -70,8 +70,12 @@ def refusal(args, catalog):
     if (args.bootloader is None) != (args.partitions is None):
         return "give both --bootloader and --partitions, or neither"
     if args.bootloader:
-        if args.bootloader.read_bytes()[:1] != bytes([ESP_IMAGE_MAGIC]) or args.bootloader.stat().st_size > 0x8000:
+        loader = args.bootloader.read_bytes()
+        if loader[:1] != bytes([ESP_IMAGE_MAGIC]) or len(loader) > 0x8000 or len(loader) < 4:
             return f"{args.bootloader} is not a bootloader: an ESP32 image (first byte e9) that fits below 0x8000"
+        # The header's flash size, byte 3's high nibble (esptool's FLASH_SIZES): the panel's table needs 16 MB.
+        if loader[3] >> 4 != 0x4:
+            return f"{args.bootloader} is built for another flash size, not the panel's 16 MB"
         table = args.partitions.read_bytes()
         if len(table) != 3072 or table[:2] != b"\xaa\x50":
             return f"{args.partitions} is not a partition table: 3,072 bytes starting aa 50, as gen_esp32part.py writes it"

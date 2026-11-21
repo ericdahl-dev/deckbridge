@@ -63,7 +63,8 @@ func feed(serving folder: URL, manifest: Data, signature: Data) throws -> FakeFe
     let image = "deck-panel-1.1.0-ddddddd.bin", loader = "deck-panel-1.1.0-ddddddd-bootloader.bin"
     let table = "deck-panel-1.1.0-ddddddd-partitions.bin"
     try panelImage("1.1.0").write(to: folder.appending(path: image))
-    try (Data([0xE9]) + Data(repeating: 0x22, count: 64)).write(to: folder.appending(path: loader))
+    // A bootloader header for 16 MB of flash: byte 3's high nibble 4.
+    try (Data([0xE9, 0x03, 0x02, 0x4F]) + Data(repeating: 0x22, count: 61)).write(to: folder.appending(path: loader))
     var rows = Data([0xAA, 0x50, 0x01, 0x02]) + Data(repeating: 0, count: 28)
     rows += Data([0xEB, 0xEB]) + Data(repeating: 0xFF, count: 14) + Data(Insecure.MD5.hash(data: rows))
     try (rows + Data(repeating: 0xFF, count: 3072 - rows.count)).write(to: folder.appending(path: table))

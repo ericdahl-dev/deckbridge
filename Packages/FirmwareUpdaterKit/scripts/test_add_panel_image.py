@@ -72,7 +72,7 @@ class AddPanelImage(unittest.TestCase):
             self.assertEqual((self.catalog / "catalog.json").read_text(), before)
 
 
-    def boot_parts(self, loader=b"\xe9" + bytes(64), table=b"\xaa\x50" + bytes(3070)):
+    def boot_parts(self, loader=b"\xe9\x03\x02\x4f" + bytes(61), table=b"\xaa\x50" + bytes(3070)):
         root = pathlib.Path(self.tmp.name)
         (root / "bootloader.bin").write_bytes(loader)
         (root / "partitions.bin").write_bytes(table)
@@ -97,9 +97,11 @@ class AddPanelImage(unittest.TestCase):
             result = run("--catalog", self.catalog, "--image", self.image, "--version", "1.0.0", "--sha", "1d0683f", *extra)
             self.assertNotEqual(result.returncode, 0, extra)
             self.assertIn("both", result.stderr)
-        for loader_bytes, table_bytes, says in [(bytes(65), b"\xaa\x50" + bytes(3070), "bootloader"),
-                                                (b"\xe9" + bytes(64), bytes(3072), "partition table"),
-                                                (b"\xe9" + bytes(64), b"\xaa\x50" + bytes(100), "partition table")]:
+        good_loader, good_table = b"\xe9\x03\x02\x4f" + bytes(61), b"\xaa\x50" + bytes(3070)
+        for loader_bytes, table_bytes, says in [(bytes(65), good_table, "bootloader"),
+                                                (b"\xe9\x03\x02\x1f" + bytes(61), good_table, "16 MB"),
+                                                (good_loader, bytes(3072), "partition table"),
+                                                (good_loader, b"\xaa\x50" + bytes(100), "partition table")]:
             loader, table = self.boot_parts(loader_bytes, table_bytes)
             result = run("--catalog", self.catalog, "--image", self.image, "--version", "1.0.0", "--sha", "1d0683f",
                          "--bootloader", loader, "--partitions", table)
