@@ -3,6 +3,18 @@
 #include <Arduino.h>
 
 #include "deck_core.h"
+#include "feed_flags.h"
+
+#if !FEED_RX_TASK && defined(PANEL_PERF_LOG)
+// FEED_RX_TASK=0 (feed_flags.h): main's ledger stamps, verbatim, for the old path.
+#include <esp_timer.h>
+
+#include "perf_log.h"
+
+namespace {
+uint32_t now_us() { return static_cast<uint32_t>(esp_timer_get_time()); }
+}  // namespace
+#endif
 
 void FeedUdp::poll(bool connected, uint32_t joins, uint32_t now_ms) {
     if (!connected) {
@@ -31,6 +43,12 @@ size_t FeedUdp::next_size() {
         // Takes the next datagram off lwIP into WiFiUDP's own buffer; never waits.
         const int size = udp_.parsePacket();
         pending_ = size > 0 ? static_cast<size_t>(size) : 0;
+#if !FEED_RX_TASK && defined(PANEL_PERF_LOG)
+        // The first look that finds it, for the frame ledger (#662). Only the drain looks, right before it reads, so
+        // this is the read's time to within microseconds, not its arrival: it trails that by the time since the
+        // last drain (about a frame). parsePacket() is the only look, and it takes the datagram off lwIP.
+        if (pending_ > 0) perf_log::feed_seen(now_us());
+#endif
     }
     return pending_;
 }
@@ -40,6 +58,9 @@ size_t FeedUdp::read(uint8_t* into, size_t room) {
     // Whatever didn't fit goes too: one datagram is one message.
     udp_.clear();
     pending_ = 0;
+#if !FEED_RX_TASK && defined(PANEL_PERF_LOG)
+    if (got > 0) perf_log::feed_read(now_us());
+#endif
     return got > 0 ? static_cast<size_t>(got) : 0;
 }
 
