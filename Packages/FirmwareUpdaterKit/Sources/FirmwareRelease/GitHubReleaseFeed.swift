@@ -24,6 +24,8 @@ public enum FeedError: Error, Equatable {
     case http(Int)
     case notARelease
     case missingAsset(String)
+    /// A draft or a pre-release: never fetched.
+    case notPublished
 }
 
 /// This project's newest published GitHub release (#704), read over GitHub's public, unauthenticated endpoints. It sends
@@ -43,6 +45,8 @@ public actor GitHubReleaseFeed: ReleaseFeed {
         let answer = try await http.get(Self.latestURL, headers: Self.headers)
         guard answer.status == 200 else { throw FeedError.http(answer.status) }
         guard let release = try? JSONDecoder().decode(Release.self, from: answer.body) else { throw FeedError.notARelease }
+        // GitHub's "latest" is never a draft or a pre-release; if it ever were, nothing of it is fetched.
+        guard !release.draft, !release.prerelease else { throw FeedError.notPublished }
         assets = [:]
         for asset in release.assets { if let url = URL(string: asset.browser_download_url) { assets[asset.name] = url } }
         return PublishedRelease(manifest: try await file("manifest.json"), signature: try await file("manifest.sig"))
@@ -65,6 +69,8 @@ public actor GitHubReleaseFeed: ReleaseFeed {
             let name: String
             let browser_download_url: String
         }
+        let draft: Bool
+        let prerelease: Bool
         let assets: [Asset]
     }
 }
