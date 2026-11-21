@@ -461,7 +461,7 @@ void test_a_hold_on_the_cables_deck_while_joining_doesnt_reset_wifi() {
     for (uint32_t now = 1000; now <= 1000 + wifi_setup::HoldReset::kHoldMs + 500; now += 100) {
         core.feed(deck2.data(), deck2.size(), now, deck_core::Source::cable);
         core.render(screen, now);
-        reset = hold.update(true, core.hold_resets_wifi(), now) || reset;
+        reset = hold.update(true, core.waiting(), now) || reset;
     }
     TEST_ASSERT_FALSE(screen.last().waiting);
     TEST_ASSERT_FALSE(reset);

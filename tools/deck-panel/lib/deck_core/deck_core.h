@@ -50,10 +50,8 @@ public:
     /// The setup network's name and password, for the waiting screen while Network::setup (#622).
     void set_setup(const char* name, const char* password);
     /// Whether the last render() showed the waiting screen (joining and setup included), not the deck: true before the
-    /// first render. Hold-to-reset counts only then (#622).
+    /// first render. Hold-to-reset counts only then (#622), never while a deck shows, cable or Wi-Fi (#667).
     bool waiting() const { return shown_waiting_; }
-    /// Whether hold-to-reset counts (#622): only on the waiting screen, never while a deck shows, cable or Wi-Fi (#667).
-    bool hold_resets_wifi() const { return shown_waiting_; }
     /// Tells `screen` what to show at `now_ms`, only when that changed since the last call.
     void render(Screen& screen, uint32_t now_ms);
 
