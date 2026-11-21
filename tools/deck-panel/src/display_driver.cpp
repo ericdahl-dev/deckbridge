@@ -61,13 +61,15 @@ panel_scan::HealthLooks g_looks;
 portMUX_TYPE g_copy_lock = portMUX_INITIALIZER_UNLOCKED;
 const uint32_t g_chunk_ns = bounce_budget::chunk_ns(TIMING, PANEL_BOUNCE_PX);  // once, not per copy
 volatile bool g_drawing = false;  // set by the loop around its LVGL refresh, read by the copy
-// The A/B arms for #666's slower frames (perf build only; default: the Scan meters the copy).
-// -DPANEL_COPY_INLINE: the copy is metered here, inline under g_copy_lock, as 1d0683fd did; the Scan never sees it.
+// The copy is metered here, inline under g_copy_lock, with no flash call per chunk (the meter and the phase inline
+// from their headers): the Scan's own meter, a flash call under its lock in the bounce interrupt, cost the perf
+// build about twice #679's skipped frames (#666). Two arms for A/B runs:
+// -DPANEL_COPY_SCAN: the Scan meters the copy, as dc08bca3 did.
 // -DPANEL_COPY_UNMETERED: the wrapper only copies, as production does; the copy and copy-spread lines read 0.
-#if defined(PANEL_COPY_INLINE) && defined(PANEL_COPY_UNMETERED)
-#error "PANEL_COPY_INLINE and PANEL_COPY_UNMETERED are two arms; build one"
+#if defined(PANEL_COPY_SCAN) && defined(PANEL_COPY_UNMETERED)
+#error "PANEL_COPY_SCAN and PANEL_COPY_UNMETERED are two arms; build one"
 #endif
-#ifdef PANEL_COPY_INLINE
+#ifndef PANEL_COPY_SCAN
 bounce_budget::Meter g_copy(g_chunk_ns);
 uint32_t g_copy_late_drawing = 0;
 uint32_t g_copy_late_turn = 0;
@@ -225,9 +227,9 @@ uint32_t display_frame_us() { return frame_pacing::frame_us(TIMING); }
 
 uint32_t display_copy_budget_us() { return g_scan.copy_budget_us(); }
 
-// The Scan's meter; it only sees copies in the perf build (the memcpy wrapper below), so empty otherwise.
+// The perf build's copy meter (the memcpy wrapper below); the Scan's with -DPANEL_COPY_SCAN; empty in production.
 bounce_budget::Report display_take_copy(DisplayCopyLate* where) {
-#ifdef PANEL_COPY_INLINE
+#if defined(PANEL_PERF_LOG) && !defined(PANEL_COPY_SCAN)
     g_looks.look(g_scan, panel_scan::HealthLooks::Part::copy);  // the window still turns with the others
     portENTER_CRITICAL(&g_copy_lock);
     const bounce_budget::Report r = g_copy.take();
@@ -236,10 +238,11 @@ bounce_budget::Report display_take_copy(DisplayCopyLate* where) {
     g_copy_late_turn = 0;
     portEXIT_CRITICAL(&g_copy_lock);
     return r;
-#endif
+#else
     const panel_scan::Health& h = g_looks.look(g_scan, panel_scan::HealthLooks::Part::copy);
     if (where != nullptr) *where = {h.copy_late_drawing, h.copy_late_turn};
     return h.copy;
+#endif
 }
 
 #ifdef PANEL_PERF_LOG
@@ -301,12 +304,12 @@ extern "C" IRAM_ATTR void* __wrap_memcpy(void* to, const void* from, size_t n) {
     const int phase = perf_line::phase(since_latch_us, g_period_us);
     const uint8_t mark = g_mark;
     const bool printing = static_cast<int32_t>(g_print_until_us - end_us) > 0;
-#ifndef PANEL_COPY_INLINE
+#ifdef PANEL_COPY_SCAN
     // The meter and the late split (drawing, or the frame turn) are the Scan's, under its own lock.
     g_scan.copied(took_us, static_cast<uint64_t>(end), g_drawing);
 #endif
     portENTER_CRITICAL_SAFE(&g_copy_lock);
-#ifdef PANEL_COPY_INLINE
+#ifndef PANEL_COPY_SCAN
     g_copy.copied(took_us);
     if (late && g_drawing) ++g_copy_late_drawing;
     else if (late && since_latch_us < panel_scan::Scan::kTurnUs) ++g_copy_late_turn;
