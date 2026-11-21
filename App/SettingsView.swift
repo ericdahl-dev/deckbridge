@@ -269,7 +269,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func displayFeedSection(_ settings: Binding<BridgeSettings>) -> some View {
         section("Display feed") {
-            hint("Sends the deck in front to a deck panel on your network.")
+            hint("Sends the deck in front to a deck panel on your network, or plugged into this Mac.")
             switchRow("Send the display feed", isOn: settings.displayFeed.enabled)
             if settings.wrappedValue.displayFeed.enabled {
                 row("Host", hint: "The panel's IP address, shown on its waiting screen") {
@@ -283,6 +283,14 @@ struct SettingsView: View {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let status = model.displayFeedStatus
                 note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+            }
+            // The USB cable (#667): no Wi-Fi setup on the panel. Off by default, apart from the switch above.
+            switchRow("Send over the USB cable", isOn: settings.displayFeed.cable)
+            if settings.wrappedValue.displayFeed.cable {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    let status = model.cableFeedStatus
+                    note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+                }
             }
         }
     }

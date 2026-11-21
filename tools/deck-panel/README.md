@@ -12,7 +12,7 @@ The default firmware is the deck view (#620): it joins Wi-Fi (set up from a phon
 | `test/` | Host tests for `lib/`, with Unity | The Mac |
 | `src/` | The board layer: pins, the companion chip, the RGB panel with LVGL, touch, LVGL's heap in PSRAM, Wi-Fi (`wifi_link`), the feed's UDP socket (`feed_udp`), the deck and waiting screens (`deck_view`, which sets only what the core says changed and keeps no copy), the test screen and `main.cpp` | The panel only |
 | `check_secret_logs.py` | Fails if any `src/` line logs or prints the Wi-Fi password; `test_secret_logs.py` tests it | The Mac |
-| `deck_logo.py` | Writes `src/deck_logo.c`, the waiting screen's logo, from `design/icon/icon-1-deck-ring.svg`; run it after an icon change. `test_deck_logo.py` fails while the committed image is stale | The Mac |
+| `deck_logo.py` | Writes `src/deck_logo.c`, the waiting screen's logo, and `src/deck_logo_small.c`, the setup screen's at half size (#677), from `design/icon/icon-1-deck-ring.svg`; run it after an icon change. `test_deck_logo.py` fails while the committed image is stale | The Mac |
 | `feed/` | The display feed's example messages, shared with DeckBridge's tests | — |
 | `fonts/` | `make_fonts.sh`, which converts Geist into `src/fonts/` | The Mac |
 
@@ -113,7 +113,7 @@ esptool.py --port /dev/cu.wchusbserial210 write_flash 0 <the backup file>
 
 An empty deck shows its number and "No track loaded", with every other field blank, the bars empty and the lamps off. The waiting screen is #620's: a headline and the address, centered.
 
-**Round things.** The panel's pixels are shorter than wide: Elecrow gives the active area as 156 × 87 mm for 800 × 480, so 0.195 mm across and 0.18125 mm down. Anything drawn square in pixels looks about 7% flat on the glass. Anything that must look round, an image or an LVGL shape, needs 1.076 rows for every column (a 100 px wide circle is 108 px high). The waiting screen's logo (`src/deck_logo.c`, made by `deck_logo.py`, checked by `test_deck_logo.py`) is drawn that way, 184 × 198 px, so the logo, two headline lines and three detail lines fill the 400 px between the margins.
+**Round things.** The panel's pixels are shorter than wide: Elecrow gives the active area as 156 × 87 mm for 800 × 480, so 0.195 mm across and 0.18125 mm down. Anything drawn square in pixels looks about 7% flat on the glass. Anything that must look round, an image or an LVGL shape, needs 1.076 rows for every column (a 100 px wide circle is 108 px high). The waiting screen's logo (`src/deck_logo.c`, made by `deck_logo.py`, checked by `test_deck_logo.py`) is drawn that way, 184 × 198 px (the setup screen's, `src/deck_logo_small.c`, 92 × 99), so the logo, two headline lines and three detail lines fill the 400 px between the margins.
 
 Each feed update redraws only the widgets whose value changed. Progress, phase and level move a plain box, and only when a whole pixel changes, so their 30 updates a second redraw a strip, never the screen.
 

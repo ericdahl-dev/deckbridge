@@ -36,6 +36,8 @@ struct Socket {
 
 class Drain {
 public:
+    /// `source`: where the socket's datagrams come from, told to the core (the USB cable needs no Wi-Fi, #667).
+    explicit Drain(deck_core::Source source = deck_core::Source::wifi) : source_(source) {}
     /// Feeds waiting datagrams to `core`, stamped `now_ms`, until the socket is empty or `clock` has run kBudgetMs;
     /// returns how many were fed. Without a clock, only kMaxPerFrame bounds it.
     int run(Socket& socket, deck_core::DeckCore& core, uint32_t now_ms, Clock clock = nullptr);
@@ -46,6 +48,7 @@ public:
     uint32_t too_big() const { return too_big_; }
 
 private:
+    deck_core::Source source_;
     uint8_t buffer_[kMaxDatagram];
     uint32_t received_ = 0;
     uint32_t processed_ = 0;

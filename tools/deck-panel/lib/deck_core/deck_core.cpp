@@ -173,7 +173,7 @@ const Row kRows[] = {
 
 }  // namespace
 
-void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms) {
+void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     static const char kBundle[8] = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0};
     bool alive = false;
     if (length >= 16 && std::memcmp(bytes, kBundle, 8) == 0) {
@@ -199,6 +199,10 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     }
     if (!alive) return;
     heard_ = true;
+    if (source == Source::cable) {
+        cable_heard_ = true;
+        last_cable_ms_ = now_ms;
+    }
     last_heard_ms_ = now_ms;
 }
 
@@ -234,8 +238,11 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
     // The time since, signed: a clock that wraps round still counts it, and a render that read the clock a moment
     // before the packet's time sees a little under 0, not 49 days.
     const int32_t since = static_cast<int32_t>(now_ms - last_heard_ms_);
-    // Off Wi-Fi the feed can't be coming: waiting at once.
-    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || network_ != Network::connected;
+    // Off Wi-Fi the feed can't be coming, unless it comes on the cable (#667): waiting at once.
+    const bool cable = cable_heard_ && static_cast<int32_t>(now_ms - last_cable_ms_) < static_cast<int32_t>(kWaitAfterMs);
+    // Stale once, forgotten: an old time would come round as recent when the clock's signed range wraps (24.8 days).
+    if (!cable) cable_heard_ = false;
+    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable);
     // Waiting holds until the next message: the old deck never comes back by itself, even when the clock comes round.
     if (waiting) heard_ = false;
     if (waiting) {
@@ -269,6 +276,7 @@ WaitingView DeckCore::waiting_view() const {
             std::snprintf(view.headline, sizeof view.headline, "Set up the panel's Wi-Fi");
             std::snprintf(view.detail, sizeof view.detail, "Join %s, password %s, then open %s", setup_name_,
                           setup_password_, ip_);
+            view.logo_small = true;  // the join instructions take more lines (#677)
             break;
         case Network::joining:
             std::snprintf(view.headline, sizeof view.headline, "Joining Wi-Fi\xE2\x80\xA6");
@@ -282,8 +290,7 @@ WaitingView DeckCore::waiting_view() const {
             break;
     }
     // Fitted to the fonts, as the deck's texts are: the address and names come from outside.
-    WaitingView fitted;
-    fitted.logo = view.logo;
+    WaitingView fitted = view;  // every field; the texts then fitted over
     font_fallback::fit(view.headline, fitted.headline, sizeof fitted.headline);
     font_fallback::fit(view.detail, fitted.detail, sizeof fitted.detail);
     return fitted;
