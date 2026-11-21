@@ -357,6 +357,10 @@ public struct DisplayFeedSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey { case enabled, host, port, cable }
 
+    /// The cable's own feed (#667) as a setting of its own: on with the cable's switch. It has no host or port; the
+    /// cable's feed reads only `enabled`.
+    var overTheCable: DisplayFeedSettings { DisplayFeedSettings(enabled: cable, host: "", port: 0) }
+
     /// A feed saved before the cable's switch (#667) loads with it off.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

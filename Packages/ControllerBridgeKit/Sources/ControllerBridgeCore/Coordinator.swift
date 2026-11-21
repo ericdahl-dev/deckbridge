@@ -281,6 +281,20 @@ public final class Coordinator {
 
     /// The deck in front, as plain OSC, for a display such as the panel. Off until the setting turns it on.
     private let displayFeed = DisplayFeed()
+    /// The same feed over the USB cable (#667): a destination of its own, with its own switch and its own snapshot.
+    private let cableFeed = DisplayFeed()
+
+    /// Where the cable's feed goes: the app's sender for the panel's serial port.
+    public func attachCableFeed(_ sender: any OSCSender) {
+        cableFeed.attach(sender)
+        updateDisplayFeed()
+    }
+
+    /// The panel's serial port opened (plugged in, or the switch turned on): the full snapshot on the cable.
+    public func cableFeedReady() {
+        cableFeed.resend(at: clock.now)
+        updateDisplayFeed()
+    }
 
     /// Where the display feed goes: the app's UDP destination for the display.
     public func attachDisplayFeed(_ sender: any OSCSender) {
@@ -291,6 +305,7 @@ public final class Coordinator {
     /// Settings' display feed: on sends the deck in front at once.
     public func setDisplayFeed(_ settings: DisplayFeedSettings) {
         displayFeed.set(settings, at: clock.now)
+        cableFeed.set(settings.overTheCable, at: clock.now)
         status.requiredSubscriptions = requiredSubscriptions
         updateDisplayFeed()
     }
@@ -354,14 +369,16 @@ public final class Coordinator {
     }
 
     private func updateDisplayFeed() {
-        guard displayFeed.on else { return }
+        let feeds = [displayFeed, cableFeed].filter(\.on)
+        guard !feeds.isEmpty else { return }
         let entries = jogEntries
         guard let front = JogDisplayController.front(entries, previewDeck: jogController.previewDeck) else {
-            displayFeed.update(nil, at: clock.now)
+            for feed in feeds { feed.update(nil, at: clock.now) }
             return
         }
         let facts = entries[front].facts
-        displayFeed.update(displayFeedDeck(facts), known: displayFeedKnown(facts), at: clock.now)
+        let deck = displayFeedDeck(facts), known = displayFeedKnown(facts)
+        for feed in feeds { feed.update(deck, known: known, at: clock.now) }
     }
 
     /// Syndicate has answered for the deck: its colors (unless DeckBridge's own are used) and whether it's loaded,
