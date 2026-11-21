@@ -20,7 +20,9 @@ private func table(rows: Int = 2, breakMD5: Bool = false) -> Data {
 }
 
 private let image = Data([0xE9] + [UInt8](repeating: 0x11, count: 64))
-private let bootloader = Data([0xE9] + [UInt8](repeating: 0x22, count: 64))
+/// A bootloader's header (esp_image_header_t): magic E9, segment count, flash mode, then flash size in byte 3's high
+/// nibble, 4 for 16 MB (esptool's FLASH_SIZES), which the panel's 16 MB partition table needs.
+private let bootloader = Data([0xE9, 0x03, 0x02, 0x4F] + [UInt8](repeating: 0x22, count: 61))
 
 private func catalog(bootloader: Data?, partitions: Data?) throws -> URL {
     let folder = FileManager.default.temporaryDirectory.appending(path: "boot-parts-\(UUID().uuidString)")
@@ -57,10 +59,12 @@ func oneWithoutTheOtherDoesNotLoad(hasBootloader: Bool, hasPartitions: Bool) thr
     }
 }
 
-@Test(arguments: [
-    Data([0x00] + [UInt8](repeating: 0x22, count: 64)),  // not an ESP32 image
-    Data([0xE9] + [UInt8](repeating: 0x22, count: 0x8000)),  // past 0x8000, over the partition table
-])
+private let notAnImage: Data = Data([0x00]) + Data(repeating: 0x22, count: 64)
+private let pastTheTable: Data = Data([0xE9, 0x03, 0x02, 0x4F]) + Data(repeating: 0x22, count: 0x8000)
+private let builtFor2MB: Data = Data([0xE9, 0x03, 0x02, 0x1F]) + Data(repeating: 0x22, count: 61)
+
+/// Not an ESP32 image; past 0x8000, over the partition table; built for 2 MB of flash.
+@Test(arguments: [notAnImage, pastTheTable, builtFor2MB])
 func aBootloaderNotShapedLikeOneDoesNotLoad(bytes: Data) throws {
     #expect(throws: CatalogError.notABootloader("panel/bootloader.bin")) {
         try Catalog(directory: catalog(bootloader: bytes, partitions: table()))
