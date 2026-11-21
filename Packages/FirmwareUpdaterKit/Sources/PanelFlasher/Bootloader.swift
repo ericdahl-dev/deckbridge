@@ -25,6 +25,8 @@ public enum FlashError: Error, Equatable {
     case writeFailed(address: UInt32)
     /// What the flash holds at this address isn't the image that was written.
     case verifyFailed(address: UInt32)
+    /// An ESP32-S3 without the deck panel's partition table: blank, or another board's layout.
+    case notADeckPanel
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
@@ -143,11 +145,7 @@ public actor Bootloader {
         do {
             let padded = image + [UInt8](repeating: 0xFF, count: (4 - image.count % 4) % 4)
             let expected = Insecure.MD5.hash(data: Data(padded)).map { String(format: "%02x", $0) }.joined()
-            // esptool allows 8 s per MB for the ROM's MD5 (MD5_TIMEOUT_PER_MB).
-            let answer = try await command(.flashMD5, data: Packet.le32(offset) + Packet.le32(UInt32(padded.count))
-                                           + Packet.le32(0) + Packet.le32(0),
-                                           dataLength: 32, timeout: max(3, 8 * Double(padded.count) / 1_048_576))
-            guard String(decoding: answer.data, as: UTF8.self).lowercased() == expected else {
+            guard try await flashMD5(at: offset, size: padded.count) == expected else {
                 throw FlashError.verifyFailed(address: offset)
             }
         } catch {
@@ -186,6 +184,31 @@ public actor Bootloader {
             try await write(erased, at: Partition.nvs.offset) { _ in }
             try await verify(erased, at: Partition.nvs.offset)
         }
+    }
+
+    /// The deck panel's partition table at 0x8000, 3,072 bytes: the MD5 of what gen_esp32part.py writes from
+    /// tools/deck-panel/partitions.csv.
+    static let partitionTable = (offset: UInt32(0x8000), size: 3072, md5: "118cbdbfce82eb12bbdeb7c59af2fce8")
+
+    /// Refuses a board whose flash doesn't hold the deck panel's partition table, before anything is written: the
+    /// chip's MD5 of the table's region against ours.
+    public func checkPartitionTable() async throws {
+        do {
+            try await prepareFlash()
+            let found = try await flashMD5(at: Self.partitionTable.offset, size: Self.partitionTable.size)
+            guard found == Self.partitionTable.md5 else { throw FlashError.notADeckPanel }
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
+    /// The chip's MD5 of `size` bytes of flash at `offset` (SPI_FLASH_MD5: the ROM answers with 32 hex characters).
+    /// esptool allows 8 s per MB (MD5_TIMEOUT_PER_MB).
+    private func flashMD5(at offset: UInt32, size: Int) async throws -> String {
+        let answer = try await command(.flashMD5, data: Packet.le32(offset) + Packet.le32(UInt32(size)) + Packet.le32(0)
+                                       + Packet.le32(0), dataLength: 32, timeout: max(3, 8 * Double(size) / 1_048_576))
+        return String(decoding: answer.data, as: UTF8.self).lowercased()
     }
 
     private func prepareFlash() async throws {
