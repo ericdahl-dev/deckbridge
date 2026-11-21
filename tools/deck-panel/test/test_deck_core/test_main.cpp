@@ -433,6 +433,21 @@ void test_the_cables_feed_shows_the_deck_off_wifi() {
     TEST_ASSERT_TRUE(screen.last().waiting);
 }
 
+// Both feeds on (#667): Wi-Fi's datagram last when Wi-Fi drops, the cable's deck still shows; it doesn't hang on which
+// of the two came last.
+void test_with_both_feeds_losing_wifi_keeps_the_cables_deck() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.feed(deck2.data(), deck2.size(), 1010, deck_core::Source::wifi);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1020);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(2, screen.last().deck);
+}
+
 // Off Wi-Fi the feed can't be coming: waiting at once, not 3 s later; back on, the next message brings the deck.
 void test_losing_wifi_is_the_waiting_screen_at_once() {
     deck_core::DeckCore core;
@@ -941,6 +956,7 @@ int main(int, char**) {
     RUN_TEST(test_a_fast_field_change_is_one_redraw_and_the_same_value_none);
     RUN_TEST(test_the_waiting_screen_says_why);
     RUN_TEST(test_the_cables_feed_shows_the_deck_off_wifi);
+    RUN_TEST(test_with_both_feeds_losing_wifi_keeps_the_cables_deck);
     RUN_TEST(test_losing_wifi_is_the_waiting_screen_at_once);
     RUN_TEST(test_control_characters_show_as_spaces);
     RUN_TEST(test_a_render_a_moment_before_the_last_packet_still_shows_the_deck);

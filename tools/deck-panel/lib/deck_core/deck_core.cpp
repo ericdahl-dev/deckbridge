@@ -199,7 +199,10 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source
     }
     if (!alive) return;
     heard_ = true;
-    cable_ = source == Source::cable;
+    if (source == Source::cable) {
+        cable_heard_ = true;
+        last_cable_ms_ = now_ms;
+    }
     last_heard_ms_ = now_ms;
 }
 
@@ -236,7 +239,8 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
     // before the packet's time sees a little under 0, not 49 days.
     const int32_t since = static_cast<int32_t>(now_ms - last_heard_ms_);
     // Off Wi-Fi the feed can't be coming, unless it comes on the cable (#667): waiting at once.
-    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable_);
+    const bool cable = cable_heard_ && static_cast<int32_t>(now_ms - last_cable_ms_) < static_cast<int32_t>(kWaitAfterMs);
+    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable);
     // Waiting holds until the next message: the old deck never comes back by itself, even when the clock comes round.
     if (waiting) heard_ = false;
     if (waiting) {

@@ -64,7 +64,9 @@ private:
     bool heard_ = false;
     bool goodbye_ = false;  ///< the datagram being read had DeckBridge's goodbye
     uint32_t last_heard_ms_ = 0;
-    bool cable_ = false;  ///< the last datagram that kept the feed alive came on the USB cable (#667)
+    /// The USB cable's feed (#667), apart from Wi-Fi's: heard on it, and when last. Within kWaitAfterMs it needs no Wi-Fi.
+    bool cable_heard_ = false;
+    uint32_t last_cable_ms_ = 0;
     Network network_ = Network::connected;
     char ip_[16] = "";
     char setup_name_[24] = "";
