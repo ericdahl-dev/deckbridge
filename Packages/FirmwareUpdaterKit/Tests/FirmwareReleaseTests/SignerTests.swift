@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 import FirmwareCatalog
@@ -51,4 +52,34 @@ func feed(serving folder: URL, manifest: Data, signature: Data) throws -> FakeFe
     #expect(throws: CatalogError.unnamedFile("stray.bin")) {
         try ReleaseSigner.manifest(for: folder, keyID: "primary", lowestAllowedPanel: FirmwareVersion("1.0.0")!)
     }
+}
+
+/// A release whose panel build carries its bootloader and partition table (#687): the manifest signs both, under
+/// devices of their own, so the panel's own reader (#690), which takes one "deck-panel" image, skips them; and the app
+/// fetches and loads them.
+@Test func aReleaseWithThePanelsBootPartsSignsThemAndTheAppLoadsThem() async throws {
+    let key = SigningKey.generate(id: "primary")
+    let folder = temporaryFolder()
+    let image = "deck-panel-1.1.0-ddddddd.bin", loader = "deck-panel-1.1.0-ddddddd-bootloader.bin"
+    let table = "deck-panel-1.1.0-ddddddd-partitions.bin"
+    try panelImage("1.1.0").write(to: folder.appending(path: image))
+    try (Data([0xE9]) + Data(repeating: 0x22, count: 64)).write(to: folder.appending(path: loader))
+    var rows = Data([0xAA, 0x50, 0x01, 0x02]) + Data(repeating: 0, count: 28)
+    rows += Data([0xEB, 0xEB]) + Data(repeating: 0xFF, count: 14) + Data(Insecure.MD5.hash(data: rows))
+    try (rows + Data(repeating: 0xFF, count: 3072 - rows.count)).write(to: folder.appending(path: table))
+    let json = #"{"panel": [{"version": "1.0.0", "sha": "aaaaaaa", "image": "deck-panel-1.0.0-aaaaaaa.bin"}, {"version": "1.1.0", "sha": "ddddddd", "image": "\#(image)", "bootloader": "\#(loader)", "partitions": "\#(table)"}], "lc6000": []}"#
+    try Data(json.utf8).write(to: folder.appending(path: "catalog.json"))
+
+    let manifest = try ReleaseSigner.manifest(for: folder, keyID: key.id, lowestAllowedPanel: FirmwareVersion("1.0.0")!)
+    let listed = try JSONSerialization.jsonObject(with: manifest) as? [String: Any]
+    let files = (listed?["files"] as? [[String: Any]] ?? []).map { "\($0["device"] ?? "") \($0["name"] ?? "")" }
+    #expect(files == ["deck-panel \(image)", "deck-panel-bootloader \(loader)", "deck-panel-partitions \(table)"])
+
+    var served: [String: Data] = [:]
+    for name in [image, loader, table] { served[name] = try Data(contentsOf: folder.appending(path: name)) }
+    let outcome = await ReleaseFetcher(feed: FakeFeed(manifest: manifest, signature: try key.sign(manifest), files: served),
+                                       trusting: [key.trusted], cache: temporaryFolder())
+        .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
+    #expect(outcome.refusal == nil)
+    #expect(outcome.catalog.newestPanel()?.bootParts != nil)
 }
