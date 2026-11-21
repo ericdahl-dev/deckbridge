@@ -20,11 +20,13 @@ void tearDown() {}
 struct FakeCable : serial_feed::Bytes {
     std::deque<uint8_t> waiting;
     void add(const std::vector<uint8_t>& bytes) { waiting.insert(waiting.end(), bytes.begin(), bytes.end()); }
-    int next() override {
-        if (waiting.empty()) return -1;
-        const int byte = waiting.front();
-        waiting.pop_front();
-        return byte;
+    size_t read(uint8_t* into, size_t room) override {
+        size_t n = 0;
+        for (; n < room && !waiting.empty(); ++n) {
+            into[n] = waiting.front();
+            waiting.pop_front();
+        }
+        return n;
     }
 };
 

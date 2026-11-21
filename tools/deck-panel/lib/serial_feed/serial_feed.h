@@ -14,8 +14,8 @@ namespace serial_feed {
 /// The cable's received bytes, as the board layer has them (Serial).
 struct Bytes {
     virtual ~Bytes() = default;
-    /// The next received byte, or -1 if none waits.
-    virtual int next() = 0;
+    /// Reads up to `room` waiting bytes into `into` without waiting (Serial.read(buf, n) on the board); returns how many.
+    virtual size_t read(uint8_t* into, size_t room) = 0;
 };
 
 /// Where text outside a frame goes, a byte at a time: the "version" question (#695) shares the cable with the feed.
@@ -42,6 +42,13 @@ private:
     Text* text_;
     feed_drain::Clock clock_;
     uint32_t last_byte_ms_ = 0;
+    /// Bytes read from the cable in one call and not yet taken: one driver call per chunk, not per byte (firmware review).
+    static constexpr size_t kChunk = 64;
+    uint8_t chunk_[kChunk];
+    size_t chunk_at_ = 0;
+    size_t chunk_end_ = 0;
+    /// The next byte read, or -1 if none waits.
+    int next();
     uint8_t packet_[feed_drain::kMaxDatagram];
     size_t length_ = 0;
     bool complete_ = false;

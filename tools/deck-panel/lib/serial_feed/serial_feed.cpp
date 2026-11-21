@@ -9,11 +9,20 @@ constexpr uint8_t kEscEnd = 0xDC;
 constexpr uint8_t kEscEsc = 0xDD;
 }  // namespace
 
+int SerialFeed::next() {
+    if (chunk_at_ == chunk_end_) {
+        chunk_at_ = 0;
+        chunk_end_ = bytes_.read(chunk_, kChunk);
+        if (chunk_end_ == 0) return -1;
+    }
+    return chunk_[chunk_at_++];
+}
+
 size_t SerialFeed::next_size() {
     // Once per call: the loop asks every frame, and a byte read now arrived since the last ask.
     const uint32_t now = clock_ ? clock_() : 0;
     while (!complete_) {
-        const int next = bytes_.next();
+        const int next = this->next();
         if (next < 0) {
             // Nothing waiting and nothing read for kQuietMs inside a frame: it was cut (DeckBridge writes each whole),
             // so it's dropped. Judged only on an empty buffer, so a loop that stalled with the rest waiting keeps it.
