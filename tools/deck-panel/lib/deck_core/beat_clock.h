@@ -15,7 +15,7 @@ class BeatClock {
   public:
     /// How many beats past the last edge heard the clock shows when they're due. 1: the next beat lights on time,
     /// and if the master stops, at most one beat shows that didn't happen. 0: never past the last edge, as before
-    /// #660. The owner chose 1 after seeing both on the panel (2026-11-21); -DDECK_PANEL_PREDICT_BEATS=0 builds the other.
+    /// #660. The owner chose 1 after seeing both (2026-11-21); -DDECK_PANEL_PREDICT_BEATS=0 builds the other.
     static constexpr int kPredictBeats = DECK_PANEL_PREDICT_BEATS;
     /// Tempos the clock believes, as a beat's length: 40-300 BPM.
     static constexpr uint32_t kShortestBeatMs = 200, kLongestBeatMs = 1500;
