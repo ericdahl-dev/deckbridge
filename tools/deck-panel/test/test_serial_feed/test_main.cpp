@@ -199,6 +199,19 @@ void test_an_opening_end_alone_is_dropped_after_quiet() {
     TEST_ASSERT_EQUAL_STRING("version\n", lines.got.c_str());
 }
 
+// A loop that stalls with half a frame read and the rest already waiting keeps the frame: quiet is only an empty cable.
+void test_a_stall_with_the_rest_waiting_keeps_the_frame() {
+    FakeCable cable;
+    g_now_ms = 9000;
+    serial_feed::SerialFeed feed(cable, nullptr, fake_clock);
+    cable.add({0xC0, 0x2f});
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    cable.add({0x61, 0xC0});
+    g_now_ms += serial_feed::SerialFeed::kQuietMs + 50;
+    const std::vector<uint8_t> got = next_packet(feed);
+    TEST_ASSERT_EQUAL(2, got.size());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
@@ -209,5 +222,6 @@ int main() {
     RUN_TEST(test_the_cables_drain_shows_the_deck_in_setup_mode);
     RUN_TEST(test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again);
     RUN_TEST(test_an_opening_end_alone_is_dropped_after_quiet);
+    RUN_TEST(test_a_stall_with_the_rest_waiting_keeps_the_frame);
     return UNITY_END();
 }
