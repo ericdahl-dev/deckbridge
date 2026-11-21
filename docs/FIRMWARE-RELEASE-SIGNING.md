@@ -40,6 +40,18 @@ swift run firmware-release new-key --id backup --out /Volumes/<USB stick>/backup
    (`.github/workflows/deck-panel-release.yml`, #703) builds the panel image and leaves it, with the catalog, in an
    **unsigned draft** release. The draft holds `catalog.json` and the files it names, with flat names, and nothing
    else. It refuses a tag that doesn't match `VERSION`, and a dirty build. It uses no key and no secrets.
+
+   The same draft also carries:
+   - the panel build's bootloader and partition table, so the app can make a blank board a deck panel (#687);
+   - the drawn jog display's own code, `block-a.bin` and `block-b.bin`, with their `build.json` (#707).
+
+   The workflow builds the blocks from this commit's source with Ubuntu's Arm toolchain. It refuses a dirty, unknown or
+   unproven build, then builds them again from scratch and checks the draft's copies match byte for byte. Nothing of
+   Denon's is built, attached or downloaded.
+
+   **A block change ships only with a deck panel release.** The app takes the newest release only when its panel
+   version is newer, so to ship new blocks, bump `tools/deck-panel/VERSION` too. One release stream keeps the app's
+   "latest" release honest.
 3. On your Mac:
 
 ```sh
@@ -48,7 +60,8 @@ Packages/FirmwareUpdaterKit/scripts/sign_release.sh <tag> --key ~/.deckbridge-ke
 
 - `--lowest` is the lowest panel version a panel may go back to over Wi-Fi. Raise it only for a security fix.
 - The script checks the release is still a draft, downloads it, and shows the manifest (each file's device, version,
-  size and SHA-256). It asks for your passphrase only after that. Then it uploads `manifest.json` and
+  size and SHA-256: `deck-panel`, `deck-panel-bootloader`, `deck-panel-partitions`, `lc6000-wd` and `lc6000-tp`,
+  and `lc6000-blocks-record` for `build.json`). It asks for your passphrase only after that. Then it uploads `manifest.json` and
   `manifest.sig` and publishes the release.
 - If anything fails before publishing, the release stays a draft.
 - After publishing, it opens a small pull request that records the build in

@@ -6,6 +6,10 @@ name: Deck panel release
 # This job never sees a signing key: none exists in the repo or in CI, and it uses no secrets at all. Its only power
 # is the run's own GITHUB_TOKEN with contents: write, to create the draft.
 # The Mac app's release (release.yml) runs on v<version> tags; the two never match the same tag.
+# The drawn jog display's own code, blocks A and B (#696, #707), rides in the same release: built here from this
+# repo's source with Ubuntu's Arm toolchain, staged with its build record, and checked against a fresh rebuild. One
+# release stream keeps the app's "latest" honest; a block change ships with a deck panel VERSION bump. Nothing of
+# Denon's firmware is built, staged, attached or downloaded.
 on:
   push:
     tags: ['deck-panel-v*']
@@ -41,6 +45,22 @@ jobs:
       # The panel keeps its Wi-Fi in NVS, set from a phone (#622): nothing secret goes into the image.
       - name: Deck panel firmware build
         run: pio run -d tools/deck-panel -e crowpanel
+      - name: Arm toolchain
+        run: |
+          # As CI's Display firmware job (#640): apt gives up on a transfer with no data for 30 s and retries it, and a
+          # whole attempt over 4 minutes is cut off and tried once more. No newlib or libstdc++: the blocks are freestanding.
+          apt="-o Acquire::http::Timeout=30 -o Acquire::Retries=3"
+          for attempt in 1 2; do
+            timeout 240 sudo apt-get $apt update && timeout 240 sudo apt-get $apt install -y --no-install-recommends \
+              gcc-arm-none-eabi binutils-arm-none-eabi && break
+            [ "$attempt" = 2 ] && exit 1
+            echo "Arm toolchain download attempt $attempt failed or stalled; trying once more"
+          done
+          arm-none-eabi-gcc --version | head -1
+      # Blocks A and B with their build record (tools/lc6000-firmware/build_record.py), the flashed settings (ARM_DRAW=1,
+      # ARM_UPPER_PROVEN=1, the defaults).
+      - name: Drawn display blocks
+        run: make -s -C tools/lc6000-display-fw arm PYTHON=python3
       - name: Draft folder
         # Refuses a tag that doesn't match tools/deck-panel/VERSION, and a dirty build, before anything is uploaded.
         # The build's bootloader and partition table ride along, so the app can make a blank board a deck panel (#687).
@@ -51,7 +71,16 @@ jobs:
             --image tools/deck-panel/.pio/build/crowpanel/firmware.bin \
             --bootloader tools/deck-panel/.pio/build/crowpanel/bootloader.bin \
             --partitions tools/deck-panel/.pio/build/crowpanel/partitions.bin \
+            --blocks tools/lc6000-display-fw/build/arm --blocks-wd 00.50 --blocks-tp 00.31 \
             --sha "$(git rev-parse --short HEAD)" --out "$RUNNER_TEMP/draft"
+      # The staged blocks must be what this commit builds, byte for byte: built again from scratch and compared
+      # (builds are reproducible per toolchain version, tools/lc6000-display-fw/arm/README.md).
+      - name: Blocks match a fresh build
+        run: |
+          make -s -C tools/lc6000-display-fw arm PYTHON=python3 ARM_BUILD=build/arm-again
+          cmp "$RUNNER_TEMP/draft/block-a.bin" tools/lc6000-display-fw/build/arm-again/block.bin
+          cmp "$RUNNER_TEMP/draft/block-b.bin" tools/lc6000-display-fw/build/arm-again/upper.bin
+          echo "the draft's blocks are this commit's build, byte for byte"
       - name: Unsigned draft release
         env:
           GH_TOKEN: ${{ github.token }}
