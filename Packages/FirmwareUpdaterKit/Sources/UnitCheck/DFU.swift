@@ -98,3 +98,12 @@ public struct DFUReader: Sendable {
         do { return try await transport.control(request) } catch { throw DFUError.left }
     }
 }
+
+extension DFUError {
+    /// What the owner reads.
+    public var reason: String {
+        switch self {
+        case .left: "The unit left update mode during the read. Nothing was saved."
+        }
+    }
+}

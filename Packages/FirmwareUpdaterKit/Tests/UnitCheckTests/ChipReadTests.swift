@@ -21,3 +21,19 @@ struct ChipReadTests {
         #expect(chip.log.allSatisfy(isReadOnly))
     }
 }
+
+@Suite("Unit check: a unit that leaves update mode mid-read")
+struct LeavesMidReadTests {
+    @Test("The read stops at once with a plain reason, and asks the unit nothing more: no retry")
+    func leavesMidRead() async {
+        let chip = FakeChip(size: 0x10_0000)
+        chip.leavesAfterUploads = 3
+        await #expect(throws: DFUError.left) {
+            try await ChipRead.read(.display, from: DFUReader(transport: chip))
+        }
+        let uploads = chip.log.filter { $0.requestType == 0xA1 && $0.request == 2 }
+        #expect(uploads.count == 4) // three answered, the fourth found it gone
+        #expect(chip.log.last.map { $0.requestType == 0xA1 && $0.request == 2 } == true)
+        #expect(DFUError.left.reason == "The unit left update mode during the read. Nothing was saved.")
+    }
+}
