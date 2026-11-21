@@ -73,6 +73,7 @@ struct Reply {
     Refusal refusal = Refusal::none;
     uint32_t bytes = 0;    ///< progress: received so far
     std::string version;   ///< switched: the version now set to boot
+    std::string floor;     ///< switched: the floor to keep once that version confirms itself (never lower)
 };
 
 class Session {

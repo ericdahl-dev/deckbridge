@@ -107,6 +107,8 @@ Reply Session::done() {
     Reply reply;
     reply.kind = Reply::switched;
     reply.version = parsed_.image.version;
+    reply.floor = below(parsed_.lowest_allowed, config_.floor) || parsed_.lowest_allowed.empty() ? config_.floor
+                                                                                                  : parsed_.lowest_allowed;
     return reply;
 }
 

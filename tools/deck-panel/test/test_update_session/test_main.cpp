@@ -207,6 +207,18 @@ void test_an_image_bigger_than_the_spare_slot_is_refused() {
     expect_refused_untouched(panel, manifest_text("primary", "1.1.0", 6553601), Refusal::too_big);
 }
 
+// The floor only ever rises: the switched reply says what to keep once the new image has confirmed itself.
+void test_a_switch_names_the_floor_to_keep_once_confirmed() {
+    Panel raised("1.0.0");
+    raised.send_manifest(manifest_text("primary", "1.3.0", 4, "1.2.0"), 0x11);
+    raised.session.chunk(kImage, 4);
+    TEST_ASSERT_EQUAL_STRING("1.2.0", raised.session.done().floor.c_str());
+    Panel kept("1.5.0");
+    kept.send_manifest(manifest_text("primary", "1.6.0", 4, "1.2.0"), 0x11);
+    kept.session.chunk(kImage, 4);
+    TEST_ASSERT_EQUAL_STRING("1.5.0", kept.session.done().floor.c_str());
+}
+
 }  // namespace
 
 int main() {
@@ -227,5 +239,6 @@ int main() {
     RUN_TEST(test_an_image_at_the_floor_is_taken_and_versions_compare_by_number);
     RUN_TEST(test_a_manifest_in_another_format_or_without_a_panel_image_is_refused);
     RUN_TEST(test_an_image_bigger_than_the_spare_slot_is_refused);
+    RUN_TEST(test_a_switch_names_the_floor_to_keep_once_confirmed);
     return UNITY_END();
 }
