@@ -37,7 +37,10 @@ public struct DeviceFinder: Sendable {
     static let lc6000Ports = "LC6000 PRIME"
     /// ST's ROM DFU bootloader.
     static let stBootloader = (vendor: UInt16(0x0483), product: UInt16(0xDF11))
-    /// How long the finder listens to a panel's serial port for its boot line.
+    /// The panel's serial speeds, tried in turn: 921600 since #667, then 115200 for a panel flashed before it.
+    public static let panelBauds = [921_600, 115_200]
+
+    /// How long the finder listens to a panel's serial port for its boot line, at each speed.
     public static let listenSeconds = 3.0
     static let bootLine = "deck panel: boot, build "
     public static let dirty = "-dirty"
@@ -63,7 +66,10 @@ public struct DeviceFinder: Sendable {
         if let chip = devices.first(where: { $0.vendor == Self.panelChip.vendor && $0.product == Self.panelChip.product }) {
             let usbID = Self.hex(chip)
             if let port = chip.serialPort {
-                let build = Self.build(in: await serial.listen(on: port, for: Self.listenSeconds))
+                var build: PanelBuild?
+                for baud in Self.panelBauds where build == nil {
+                    build = Self.build(in: await serial.listen(on: port, baud: baud, for: Self.listenSeconds))
+                }
                 found.panel = .onSerial(build: build)
                 log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
             } else {

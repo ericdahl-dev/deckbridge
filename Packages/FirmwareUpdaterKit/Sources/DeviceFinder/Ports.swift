@@ -30,8 +30,8 @@ public protocol MIDIPorts: Sendable {
 /// A panel's serial lines. Listening only: the port opens with DTR and RTS held off, so the panel isn't reset, and
 /// nothing is written to it. A later ticket may add a version question here (#695).
 public protocol PanelSerial: Sendable {
-    /// The lines the panel printed on `port` within `seconds`.
-    func listen(on port: String, for seconds: Double) async -> [String]
+    /// The lines the panel printed on `port` at `baud` within `seconds`.
+    func listen(on port: String, baud: Int, for seconds: Double) async -> [String]
 }
 
 /// Where the finder writes what it found: a file the owner can send.
