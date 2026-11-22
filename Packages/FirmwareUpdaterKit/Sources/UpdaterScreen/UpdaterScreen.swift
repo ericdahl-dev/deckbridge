@@ -1,4 +1,22 @@
 import DeviceFinder
+import Foundation
+
+/// Steps to install a missing USB driver (#688): plain text, and the maker's own download page.
+public struct DriverGuide: Sendable, Equatable {
+    public let steps: [String]
+    public let link: URL
+
+    /// WCH's CH34x driver for the panel's CH340K. The page was checked by hand on 2026-11-21: WCH's own site,
+    /// CH34XSER_MAC.ZIP version 2.1, for CH340 and macOS 11 and later.
+    public static let ch34x = DriverGuide(
+        steps: [
+            "Download the CH34x driver for macOS from WCH, the chip's maker.",
+            "Open the download, drag CH34xVCPDriver to Applications, open it, and click Install.",
+            "If macOS asks, allow the driver in System Settings > General > Login Items & Extensions > Driver Extensions.",
+            "Unplug the panel and plug it back in. This app looks again by itself.",
+        ],
+        link: URL(string: "https://www.wch-ic.com/downloads/CH34XSER_MAC_ZIP.html")!)
+}
 
 /// One section of the app, as the owner reads it.
 public struct DeviceSection: Sendable, Equatable {
@@ -6,11 +24,14 @@ public struct DeviceSection: Sendable, Equatable {
     public let detail: String?
     /// A warning the owner must accept before anything else in the section shows or can be used.
     public let warning: String?
+    /// How to install the driver, when the device's driver is missing.
+    public let guide: DriverGuide?
 
-    init(status: String, detail: String? = nil, warning: String? = nil) {
+    init(status: String, detail: String? = nil, warning: String? = nil, guide: DriverGuide? = nil) {
         self.status = status
         self.detail = detail
         self.warning = warning
+        self.guide = guide
     }
 }
 
@@ -29,10 +50,13 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
     public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
 
-    public init(found: Found, lc6000WarningAccepted: Bool) {
+    /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
+    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false) {
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
-        case .driverMissing: panel = DeviceSection(status: "Deck panel found", detail: "The USB driver for its chip is missing")
+        case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
+        case .driverMissing: panel = DeviceSection(status: "Deck panel found", detail: "The USB driver for its chip is missing",
+                                                    guide: .ch34x)
         case .onSerial(let build?):
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
             let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"

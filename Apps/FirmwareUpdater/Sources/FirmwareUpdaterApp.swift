@@ -4,47 +4,33 @@ import UpdaterScreen
 
 @main
 struct FirmwareUpdaterApp: App {
-    @State private var model = UpdaterModel()
+    @State private var model = Live.updater()
 
     var body: some Scene {
         Window("Firmware Updater", id: "updater") {
             UpdaterView(model: model)
                 .frame(minWidth: 480, minHeight: 360)
-                .task { await model.refresh() }
+                .task {
+                    await model.refresh()
+                    await model.watch()
+                }
         }
         .windowResizability(.contentSize)
     }
 }
 
-/// Finds what is plugged in and keeps the screen's values. It only looks (#685).
-@MainActor @Observable
-final class UpdaterModel {
-    private(set) var screen = UpdaterScreen(found: Found(), lc6000WarningAccepted: false)
-    private(set) var looking = false
-    private var found = Found()
-    private var lc6000WarningAccepted = false
-    private let finder = DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared)
-
-    func refresh() async {
-        guard !looking else { return }
-        looking = true
-        found = await finder.find()
-        looking = false
-        show()
-    }
-
-    func acceptLC6000Warning() {
-        lc6000WarningAccepted = true
-        show()
-    }
-
-    private func show() {
-        screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted)
+/// The app's model, with the real ports: IOKit, CoreMIDI, a listen-only serial port, and IOKit's USB notifications.
+@MainActor
+enum Live {
+    static let usbChanges = IOKitUSBChanges()
+    static func updater() -> Updater {
+        Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
+                changes: usbChanges.changes, log: FileLog.shared)
     }
 }
 
 struct UpdaterView: View {
-    let model: UpdaterModel
+    let model: Updater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -75,6 +61,7 @@ struct SectionView: View {
                 } else {
                     Text(section.status).font(.headline)
                     if let detail = section.detail { Text(detail).foregroundStyle(.secondary) }
+                    if let guide = section.guide { GuideView(guide: guide) }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -82,5 +69,23 @@ struct SectionView: View {
         } label: {
             Text(title).font(.title3.bold())
         }
+    }
+}
+
+/// A driver's install steps, as plain numbered text, and the maker's download page (#688). No Settings button.
+struct GuideView: View {
+    let guide: DriverGuide
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(guide.steps.enumerated()), id: \.offset) { number, step in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(number + 1).").monospacedDigit()
+                    Text(step).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Link("Open WCH's driver download page", destination: guide.link)
+        }
+        .padding(.top, 4)
     }
 }

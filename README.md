@@ -17,8 +17,8 @@ LC6000 ◀──MIDI LEDs──  DeckBridge  ◀──OSC feedback :9096── S
 | Jog while playing | `PhaseBend` ±1, released 80 ms after the wheel stops. With VINYL on, it seeks instead, as the paused jog does |
 | VINYL | Toggles the playing jog between bending (off, the default) and seeking (on), per deck layer. Its light is full while seeking is on |
 | Jog while paused | `WaveformSeek`, using the track length from feedback, with the deck's `Quantize` at None (1) while seeking so Syndicate doesn't snap it to the grid, then Use Global (0) 300 ms after the last move. Falls back to `BeatSkip` |
-| Needle Drop strip, while touched | `WaveformSeek`. On a paused deck, the deck's `Quantize` is None while touched, then Use Global |
-| Shift + Needle Drop strip, while touched | Moves the deck's channel fader in Syndicate (`Mixer/CHn/Volume`, n the deck), on by default. Relative moves it from where it is by how far the finger travels, and needs Syndicate's `Volume` feedback; Jump sends it straight to the finger. Settings › Controller switches it and picks the mode (#609) |
+| Needle Drop strip, while touched | Moves the deck's channel fader in Syndicate (`Mixer/CHn/Volume`, n the deck), on by default (#609, #729). Relative moves it from where it is by how far the finger travels, and needs Syndicate's `Volume` feedback; Jump sends it straight to the finger. Settings › Controller switches it and picks the mode; switched off, the strip seeks with or without Shift |
+| Shift + Needle Drop strip, while touched | `WaveformSeek` (needle drop). On a paused deck, the deck's `Quantize` is None while touched, then Use Global |
 | Play / Cue / Sync / Master | `PlayPause` / `Cue` (hold) / `TempoSync` / `TempoMaster` |
 | Pads in Hot Cue mode | `HotCue n 1/0` (press and hold) |
 | Shift + pad in Hot Cue mode, deck stopped | Goes to that cue without playing, at once: `Quantize 1` (None), then a silent `WaveformSeek` to the cue, then `Quantize 0` (Use Global). The first press on each cue (per track) taps `Cue n` and pauses it on `Playing 1` instead, with a short blip, to learn where the cue is. Syndicate doesn't report a deck's own quantize, so a deck set to its own quantize is reset to Use Global. On a playing deck it's a hot cue |
@@ -97,7 +97,7 @@ Click the menu-bar icon (a jog wheel) to open the panel:
   - **TEMPO:** MASTER when this deck leads the tempo.
 - **Why no LEDs?:** says in plain words what to fix when something is wrong, with a **Copy details** button for the raw error.
 - **Settings…** and **Diagnostics…**
-- **Demo controller:** runs a scripted controller against a simulated Syndicate, so you can see the bridge work without hardware. Nothing goes to the network, and it's off again at the next launch.
+- **Demo controller:** runs a scripted controller against a simulated Syndicate, so you can see the bridge work without hardware. Nothing goes to the network unless you turn on the display feed, and then only unencrypted to the one address you set on your local network. It's off again at the next launch.
 - **Quit:** asks first while feedback is live, because quitting stops the controller.
 
 If the bridge itself can't start, the header says **Bridge stopped** with the reason: MIDI, Syndicate's address or the controller profiles. The help says how to fix it.

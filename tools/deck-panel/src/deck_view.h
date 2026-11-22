@@ -35,7 +35,9 @@ private:
     lv_obj_t* remaining_ = nullptr;
     lv_obj_t* progress_fill_ = nullptr;
     lv_obj_t* beats_[4] = {};
-    lv_obj_t* phase_marker_ = nullptr;
+    lv_obj_t* phase_ = nullptr;       ///< the phase bar's track
+    lv_obj_t* phase_bar_ = nullptr;   ///< in the track: the bar from the center, in the deck color
+    lv_obj_t* phase_tick_ = nullptr;  ///< on the page, over the track: the locked tick
     lv_obj_t* level_fill_ = nullptr;
     Lamp play_, cue_, sync_, master_, loop_;
     lv_obj_t* waiting_page_ = nullptr;

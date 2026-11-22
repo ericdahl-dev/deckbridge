@@ -34,6 +34,8 @@ public struct Found: Sendable, Equatable {
 public struct DeviceFinder: Sendable {
     /// The CrowPanel's USB serial chip, a CH340K (tools/deck-panel/README.md).
     static let panelChip = (vendor: UInt16(0x1A86), product: UInt16(0x7522))
+    /// The panel's USB id as the log writes it.
+    public static let panelUSBID = String(format: "%04X:%04X", panelChip.vendor, panelChip.product)
 
     /// The LC6000's MIDI ports carry this in their names, as DeckBridge finds them ("LC6000 PRIME Controller", "… WD").
     static let lc6000Ports = "LC6000 PRIME"
@@ -99,7 +101,7 @@ public struct DeviceFinder: Sendable {
                 }
             } else {
                 found.panel = .driverMissing
-                log.log("deck panel: on USB \(usbID), no serial port (driver missing)")
+                log.log("deck panel: on USB \(usbID), no serial port yet")
             }
         }
         if await midi.names().contains(where: { $0.contains(Self.lc6000Ports) }) {

@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
+        .library(name: "PortHandoff", targets: ["PortHandoff"]),
         .executable(name: "firmware-release", targets: ["firmware-release"]),
     ],
     targets: [
@@ -33,7 +34,11 @@ let package = Package(
         // lines. It only looks: nothing here can send to a device. The real ports are the app's adapters.
         .target(name: "DeviceFinder", dependencies: ["FirmwareModel"]),
         // The app's two sections, deck panel and LC6000, as plain values: what the owner reads (#685).
-        .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel"]),
-        .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel"]),
+        .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel", "PortHandoff"]),
+        // Borrowing the deck panel's USB port from DeckBridge for an update (#710): ask, wait for its answer, give it
+        // back. Signals between the two apps on this Mac only; the app's adapter carries them. Never opens a port.
+        .target(name: "PortHandoff"),
+        .testTarget(name: "PortHandoffTests", dependencies: ["PortHandoff"]),
+        .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel", "PortHandoff"]),
     ]
 )

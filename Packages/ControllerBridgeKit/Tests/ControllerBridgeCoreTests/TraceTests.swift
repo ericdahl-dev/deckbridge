@@ -193,7 +193,7 @@ struct TraceJogDisplayTests {
         rig.driver.trace = { category, text in if category == .jogDisplay { lines.list.append(text) } }
         rig.driver.connect()
         lines.list.removeAll()
-        rig.driver.marker(4096)
+        rig.driver.needle(4096)
         #expect(lines.list == ["WD out E0 00 20"])
     }
 }
