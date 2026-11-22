@@ -53,6 +53,7 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
     public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, deckBridgeSilent: Bool = false) {
+        firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
         case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
@@ -76,5 +77,25 @@ public struct UpdaterScreen: Sendable, Equatable {
         case .onMIDI: lc6000 = DeviceSection(status: "LC6000 found", detail: "Firmware not checked yet")
         case .updateMode: lc6000 = DeviceSection(status: "A device in update mode, maybe an LC6000")
         }
+    }
+
+    /// The log's first look (#734): what each section found, in status words only, never a build, serial number or
+    /// port, so the launch smoke check can match it exactly. The LC6000's words don't wait for its warning.
+    public let firstLookLine: String
+
+    static func firstLook(_ found: Found, panelWaiting: Bool) -> String {
+        let panel = switch found.panel {
+        case nil: "not found"
+        case .driverMissing where panelWaiting: "found (waiting for its port)"
+        case .driverMissing: "found (driver missing)"
+        case .portBusy: "found (port busy)"
+        case .onSerial(let build): build == nil ? "found (build not read)" : "found (build read)"
+        }
+        let lc6000 = switch found.lc6000 {
+        case nil: "not found"
+        case .onMIDI: "found"
+        case .updateMode: "in update mode"
+        }
+        return "first look: deck panel \(panel), LC6000 \(lc6000)"
     }
 }
