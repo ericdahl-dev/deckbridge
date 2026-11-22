@@ -12,5 +12,6 @@
 # One byte changes; the line covers the whole token so the old-bytes check does too. No code
 # changes. The unit starts in the state it is in after pad 1 has been pressed once.
 #
-# Unproven on hardware: nobody has flashed it. Apply it only to the stock 00.31 image.
+# Proven on hardware: flashed with the kit on 2026-11-19 (#435, #439), and by the Firmware Updater on 2026-11-22
+# (#748): read back equal, and the unit starts with no deck-select blink. Apply it only to the stock 00.31 image.
 0x08015CDB 0a14ff64 0a140064
