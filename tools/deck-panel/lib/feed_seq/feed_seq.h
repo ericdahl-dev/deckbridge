@@ -1,0 +1,25 @@
+// The feed's sequence number (#750): DeckBridge numbers every bundle (`/DeckBridge/Display/seq`), and the panel counts
+// the numbers it never saw. Kept free of Arduino so it's host-tested.
+#pragma once
+
+#include <cstdint>
+
+namespace feed_seq {
+
+/// One source's count (Wi-Fi's UDP, or the USB cable): the datagrams lost between the ones it saw.
+class Counter {
+  public:
+    /// A bundle numbered `seq` came.
+    void saw(uint32_t seq);
+    /// Datagrams missing since boot.
+    uint32_t lost() const;
+    /// A numbered bundle has come at least once: a DeckBridge from before #750 sends none.
+    bool seen() const;
+
+  private:
+    bool seen_ = false;
+    uint32_t last_ = 0;
+    uint32_t lost_ = 0;
+};
+
+}  // namespace feed_seq
