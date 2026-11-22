@@ -66,6 +66,19 @@ void test_the_wrap_counts_across_it() {
     TEST_ASSERT_EQUAL_UINT32(1, d.lost());
 }
 
+// A datagram that came a little late (#750's firmware review): 12 before 11 counts 11 lost, then 11 coming takes the
+// loss back; 13 is then on time. A repeat changes nothing.
+void test_a_late_datagram_is_not_two_losses() {
+    feed_seq::Counter c;
+    c.saw(10);
+    c.saw(12);
+    TEST_ASSERT_EQUAL_UINT32(1, c.lost());
+    c.saw(11);
+    c.saw(13);
+    c.saw(13);
+    TEST_ASSERT_EQUAL_UINT32(0, c.lost());
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_nothing_seen_is_nothing_lost_and_not_seen);
@@ -74,5 +87,6 @@ int main() {
     RUN_TEST(test_the_first_number_seen_is_the_baseline);
     RUN_TEST(test_at_or_below_the_last_is_a_restart_not_a_loss);
     RUN_TEST(test_the_wrap_counts_across_it);
+    RUN_TEST(test_a_late_datagram_is_not_two_losses);
     return UNITY_END();
 }

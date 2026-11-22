@@ -9,6 +9,9 @@ namespace feed_seq {
 /// One source's count (Wi-Fi's UDP, or the USB cable): the datagrams lost between the ones it saw.
 class Counter {
   public:
+    /// At most this far behind the last, and not 1, a number is a late datagram, not a restart (#750's review).
+    static constexpr uint32_t kLate = 8;
+
     /// A bundle numbered `seq` came.
     void saw(uint32_t seq);
     /// Datagrams missing since boot.
