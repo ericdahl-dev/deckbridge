@@ -57,4 +57,28 @@ struct CableHandoffTests {
         #expect(CableHandoff.releasedName == "dev.ericdahl.deckbridge.panel-port.released")
         #expect(CableHandoff.doneName == "dev.ericdahl.deckbridge.panel-port.done")
     }
+
+    /// The debug trace's line for each step (#710's owner run: deckbridge.log had nothing, so a lend couldn't be told
+    /// from no ask at all). `note` is the last call's line; nil when that call changed nothing.
+    @Test("Each step leaves a line for the trace: asked, done, done with the switch off, switch off while lent")
+    func notes() {
+        var handoff = CableHandoff()
+        _ = handoff.releaseAsked(holding: true)
+        #expect(handoff.note == "cable: the Firmware Updater asked for the port; closed it, lent")
+        _ = handoff.doneAsked(cableOn: true)
+        #expect(handoff.note == "cable: the Firmware Updater is done; taking the port back")
+        _ = handoff.releaseAsked(holding: false)
+        #expect(handoff.note == "cable: the Firmware Updater asked for the port; it wasn't open, lent")
+        _ = handoff.doneAsked(cableOn: false)
+        #expect(handoff.note == "cable: the Firmware Updater is done; switch off, port stays closed")
+        _ = handoff.doneAsked(cableOn: true)
+        #expect(handoff.note == "cable: the Firmware Updater said done, but the port wasn't lent")
+        _ = handoff.releaseAsked(holding: false)
+        handoff.switchChanged(on: true)
+        #expect(handoff.note == nil)
+        handoff.switchChanged(on: false)
+        #expect(handoff.note == "cable: switch off while lent; the lend ends")
+        handoff.switchChanged(on: true)
+        #expect(handoff.note == nil)
+    }
 }

@@ -115,7 +115,7 @@ public final class Updater {
         updating = true
         canCancel = true
         let lend = borrow?()
-        let outcome = await lend?.borrow() ?? .noAnswer
+        let outcome = if let lend { await ask(lend) } else { PortBorrow.Outcome.noAnswer }
         let (steps, step) = AsyncStream<PanelUpdate.Step>.makeStream()
         flashing = Task.detached {
             await flasher.flash { step.yield($0) }
@@ -130,7 +130,7 @@ public final class Updater {
             }
             show()
         }
-        lend?.giveBack()
+        if let lend { giveBack(lend, after: outcome) }
         flashing = nil
         canCancel = false
         updating = false
@@ -185,13 +185,29 @@ public final class Updater {
     private func lookPastDeckBridge() async {
         deckBridgeSilent = false
         guard case .portBusy = found.panel, let borrow = borrow?() else { return }
-        switch await borrow.borrow() {
+        switch await ask(borrow) {
         case .lent:
             found = await finder.find()
-            borrow.giveBack()
+            giveBack(borrow)
         case .noAnswer:
             deckBridgeSilent = true
         }
+    }
+
+    /// Asks DeckBridge for the port, and logs its answer (#710: the owner's run had no trace of either side).
+    private func ask(_ borrow: PortBorrow) async -> PortBorrow.Outcome {
+        let outcome = await borrow.borrow()
+        switch outcome {
+        case .lent: log?.log("deck panel: asked DeckBridge for the port, it let go")
+        case .noAnswer: log?.log("deck panel: asked DeckBridge for the port, no answer in \(Int(PortBorrow.answerWait)) s")
+        }
+        return outcome
+    }
+
+    /// Gives a lent port back, and logs it; nothing when it wasn't lent.
+    private func giveBack(_ borrow: PortBorrow, after outcome: PortBorrow.Outcome = .lent) {
+        borrow.giveBack()
+        if outcome == .lent { log?.log("deck panel: gave the port back to DeckBridge") }
     }
 
     /// The panel is on USB with no port, and the wait isn't up: it may still be coming.

@@ -88,7 +88,9 @@ public struct DeviceFinder: Sendable {
                 var busy = false
                 for baud in Self.panelBauds where build == nil && !busy {
                     switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: Self.versionQuestion) {
-                    case .lines(let lines): build = Self.build(in: lines)
+                    case .lines(let lines):
+                        build = Self.build(in: lines)
+                        if build == nil { log.log("deck panel: asked at \(baud), " + Self.noBuild(in: lines)) }
                     case .busy: busy = true
                     }
                 }
@@ -112,6 +114,20 @@ public struct DeviceFinder: Sendable {
             log.log("LC6000: a device in update mode on USB \(Self.hex(st))")
         }
         return found
+    }
+
+    /// Why `lines` gave no build, for the log (#710's owner run): counts and fixed words only, never the panel's text.
+    static func noBuild(in lines: [String]) -> String {
+        guard !lines.isEmpty else { return "nothing back" }
+        let count = lines.count == 1 ? "1 line" : "\(lines.count) lines"
+        let prefixes = [bootLine, answerLine]
+        if lines.contains(where: { line in prefixes.contains(where: line.hasPrefix) }) {
+            return count + ", build line not well formed"
+        }
+        if lines.contains(where: { line in prefixes.contains(where: line.contains) }) {
+            return count + ", build line torn inside another line"
+        }
+        return count + ", no build line"
     }
 
     static func hex(_ device: USBDevice) -> String {

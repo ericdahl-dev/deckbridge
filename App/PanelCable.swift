@@ -33,6 +33,8 @@ final class PanelCable: BytePort, @unchecked Sendable {
 
     /// The port opened: the Coordinator sends the full snapshot on it. Called on the main queue.
     var onOpen: (() -> Void)?
+    /// The debug trace: each step of lending the port to the Firmware Updater (#710). Set before the switch turns on.
+    var trace: TraceSink?
 
     // Main thread.
     private var enabled = false
@@ -47,6 +49,7 @@ final class PanelCable: BytePort, @unchecked Sendable {
         guard on != enabled else { return }
         enabled = on
         handoff.switchChanged(on: on)
+        traceHandoff()
         generation += 1
         timer?.invalidate()
         timer = nil
@@ -88,9 +91,12 @@ final class PanelCable: BytePort, @unchecked Sendable {
     /// `io`, after any open already queued there, so a look in flight can't open the port after the reply.
     func lend(reply: @escaping @Sendable () -> Void) {
         let actions = handoff.releaseAsked(holding: state == .open)
+        traceHandoff()
+        let trace = trace
         io.async { [weak self] in
             guard let self else { return }
             if actions.contains(.closePort) || self.fd >= 0 { self.close(then: .lent) } else { self.set(.lent) }
+            trace?(.displayFeed, "cable: port closed; telling the Firmware Updater it's free")
             DispatchQueue.main.async(execute: reply)
         }
     }
@@ -98,8 +104,13 @@ final class PanelCable: BytePort, @unchecked Sendable {
     /// The updater is done: take the port back if the switch is on. Its opening sends the full snapshot (onOpen).
     func reclaim() {
         let actions = handoff.doneAsked(cableOn: enabled)
+        traceHandoff()
         if handoff.mayLook, state == .lent { set(.noPanel) }
         if actions.contains(.lookAgain) { look() }
+    }
+
+    private func traceHandoff() {
+        if let note = handoff.note { trace?(.displayFeed, note) }
     }
 
     // MARK: On `io`
