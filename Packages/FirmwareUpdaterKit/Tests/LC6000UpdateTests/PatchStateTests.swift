@@ -44,4 +44,15 @@ struct PatchStateTests {
         #expect(PatchedImage.state(of: patched, chip: .tp, edits: edits, known: known) == .alreadyPatched("00.31"))
         #expect(PatchedImage.state(of: stock, chip: .tp, edits: edits, known: .none) == .unknown)
     }
+
+    @Test("wd: an image of ours the catalog knows by its CRC (the drawn display) is up to date, by its label")
+    func displayOurs() throws {
+        let v = try Self.vector("wd 00.50 slot-16")
+        let stock = V.element(v), edits = try V.edits(v)
+        // Stand-in for the drawn image: any image with a good trailer whose stock the catalog doesn't know.
+        let ours = try PatchedImage.apply(edits, chip: .wd, to: stock)
+        let crc = try #require(DisplayTrailer.crc(of: ours))
+        let known = KnownNumbers(display: [:], topPanel: [:], displayOurs: [crc: "00.50 drawn"])
+        #expect(PatchedImage.state(of: ours, chip: .wd, edits: edits, known: known) == .alreadyPatched("00.50 drawn"))
+    }
 }

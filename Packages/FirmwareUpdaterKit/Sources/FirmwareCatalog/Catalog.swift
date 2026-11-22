@@ -165,21 +165,25 @@ public struct Catalog: Sendable {
 
     /// The numbers the sets' stock firmware is known by (#692). A number that isn't one fails the load.
     private static func numbers(_ sets: [File.Set]) throws -> KnownNumbers {
-        var display: [UInt32: String] = [:], topPanel: [String: String] = [:]
+        var display: [UInt32: String] = [:], topPanel: [String: String] = [:], displayOurs: [UInt32: String] = [:]
         for set in sets {
             guard let known = set.known else { continue }
-            if let crc = known.wd_crc {
-                guard crc.wholeMatch(of: /0x[0-9A-F]{8}/) != nil, let value = UInt32(crc.dropFirst(2), radix: 16) else {
-                    throw CatalogError.badNumber(crc)
-                }
-                display[value] = set.wd
-            }
+            if let crc = known.wd_crc { display[try Self.crc(crc)] = set.wd }
+            for ours in known.wd_ours ?? [] { displayOurs[try Self.crc(ours.crc)] = ours.label }
             if let hash = known.tp_sha256 {
                 guard hash.wholeMatch(of: /[0-9a-f]{64}/) != nil else { throw CatalogError.badNumber(hash) }
                 topPanel[hash] = set.tp
             }
         }
-        return KnownNumbers(display: display, topPanel: topPanel)
+        return KnownNumbers(display: display, topPanel: topPanel, displayOurs: displayOurs)
+    }
+
+    /// "0x" and 8 uppercase hex digits, or the load fails.
+    private static func crc(_ text: String) throws -> UInt32 {
+        guard text.wholeMatch(of: /0x[0-9A-F]{8}/) != nil, let value = UInt32(text.dropFirst(2), radix: 16) else {
+            throw CatalogError.badNumber(text)
+        }
+        return value
     }
 
     /// The SHA of every panel build the catalog lists, carried or not.
@@ -206,7 +210,13 @@ public struct Catalog: Sendable {
         }
         struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry]; var known: Known? = nil }
         /// The numbers this set's stock firmware is known by (#692): "0x" and 8 hex digits; 64 hex digits.
-        struct Known: Decodable { let wd_crc: String?; let tp_sha256: String? }
+        /// wd_ours: our own wd images (the drawn display), by trailer CRC, each with the label the screen shows.
+        struct Known: Decodable {
+            struct Ours: Decodable { let crc: String; let label: String }
+            let wd_crc: String?
+            let tp_sha256: String?
+            var wd_ours: [Ours]? = nil
+        }
         struct Entry: Decodable {
             let kind: LC6000Entry.Kind
             let chip: Chip
@@ -224,12 +234,15 @@ public struct Catalog: Sendable {
 public struct KnownNumbers: Sendable, Hashable {
     public let display: [UInt32: String]
     public let topPanel: [String: String]
+    /// Our own wd images on top of a stock one (the drawn display), by trailer CRC, to the label the screen shows.
+    public let displayOurs: [UInt32: String]
     /// Nothing known: every version refused for updates, backups still allowed.
     public static let none = KnownNumbers(display: [:], topPanel: [:])
 
-    public init(display: [UInt32: String], topPanel: [String: String]) {
+    public init(display: [UInt32: String], topPanel: [String: String], displayOurs: [UInt32: String] = [:]) {
         self.display = display
         self.topPanel = topPanel
+        self.displayOurs = displayOurs
     }
 }
 

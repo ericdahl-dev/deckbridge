@@ -9,6 +9,10 @@ public protocol MIDISend: Sendable {
 /// A port of tools/lc6000-firmware/enter-update-mode.swift. It writes nothing to flash, but the chip stays in update
 /// mode until it is flashed or power-cycled.
 public struct UpdateModeStep: Sendable {
+    /// What the screen says once the step is sent. A power cycle ends update mode: the owner saw it (2026-11-22).
+    public static let sentText = "Sent. The display chip restarts in update mode: give it a few seconds, then back it up. "
+        + "A power cycle ends update mode, and the chip starts its own firmware again."
+
     public enum Outcome: Sendable, Hashable {
         case sent
         case refused(String)

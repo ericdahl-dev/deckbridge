@@ -64,6 +64,8 @@ public enum PatchedImage {
     /// every edit's new bytes are there, the display image's CRC is good, and with the old bytes back it's stock.
     public static func state(of app: [UInt8], chip: Chip, edits: [PatchEdit], known: KnownNumbers) -> PatchState {
         if let version = stockVersion(app, chip: chip, known: known) { return .stock(version) }
+        // One of our own images on top of stock (the drawn display), known by its CRC: already up to date.
+        if chip == .wd, let label = DisplayTrailer.crc(of: app).flatMap({ known.displayOurs[$0] }) { return .alreadyPatched(label) }
         // apply checks the display CRC before it builds on the image, so a damaged one is refused here too.
         let undone = edits.map { PatchEdit(address: $0.address, old: $0.new, new: $0.old) }
         guard let stock = try? apply(undone, chip: chip, to: app),

@@ -73,4 +73,12 @@ struct SysEx7Tests {
         #expect(SysEx7.packets(try kitUpdateModeMessage()) == [[0x3016_0002, 0x0B01_1072], [0x3032_0000, 0x0000_0000]])
         #expect(SysEx7.packets([0xF0, 0x7E, 0x00, 0x06, 0x01, 0xF7]) == [[0x3004_7E00, 0x0601_0000]])
     }
+
+    /// The owner saw a power cycle end the display chip's update mode (2026-11-22): the screen says so, with no fear.
+    @Test("After the step: back it up now, and a power cycle ends update mode")
+    func sentText() {
+        #expect(UpdateModeStep.sentText.contains("A power cycle ends update mode"))
+        #expect(!UpdateModeStep.sentText.contains("isn't known"))
+        #expect(!UpdateModeStep.sentText.contains("way back"))
+    }
 }
