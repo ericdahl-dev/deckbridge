@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// The updater window's size (#761): as big as what it shows, so the owner never resizes it to read a section.
 public enum WindowFit {
@@ -12,5 +13,23 @@ public enum WindowFit {
         let floor = handSet ?? .zero
         return CGSize(width: min(max(content.width, minWidth, floor.width), visible.width),
                       height: min(max(content.height + titleBar, floor.height), visible.height))
+    }
+}
+
+/// The window size the owner last set by hand (#761), kept in the app's defaults so it lasts across launches.
+public struct HandSetSize {
+    private let defaults: UserDefaults
+    private static let key = "WindowFit.handSetSize"
+
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+    /// The size last set by hand; nil when the owner never resized the window.
+    public var size: CGSize? {
+        guard let pair = defaults.array(forKey: Self.key) as? [Double], pair.count == 2 else { return nil }
+        return CGSize(width: pair[0], height: pair[1])
+    }
+
+    public func remember(_ size: CGSize) {
+        defaults.set([Double(size.width), Double(size.height)], forKey: Self.key)
     }
 }
