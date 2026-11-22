@@ -132,11 +132,15 @@ void DeckScreen::build() {
         beats_[i] = box(deck_page_, kLeft + i * (beat_w + kBeatGap), kBeatY, beat_w, kBeatH, kTrack);
     }
 
-    // The phase bar: a track, a center mark, and the marker, hidden while the phase is unknown.
-    lv_obj_t* phase = box(deck_page_, kLeft, kPhaseY, kWidth, kPhaseH, kTrack);
-    box(phase, kWidth / 2 - 1, 0, 2, kPhaseH, kGray);
-    phase_marker_ = box(phase, 0, 0, kMarkerW, kPhaseH, lv_color_white());
-    lv_obj_add_flag(phase_marker_, LV_OBJ_FLAG_HIDDEN);
+    // The phase bar (#721, the jog display's rule, #462): the track, a bar in the deck color from the center off
+    // phase (0 wide, so hidden, until the core says), and the locked tick. The tick is on the page, after the track so
+    // drawn over it, not in it: it reaches kPhaseTickReach past the track above and below, which the track would clip.
+    phase_ = box(deck_page_, kLeft, kPhaseY, kWidth, kPhaseH, kTrack);
+    phase_bar_ = box(phase_, 0, 0, 0, kPhaseH, lv_color_white());
+    lv_obj_add_flag(phase_bar_, LV_OBJ_FLAG_HIDDEN);
+    phase_tick_ = box(deck_page_, kLeft + kWidth / 2 - kPhaseTickW / 2, kPhaseY - kPhaseTickReach, kPhaseTickW,
+                      kPhaseH + 2 * kPhaseTickReach, lv_color_white());
+    lv_obj_add_flag(phase_tick_, LV_OBJ_FLAG_HIDDEN);
 
     // The lamps: lit is the lamp's color with black text.
     const int lamp_w = (kWidth - 4 * kLampGap) / 5;
@@ -171,12 +175,18 @@ void DeckScreen::build() {
     lv_obj_add_flag(logo_, LV_OBJ_FLAG_HIDDEN);
     headline_ = label(waiting_page_, waiting_w, &geist_semibold_36, lv_color_white(), LV_TEXT_ALIGN_CENTER, 2);
     detail_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_CENTER, 3);
+    // The firmware's version and SHA (#695): floating, bottom right, vertically centered in the bottom margin, so the
+    // column keeps its 400 px.
+    build_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_RIGHT, 1);
+    lv_obj_add_flag(build_, LV_OBJ_FLAG_FLOATING);
+    lv_obj_align(build_, LV_ALIGN_BOTTOM_RIGHT, 0, (kMargin + lv_font_get_line_height(&geist_regular_24)) / 2);
 }
 
 void DeckScreen::show_waiting(const deck_core::WaitingView& view, const deck_core::WaitingChanges& changes) {
     // The view is the core's and stays put until the next call: the labels point at its texts.
     if (changes.headline) lv_label_set_text_static(headline_, view.headline);
     if (changes.detail) lv_label_set_text_static(detail_, view.detail);
+    if (changes.build) lv_label_set_text_static(build_, view.build);
     if (changes.logo_small) lv_image_set_src(logo_, view.logo_small ? &deck_logo_small : &deck_logo);
     if (changes.logo) set_hidden(logo_, !view.logo);
     set_hidden(deck_page_, true);
@@ -204,7 +214,11 @@ void DeckScreen::draw(const deck_core::Face& f, const deck_core::Changes& c) {
     for (const auto& t : texts) {
         if (c.has(t.part)) lv_label_set_text_static(t.label, t.text);
     }
-    if (c.has(Part::deck_color)) lv_obj_set_style_text_color(deck_number_, lv_color_hex(f.deck_color), 0);
+    if (c.has(Part::deck_color)) {
+        lv_obj_set_style_text_color(deck_number_, lv_color_hex(f.deck_color), 0);
+        // The phase bar is the deck color, not a color of its own in the face (the beats' come resolved).
+        lv_obj_set_style_bg_color(phase_bar_, lv_color_hex(f.deck_color), 0);
+    }
 
     // Fast: the core tells only whole-pixel moves.
     if (c.has(Part::progress_px)) lv_obj_set_width(progress_fill_, f.progress_px);
@@ -212,11 +226,14 @@ void DeckScreen::draw(const deck_core::Face& f, const deck_core::Changes& c) {
     for (int i = 0; i < 4; ++i) {
         if (c.has(Part::beat_color, i)) lv_obj_set_style_bg_color(beats_[i], lv_color_hex(f.beat_color[i]), 0);
     }
-    if (c.has(Part::phase_px)) {
-        const bool marker = f.phase_px != deck_core::kPhaseHidden;
-        if (marker) lv_obj_set_x(phase_marker_, f.phase_px);
-        set_hidden(phase_marker_, !marker);
+    if (c.has(Part::phase_track_color)) lv_obj_set_style_bg_color(phase_, lv_color_hex(f.phase_track_color), 0);
+    if (c.has(Part::phase_bar_x)) lv_obj_set_x(phase_bar_, f.phase_bar_x);
+    if (c.has(Part::phase_bar_w)) {
+        if (f.phase_bar_w > 0) lv_obj_set_width(phase_bar_, f.phase_bar_w);
+        set_hidden(phase_bar_, f.phase_bar_w <= 0);
     }
+    if (c.has(Part::phase_tick)) set_hidden(phase_tick_, f.phase_tick == 0);
+    if (c.has(Part::phase_tick_color)) lv_obj_set_style_bg_color(phase_tick_, lv_color_hex(f.phase_tick_color), 0);
     if (c.has(Part::level_px)) lv_obj_set_height(level_fill_, f.level_px);
 
     Lamp* lamps[] = {&play_, &cue_, &sync_, &master_, &loop_};

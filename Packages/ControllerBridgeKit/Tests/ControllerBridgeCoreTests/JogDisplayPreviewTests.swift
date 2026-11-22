@@ -27,22 +27,22 @@ struct JogDisplayPreviewTests {
         #expect(!driver.isConnected, "no hello without a port")
     }
 
-    @Test("With no port, the marker and play light are reported on change")
-    func markerAndLight() {
+    @Test("With no port, the needle and play light are reported on change")
+    func needleAndLight() {
         let (driver, take) = Self.previewing()
-        driver.marker(4096)
-        driver.marker(4096)
+        driver.needle(4096)
+        driver.needle(4096)
         driver.playLight(true)
         driver.playLight(true)
-        #expect(take() == [.marker(pitchBend: 4096), .playLight(true)])
+        #expect(take() == [.needle(pitchBend: 4096), .playLight(true)])
     }
 }
 
 /// The preview at the Coordinator seam (#221): with Settings' switch off, nothing reaches the unit, but the simulator
-/// still sees the deck in front, its marker while playing, and the play light.
+/// still sees the deck in front, its needle while playing, and the play light.
 @Suite("Jog display preview at the Coordinator")
 struct JogDisplayPreviewCoordinatorTests {
-    @Test("Switch off: zero bytes to either port, and the simulator still gets deck 2's content, its marker and the light")
+    @Test("Switch off: zero bytes to either port, and the simulator still gets deck 2's content, its needle and the light")
     func switchOffStillPreviews() throws {
         let rig = try Rig()
         let port = JogDisplayCoordinatorTests.Port()
@@ -64,7 +64,7 @@ struct JogDisplayPreviewCoordinatorTests {
         #expect(port.wd == [])
         let shownDecks = events.compactMap { if case .uploadStarted(_, let content, _) = $0 { return content.deck }; return nil }
         #expect(shownDecks.last == 2)
-        #expect(events.contains { if case .marker = $0 { return true }; return false })
+        #expect(events.contains { if case .needle = $0 { return true }; return false })
         #expect(events.contains(.playLight(true)))
         #expect(!events.contains(.connected))
     }

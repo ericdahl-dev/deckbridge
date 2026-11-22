@@ -30,11 +30,11 @@ struct JogSimulatorState: Sendable {
                 sim.apply(.uploadStarted(slot: Int(slot), deck: content.deck, bytes: bytes, at: now))
             case .shown(let slot): sim.apply(.shown(slot: Int(slot)))
             case .failed: sim.apply(.failed)
-            // The unit's needle is the front deck's, which deckMarker already brings; the simulator draws every deck's.
-            case .marker: break
-            case .deckMarker(let deck, let pitchBend):
+            // The unit's needle is the front deck's, which deckNeedle already brings; the simulator draws every deck's.
+            case .needle: break
+            case .deckNeedle(let deck, let pitchBend):
                 var limiter = needleLimiters[deck] ?? RedrawLimiter<Int>(interval: 1.0 / 30)
-                if let value = limiter.offer(pitchBend, at: now.timeIntervalSinceReferenceDate) { sim.apply(.marker(deck: deck, pitchBend: value)) }
+                if let value = limiter.offer(pitchBend, at: now.timeIntervalSinceReferenceDate) { sim.apply(.needle(deck: deck, pitchBend: value)) }
                 needleLimiters[deck] = limiter
             // The master clock's beat: the lit segment on every deck (#165).
             case .masterBeat(let beat): sim.apply(.masterBeat(beat))
@@ -52,7 +52,7 @@ struct JogSimulatorState: Sendable {
     mutating func tick(_ now: Date) {
         if drawn.drawing { drawnClock = (now.timeIntervalSinceReferenceDate * 4).rounded(.down) / 4 }
         for deck in needleLimiters.keys.sorted() {
-            if let value = needleLimiters[deck]?.tick(at: now.timeIntervalSinceReferenceDate) { sim.apply(.marker(deck: deck, pitchBend: value)) }
+            if let value = needleLimiters[deck]?.tick(at: now.timeIntervalSinceReferenceDate) { sim.apply(.needle(deck: deck, pitchBend: value)) }
         }
     }
 }
@@ -149,7 +149,7 @@ struct JogDisplayPane: View {
         .card()
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
         .background {
-            // The display timer: lets a held-back marker through, at most 30 times a second.
+            // The display timer: lets a held-back needle through, at most 30 times a second.
             if animates {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                     Color.clear.onChange(of: context.date) { _, now in log.tick(now) }
@@ -167,7 +167,7 @@ private struct JogDeckPreview: View, Equatable {
     let onUnit: Bool
     let card: String
     let litBeat: Int?
-    let marker: Double
+    let needle: Double
     let playing: Bool
     /// The drawn layout's inputs while the jog display would draw (#465); nil for today's image preview.
     let drawn: DrawnPreviewImage?
@@ -179,7 +179,7 @@ private struct JogDeckPreview: View, Equatable {
         onUnit = sim.onUnit(deck: deck)
         card = sim.card(deck: deck)
         litBeat = sim.litBeat(deck: deck)
-        marker = sim.markerTurns(deck: deck)
+        needle = sim.needleTurns(deck: deck)
         playing = sim.playing(deck: deck)
     }
 
@@ -195,7 +195,7 @@ private struct JogDeckPreview: View, Equatable {
                     .frame(width: 153, height: 153)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Theme.hairline, lineWidth: 1))
-            } else if let image = Self.image(JogDisplayRenderer.simulatorImage(content, litBeat: litBeat, marker: marker)) {
+            } else if let image = Self.image(JogDisplayRenderer.simulatorImage(content, litBeat: litBeat, needle: needle)) {
                 Image(decorative: image, scale: 1)
                     .interpolation(.high)
                     .resizable()

@@ -7,6 +7,13 @@ public struct PanelFirmware: Sendable, Hashable {
     public let version: FirmwareVersion
     public let sha: String
     public let image: URL
+    public var bootParts: BootParts? = nil
+}
+
+/// The panel build's bootloader (written at 0x0) and partition table (at 0x8000).
+public struct BootParts: Sendable, Hashable {
+    public let bootloader: URL
+    public let partitions: URL
 }
 
 public enum CatalogError: Error, Equatable {
@@ -21,20 +28,31 @@ public enum CatalogError: Error, Equatable {
     case missingBlock(String)
     /// A block entry that isn't shaped like block A or block B as this repo builds them.
     case notOurBlock(String)
+    /// A known number (#692) that isn't a wd CRC ("0x" and 8 hex digits) or a tp SHA-256 (64 hex digits).
+    case badNumber(String)
+    /// A panel entry (named by its version) with a bootloader and no partition table, or the other way round.
+    case missingBootPart(String)
+    /// Not an ESP32 image for 16 MB of flash that fits below the partition table at 0x8000.
+    case notABootloader(String)
+    /// Not a 3,072-byte partition table whose MD5 row matches its rows, as gen_esp32part.py writes it.
+    case notAPartitionTable(String)
 }
 
 /// The firmware the app ships with, read from a folder holding `catalog.json` and the files it names. No network.
 public struct Catalog: Sendable {
     private let panel: [PanelFirmware]
     private let lc6000: [LC6000PatchSet]
+    public let knownNumbers: KnownNumbers
 
     public init(directory: URL) throws {
         let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: directory.appending(path: "catalog.json")))
-        let names = file.panel.map(\.image) + file.lc6000.flatMap { $0.entries.flatMap { [$0.file] + [$0.record].compactMap { $0 } } }
+        let names = file.panel.flatMap { [$0.image] + [$0.bootloader, $0.partitions].compactMap { $0 } } + file.lc6000.flatMap { $0.entries.flatMap { [$0.file] + [$0.record].compactMap { $0 } } }
         if let outside = names.first(where: { !Self.staysInside($0) }) { throw CatalogError.outsideFolder(outside) }
         panel = try file.panel.map { entry in
             guard let version = FirmwareVersion(entry.version) else { throw CatalogError.badVersion(entry.version) }
-            return PanelFirmware(version: version, sha: entry.sha, image: directory.appending(path: entry.image))
+            var firmware = PanelFirmware(version: version, sha: entry.sha, image: directory.appending(path: entry.image))
+            firmware.bootParts = try Self.bootParts(of: entry, in: directory)
+            return firmware
         }
         lc6000 = try file.lc6000.map { set in
             try LC6000PatchSet(
@@ -53,10 +71,44 @@ public struct Catalog: Sendable {
                 },
                 blocks: Self.ownBlocks(in: set.entries, directory: directory))
         }
+        knownNumbers = try Self.numbers(file.lc6000)
         let named = Set(["catalog.json"] + names)
         if let stray = try Self.files(in: directory).first(where: { !named.contains($0) }) {
             throw CatalogError.unnamedFile(stray)
         }
+    }
+
+    /// A carried panel image's bootloader and partition table: both or neither, each shaped as `pio run` builds it.
+    /// A history entry (its image not carried) is left alone.
+    private static func bootParts(of entry: File.Panel, in directory: URL) throws -> BootParts? {
+        guard FileManager.default.fileExists(atPath: directory.appending(path: entry.image).path(percentEncoded: false)) else {
+            return nil
+        }
+        switch (entry.bootloader, entry.partitions) {
+        case (nil, nil): return nil
+        case (let bootloader?, let partitions?):
+            let loader = directory.appending(path: bootloader), table = directory.appending(path: partitions)
+            let loaderBytes = [UInt8](try Data(contentsOf: loader))
+            // Its header's flash size (byte 3, high nibble; esptool's FLASH_SIZES) must be 16 MB, the size the panel's
+            // partition table needs, or the panel won't boot.
+            guard loaderBytes.count >= 4, loaderBytes.count <= 0x8000, loaderBytes[0] == 0xE9, loaderBytes[3] >> 4 == 0x4 else {
+                throw CatalogError.notABootloader(bootloader)
+            }
+            guard isPartitionTable([UInt8](try Data(contentsOf: table))) else { throw CatalogError.notAPartitionTable(partitions) }
+            return BootParts(bootloader: loader, partitions: table)
+        default: throw CatalogError.missingBootPart(entry.version)
+        }
+    }
+
+    /// gen_esp32part.py's shape: 32-byte rows starting AA 50, then a row EB EB, FF × 14 and the MD5 of the rows before
+    /// it, then FF, 3,072 bytes in all.
+    static func isPartitionTable(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count == 3072 else { return false }
+        var at = 0
+        while at + 32 <= bytes.count, bytes[at] == 0xAA, bytes[at + 1] == 0x50 { at += 32 }
+        guard at > 0, at + 32 <= bytes.count, bytes[at] == 0xEB, bytes[at + 1] == 0xEB else { return false }
+        let md5 = Array(Insecure.MD5.hash(data: Data(bytes[0..<at])))
+        return Array(bytes[(at + 16)..<(at + 32)]) == md5 && bytes[(at + 32)...].allSatisfy { $0 == 0xFF }
     }
 
     /// Block A and block B, when the set carries them, with the commit their build record names. Both or neither,
@@ -111,6 +163,25 @@ public struct Catalog: Sendable {
         }
     }
 
+    /// The numbers the sets' stock firmware is known by (#692). A number that isn't one fails the load.
+    private static func numbers(_ sets: [File.Set]) throws -> KnownNumbers {
+        var display: [UInt32: String] = [:], topPanel: [String: String] = [:]
+        for set in sets {
+            guard let known = set.known else { continue }
+            if let crc = known.wd_crc {
+                guard crc.wholeMatch(of: /0x[0-9A-F]{8}/) != nil, let value = UInt32(crc.dropFirst(2), radix: 16) else {
+                    throw CatalogError.badNumber(crc)
+                }
+                display[value] = set.wd
+            }
+            if let hash = known.tp_sha256 {
+                guard hash.wholeMatch(of: /[0-9a-f]{64}/) != nil else { throw CatalogError.badNumber(hash) }
+                topPanel[hash] = set.tp
+            }
+        }
+        return KnownNumbers(display: display, topPanel: topPanel)
+    }
+
     /// The SHA of every panel build the catalog lists, carried or not.
     public var listedPanelSHAs: [String] { panel.map(\.sha) }
 
@@ -125,8 +196,17 @@ public struct Catalog: Sendable {
     }
 
     private struct File: Decodable {
-        struct Panel: Decodable { let version: String; let sha: String; let image: String }
-        struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry] }
+        struct Panel: Decodable {
+            let version: String
+            let sha: String
+            let image: String
+            /// The panel build's bootloader and partition table (#687), for making a blank board a deck panel.
+            var bootloader: String? = nil
+            var partitions: String? = nil
+        }
+        struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry]; var known: Known? = nil }
+        /// The numbers this set's stock firmware is known by (#692): "0x" and 8 hex digits; 64 hex digits.
+        struct Known: Decodable { let wd_crc: String?; let tp_sha256: String? }
         struct Entry: Decodable {
             let kind: LC6000Entry.Kind
             let chip: Chip
@@ -138,6 +218,14 @@ public struct Catalog: Sendable {
         let panel: [Panel]
         let lc6000: [Set]
     }
+}
+
+/// Numbers only, never firmware: the wd image's trailer CRC and the tp app area's SHA-256 (hex), each to its version.
+public struct KnownNumbers: Sendable, Hashable {
+    public let display: [UInt32: String]
+    public let topPanel: [String: String]
+    /// Nothing known: every version refused for updates, backups still allowed.
+    public static let none = KnownNumbers(display: [:], topPanel: [:])
 }
 
 /// What the app offers a deck panel.

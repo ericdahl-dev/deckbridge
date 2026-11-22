@@ -123,11 +123,11 @@ struct JogDisplayCoordinatorTests {
     }
 }
 
-/// The marker and the play light on the WD port (#165), at the Coordinator seam. Pitch bend on ch1 is E0 lsb msb;
-/// the play light is note 1 on ch1. The marker is the deck's own needle (the user's pick), from its BarRamp and BPM.
+/// The needle and the play light on the WD port (#165), at the Coordinator seam. Pitch bend on ch1 is E0 lsb msb;
+/// the play light is note 1 on ch1. The needle is the deck's own needle (the user's pick), from its BarRamp and BPM.
 /// Worked by hand at 120 BPM (a 2 s bar): a quarter-second after BarRamp 0 is 1/8 turn, 2048 (E0 00 10).
-@Suite("Jog marker at the Coordinator")
-struct JogMarkerCoordinatorTests {
+@Suite("Jog needle at the Coordinator")
+struct JogNeedleCoordinatorTests {
     static func started() throws -> (Rig, JogDisplayDriverTests.FakePort) {
         let rig = try Rig()
         let (port, _) = JogDisplayCoordinatorTests.attach(rig)
@@ -425,7 +425,7 @@ struct JogNeedleEventTests {
 
     static func needles(_ events: Events) -> [Int: Int] {
         var out: [Int: Int] = [:]
-        for case let .deckMarker(deck, pitchBend) in events.list { out[deck] = pitchBend }
+        for case let .deckNeedle(deck, pitchBend) in events.list { out[deck] = pitchBend }
         return out
     }
 
@@ -433,13 +433,13 @@ struct JogNeedleEventTests {
     func perDeck() throws {
         let (rig, port, events) = try Self.started()
         for (deck, ramp) in [(1, 0.25), (3, 0.5)] {
-            JogMarkerCoordinatorTests.feed(rig, "Deck/\(deck)/Playing", .int(1))
-            JogMarkerCoordinatorTests.feed(rig, "Deck/\(deck)/BPM", .float(120))
-            JogMarkerCoordinatorTests.feed(rig, "Deck/\(deck)/BarRamp", .float(Float(ramp)))
+            JogNeedleCoordinatorTests.feed(rig, "Deck/\(deck)/Playing", .int(1))
+            JogNeedleCoordinatorTests.feed(rig, "Deck/\(deck)/BPM", .float(120))
+            JogNeedleCoordinatorTests.feed(rig, "Deck/\(deck)/BarRamp", .float(Float(ramp)))
         }
-        JogMarkerCoordinatorTests.tick(rig, at: 0)
+        JogNeedleCoordinatorTests.tick(rig, at: 0)
         #expect(Self.needles(events) == [1: 4096, 3: 8192])
-        #expect(JogMarkerCoordinatorTests.bends(port) == [[0xE0, 0x00, 0x20]])
+        #expect(JogNeedleCoordinatorTests.bends(port) == [[0xE0, 0x00, 0x20]])
     }
 
     @Test("Settings' Apply (setControllers) leaves the display on: a goodbye while the entries change, then hello again")
@@ -451,13 +451,13 @@ struct JogNeedleEventTests {
     @Test("A paused deck's needle stays where it was")
     func paused() throws {
         let (rig, _, events) = try Self.started()
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(1))
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/BPM", .float(120))
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/BarRamp", .float(0.5))
-        JogMarkerCoordinatorTests.tick(rig, at: 0)
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(0))
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/Playing", .int(1))
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/BPM", .float(120))
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/BarRamp", .float(0.5))
+        JogNeedleCoordinatorTests.tick(rig, at: 0)
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/Playing", .int(0))
         events.list.removeAll()
-        JogMarkerCoordinatorTests.tick(rig, at: 0.5)
+        JogNeedleCoordinatorTests.tick(rig, at: 0.5)
         #expect(Self.needles(events) == [:])
     }
 
@@ -465,11 +465,11 @@ struct JogNeedleEventTests {
     func deckPlaying() throws {
         let (rig, _, events) = try Self.started()
         events.list.removeAll()
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(1))
-        JogMarkerCoordinatorTests.feed(rig, "Deck/1/Track", .string("Daybreak"))
-        for t in stride(from: 0.0, through: 2.0, by: 0.25) { JogMarkerCoordinatorTests.tick(rig, at: t) }
-        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(0))
-        for t in stride(from: 2.25, through: 4.0, by: 0.25) { JogMarkerCoordinatorTests.tick(rig, at: t) }
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/Playing", .int(1))
+        JogNeedleCoordinatorTests.feed(rig, "Deck/1/Track", .string("Daybreak"))
+        for t in stride(from: 0.0, through: 2.0, by: 0.25) { JogNeedleCoordinatorTests.tick(rig, at: t) }
+        JogNeedleCoordinatorTests.feed(rig, "Deck/3/Playing", .int(0))
+        for t in stride(from: 2.25, through: 4.0, by: 0.25) { JogNeedleCoordinatorTests.tick(rig, at: t) }
         let plays = events.list.compactMap { event -> String? in
             if case .deckPlaying(let deck, let on) = event { return "\(deck) \(on)" }
             return nil
@@ -481,7 +481,7 @@ struct JogNeedleEventTests {
     @Test("Header/Clock is the master beat for every deck's ring, as an event only: nothing is sent for it")
     func masterBeat() throws {
         let (rig, port, events) = try Self.started()
-        JogMarkerCoordinatorTests.feed(rig, "Header/Clock", .int(3))
+        JogNeedleCoordinatorTests.feed(rig, "Header/Clock", .int(3))
         #expect(events.list.contains(.masterBeat(3)))
         #expect(port.wd == [])
     }

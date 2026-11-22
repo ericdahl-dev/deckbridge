@@ -18,6 +18,7 @@
 #include <atomic>
 
 #include "board_pins.h"
+#include "build_info.h"
 #include "display_driver.h"
 #include "feed_flags.h"
 #include "frame_clock.h"
@@ -39,8 +40,28 @@
 #ifndef DECK_PANEL_SHA
 #define DECK_PANEL_SHA "unknown"
 #endif
+#ifndef DECK_PANEL_VERSION
+#define DECK_PANEL_VERSION "0"
+#endif
+#ifndef DECK_PANEL_RELEASE
+#define DECK_PANEL_RELEASE 0
+#endif
 
 namespace {
+
+// The firmware the updater reads (#695): on the boot line, on the waiting screen, and on request over serial.
+const build_info::Build kBuild{DECK_PANEL_VERSION, DECK_PANEL_SHA, DECK_PANEL_RELEASE != 0};
+build_info::Question g_question;
+
+// The updater asks without a reboot, so it needn't wait for a boot line; opening the port doesn't reset it (#667).
+void answer_version_questions() {
+    while (Serial.available() > 0) {
+        if (!g_question.feed(static_cast<char>(Serial.read()))) continue;
+        char line[96];
+        build_info::answer_line(kBuild, line, sizeof line);
+        Serial.println(line);
+    }
+}
 
 // Serial's TX ring buffer: a print lands in it and the UART drains it in the background (115200 baud, about 11.5 B a
 // millisecond), so no print waits for the wire unless the buffer is full. IDF's TX ring doesn't split an item and
@@ -177,6 +198,9 @@ void build_screen() {
     // The first frame says what's true before Wi-Fi starts: the core takes the network as up until told.
     g_core.set_network(wifi_link::state(), wifi_link::ip());
     g_core.set_setup(wifi_link::setup_name(), wifi_link::setup_password());
+    static char build_label[48];  // the core copies it; static keeps it off the setup stack anyway
+    build_info::label(kBuild, build_label, sizeof build_label);
+    g_core.set_build(build_label);
     g_core.render(g_screen, millis());
 #endif
 }
@@ -305,6 +329,7 @@ class PanelBoard : public frame_clock::Board {
         touch_poll();
         MARK(lvgl);
         lv_timer_handler();
+        answer_version_questions();
 #else
         const uint32_t now = millis();
         // Every frame: these can't wait, and the first can't be bounded (setup's web server, a join, a scan).
@@ -345,6 +370,8 @@ class PanelBoard : public frame_clock::Board {
                           static_cast<unsigned long>(too_big), static_cast<unsigned long>(dropped));
         }
         log_health(now);
+        // The updater's version question (#695), answered with time left: a question waits in Serial's buffer.
+        answer_version_questions();
 #endif
     }
 
@@ -361,7 +388,9 @@ void setup() {
     const bool tx_buffered = Serial.setTxBufferSize(kSerialTxBytes) == kSerialTxBytes;
     Serial.begin(115200);
     if (!tx_buffered) Serial.println("deck panel: no serial TX buffer; prints may hold a frame");
-    Serial.printf("deck panel: boot, build %s\n", DECK_PANEL_SHA);
+    char boot[96];
+    build_info::boot_line(kBuild, boot, sizeof boot);
+    Serial.println(boot);
 #if !FEED_RX_TASK || FEED_STAMP_AT_READ || FEED_RX_DELAY_TICKS != 0 || FEED_RX_WAIT_MS != 5
     // Only off the defaults (feed_flags.h), so a run's log says which build it was.
     Serial.printf("deck panel: feed flags FEED_RX_TASK=%d FEED_STAMP_AT_READ=%d FEED_RX_WAIT_MS=%d "

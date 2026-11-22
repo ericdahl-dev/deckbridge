@@ -52,10 +52,6 @@ std::string format(const Window& w) {
     return line;
 }
 
-int phase(uint32_t since_latch_us, uint32_t period_us) {
-    if (period_us == 0 || since_latch_us >= period_us) return kPhases - 1;
-    return static_cast<int>(static_cast<uint64_t>(since_latch_us) * kPhases / period_us);
-}
 
 std::string format_copy(const CopySpread& c) {
     static const char* const kNames[kMarks] = {"wait", "read", "render", "refresh", "wifi",

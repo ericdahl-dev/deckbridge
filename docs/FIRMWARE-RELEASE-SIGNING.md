@@ -35,8 +35,31 @@ swift run firmware-release new-key --id backup --out /Volumes/<USB stick>/backup
 
 ## Each release: one command
 
-A **draft** GitHub release must hold `catalog.json` and every file it names, with flat names, and nothing else. CI
-will build that draft on a tag; that job is a follow-up to #689 and doesn't exist yet. Then, on your Mac:
+1. Bump `tools/deck-panel/VERSION` in the release pull request and merge it.
+2. Tag that commit `deck-panel-v<VERSION>` and push the tag. The Deck panel release workflow
+   (`.github/workflows/deck-panel-release.yml`, #703) builds the panel image and leaves it, with the catalog, in an
+   **unsigned draft** release. The draft holds `catalog.json` and the files it names, with flat names, and nothing
+   else. It refuses a tag that doesn't match `VERSION`, and a dirty build. It uses no key and no secrets.
+
+   The same draft also carries:
+   - the panel build's bootloader and partition table, so the app can make a blank board a deck panel (#687);
+   - the drawn jog display's own code, `block-a.bin` and `block-b.bin`, with their `build.json` (#707).
+
+   The workflow builds the blocks from this commit's source with Ubuntu's Arm toolchain. It refuses a dirty, unknown or
+   unproven build, then builds them again from scratch and checks the draft's copies match byte for byte. Nothing of
+   Denon's is built, attached or downloaded.
+
+   **A block change ships only with a deck panel release.** The app takes the newest release only when its panel
+   version is newer, so to ship new blocks, bump `tools/deck-panel/VERSION` too. One release stream keeps the app's
+   "latest" release honest.
+
+   **Every published release carries the current `manifest.json` and `manifest.sig`.** The updater reads GitHub's
+   newest published release (`/releases/latest/download/manifest.json`), whatever kind it is. A release without a
+   manifest published after a firmware release hides that firmware: the updater says no signed firmware release is
+   published. So don't publish an app-only GitHub release. If one is ever needed, attach the current firmware
+   release's files to it, or create it with `gh release create --latest=false` so the firmware release stays
+   "latest". Today only this workflow creates releases (`release.yml` ships the app through TestFlight, not GitHub).
+3. On your Mac:
 
 ```sh
 Packages/FirmwareUpdaterKit/scripts/sign_release.sh <tag> --key ~/.deckbridge-keys/primary.key --lowest <version>
@@ -44,9 +67,14 @@ Packages/FirmwareUpdaterKit/scripts/sign_release.sh <tag> --key ~/.deckbridge-ke
 
 - `--lowest` is the lowest panel version a panel may go back to over Wi-Fi. Raise it only for a security fix.
 - The script checks the release is still a draft, downloads it, and shows the manifest (each file's device, version,
-  size and SHA-256). It asks for your passphrase only after that. Then it uploads `manifest.json` and
+  size and SHA-256: `deck-panel`, `deck-panel-bootloader`, `deck-panel-partitions`, `lc6000-wd` and `lc6000-tp`,
+  and `lc6000-blocks-record` for `build.json`). It asks for your passphrase only after that. Then it uploads `manifest.json` and
   `manifest.sig` and publishes the release.
-- If anything fails, the release stays a draft.
+- If anything fails before publishing, the release stays a draft.
+- After publishing, it opens a small pull request that records the build in
+  `Packages/FirmwareUpdaterKit/Sources/FirmwareCatalog/Catalog/catalog.json`. **Merge it.** The next release must
+  still list every build shipped, or an app carrying this one refuses it. If the pull request isn't made, add the
+  `record:` line the draft job printed in its log by hand.
 
 ## A lost key
 

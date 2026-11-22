@@ -55,6 +55,8 @@ jobs:
           # The domain docs (GLOSSARY.md, docs/adr): every term still used, every ADR numbered, dated and linked.
           python3 -I scripts/test_check_domain_docs.py
           python3 -I scripts/check_domain_docs.py
+          # The firmware updater's launch smoke check (#734), against a stand-in app: the real run is in the app job.
+          python3 -I scripts/test_updater_smoke.py
       - name: LC6000 firmware tool tests
         # tools/lc6000-firmware (#430): the tests build synthetic DfuSe files, so no vendor data is needed.
         run: python3 -I -m unittest discover tools/lc6000-firmware
@@ -93,6 +95,7 @@ jobs:
           python3 -I tools/deck-panel/test_secret_logs.py
           python3 -I tools/deck-panel/check_secret_logs.py
           python3 -I tools/deck-panel/test_deck_logo.py
+          python3 -I tools/deck-panel/test_git_sha.py
       # The panel keeps its Wi-Fi in NVS, set from a phone (#622): nothing to build in.
       - name: Deck panel firmware build
         run: |
@@ -175,6 +178,8 @@ jobs:
           swift test
           python3 -I scripts/test_add_panel_image.py
           python3 -I scripts/test_sign_release.py
+          python3 -I scripts/test_release_draft.py
+          python3 -I scripts/test_record_shipped_build.py
           python3 -I scripts/test_stage_lc6000_blocks.py
           python3 -I scripts/test_check_staged_blocks.py
       # The release workflow (#28) only runs on tags, so its scripts are tested here on every pull request.
@@ -184,6 +189,7 @@ jobs:
           scripts/test-tag-external.sh
           python3 -I scripts/test_ci_profile.py
           python3 -I scripts/test_testflight_distribute.py
+          python3 -I scripts/test_check_app_icon.py
 
   app:
     name: App build (Release, ad-hoc)
@@ -211,6 +217,22 @@ jobs:
           for key in app-sandbox network.client network.server; do
             [[ "$ents" == *"com.apple.security.$key"* ]] || { echo "missing entitlement $key"; exit 1; }
           done
+      # The firmware updater (#685): its own app, notarized from the site, so hardened runtime and no sandbox.
+      - name: Firmware updater build (Release, ad-hoc)
+        working-directory: Apps/FirmwareUpdater
+        run: |
+          xcodegen generate
+          xcodebuild -project FirmwareUpdater.xcodeproj -scheme FirmwareUpdater -configuration Release \
+            -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
+          app=build/Build/Products/Release/FirmwareUpdater.app
+          info=$(codesign -dv "$app" 2>&1); echo "$info"
+          [[ "$info" == *"flags="*"runtime"* ]] || { echo "hardened runtime missing"; exit 1; }
+          if codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q app-sandbox; then echo "sandboxed"; exit 1; fi
+          # Its own icon (#733): every size in the set, and the built app names and carries it.
+          python3 -I ../../scripts/check_app_icon.py --iconset Assets.xcassets/AppIcon.appiconset --app "$app"
+      # It starts with nothing plugged in, logs its first look ("not found" for both sections) and quits (#734).
+      - name: Firmware updater launch smoke
+        run: UPDATER_SMOKE_TIMEOUT=60 scripts/updater_smoke.sh Apps/FirmwareUpdater/build/Build/Products/Release/FirmwareUpdater.app
       # A gate since #46: it passed on the 10 main runs from 99545f9 to 23a8788 (virtual MIDI and loopback UDP work on
       # hosted macos-26 runners). A failure fails this job, which is a required check.
       - name: Smoke

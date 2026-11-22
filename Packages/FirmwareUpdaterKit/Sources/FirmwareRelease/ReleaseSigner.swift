@@ -19,7 +19,9 @@ public struct SigningKey: Sendable {
 /// Writes a release's manifest from the folder CI's draft holds (catalog.json and the files it names).
 public enum ReleaseSigner {
     /// The manifest's bytes, to sign as they are: the catalog, then each file present with its device, version, size and
-    /// SHA-256. A panel build listed without its image is history and gets no file entry.
+    /// SHA-256. A panel build listed without its image is history and gets no file entry. A panel build's bootloader
+    /// and partition table are signed under "deck-panel-bootloader" and "deck-panel-partitions"; the drawn display's
+    /// blocks under their chip, and their build record once, under "lc6000-blocks-record".
     public static func manifest(for folder: URL, keyID: String, lowestAllowedPanel: FirmwareVersion) throws -> Data {
         _ = try Catalog(directory: folder)
         let catalog = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appending(path: "catalog.json"))) as? [String: Any] ?? [:]
@@ -31,13 +33,23 @@ public enum ReleaseSigner {
             files.append(["name": name, "device": device, "version": version, "size": data.count, "sha256": sha256Hex(data)])
         }
         for panel in catalog["panel"] as? [[String: Any]] ?? [] {
-            try add(panel["image"] as? String ?? "", device: "deck-panel", version: panel["version"] as? String ?? "")
+            let version = panel["version"] as? String ?? ""
+            try add(panel["image"] as? String ?? "", device: "deck-panel", version: version)
+            // The build's bootloader and partition table (#687), under devices of their own: the panel's reader
+            // (#690) takes exactly one "deck-panel" image and skips the rest.
+            if let loader = panel["bootloader"] as? String { try add(loader, device: "deck-panel-bootloader", version: version) }
+            if let table = panel["partitions"] as? String { try add(table, device: "deck-panel-partitions", version: version) }
         }
         for set in catalog["lc6000"] as? [[String: Any]] ?? [] {
+            var records: [String] = []
             for entry in set["entries"] as? [[String: Any]] ?? [] {
                 let chip = entry["chip"] as? String ?? ""
                 try add(entry["file"] as? String ?? "", device: "lc6000-\(chip)", version: set[chip] as? String ?? "")
+                if let record = entry["record"] as? String, !records.contains(record) { records.append(record) }
             }
+            // The blocks' build record (#696, #707), once for blocks A and B: the catalog reads it to tell they're from
+            // one build, so a fetched release needs it signed and served too.
+            for record in records { try add(record, device: "lc6000-blocks-record", version: set["wd"] as? String ?? "") }
         }
         let manifest: [String: Any] = [
             "format": 1,
