@@ -447,13 +447,10 @@ void setup() {
     const bool rx_buffered = Serial.setRxBufferSize(kSerialRxBytes) == kSerialRxBytes;
     // The cable feed's speed (#667). The ESP32's ROM prints its own boot text at 115200 before this: expected.
     const size_t internal_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    // The driver mallocs its RX ring with no caps, and anything of CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL (4 KB) or more
-    // goes to PSRAM: the owner's panel showed it there (1052 B internal taken, #754). The drain reads the ring in the
-    // gap before the draw, where a PSRAM read can evict the bounce copy's preload, so begin() alone runs with the limit
-    // raised, and it's set back at once.
-    heap_caps_malloc_extmem_enable(2 * kSerialRxBytes);
+    // IDF's UART driver allocates its rings with heap_caps_malloc(MALLOC_CAP_DEFAULT), which searches PSRAM first, so
+    // the 4 KB RX ring is in PSRAM (the owner's panel: 1052 B internal taken, #754). The malloc threshold doesn't reach
+    // it; CONFIG_UART_ISR_IN_IRAM would (custom_sdkconfig), if the perf build's copy margin shows the cable hurts.
     Serial.begin(921600);
-    heap_caps_malloc_extmem_enable(CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL);
     const size_t internal_after = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     if (!tx_buffered) Serial.println("deck panel: no serial TX buffer; prints may hold a frame");
     if (!rx_buffered) Serial.println("deck panel: no serial RX buffer; the cable feed may drop frames");
