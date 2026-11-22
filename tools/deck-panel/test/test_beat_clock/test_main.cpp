@@ -210,6 +210,15 @@ void test_a_clock_bpm_after_a_stop_doesnt_restart_it() {
     TEST_ASSERT_EQUAL(4, clock.beat_at(6000));
 }
 
+// #718: a box lights `lead` ms before its beat is due, so it lands with the LC6000 instead of the path's delay behind.
+void test_a_lead_lights_the_next_beat_that_much_early() {
+    BeatClock clock(50);
+    clock.edge(1, 1000);
+    clock.edge(2, 1469);
+    TEST_ASSERT_EQUAL(2, clock.beat_at(1887));
+    TEST_ASSERT_EQUAL(3, clock.beat_at(1888));  // due at 1938, less 50
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -230,5 +239,6 @@ int main(int, char**) {
     RUN_TEST(test_clock_bpm_0_leaves_the_beat_length_to_the_edges);
     RUN_TEST(test_the_clock_bpm_just_after_the_first_edge_times_it);
     RUN_TEST(test_a_clock_bpm_after_a_stop_doesnt_restart_it);
+    RUN_TEST(test_a_lead_lights_the_next_beat_that_much_early);
     return UNITY_END();
 }

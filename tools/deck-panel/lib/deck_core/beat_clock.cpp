@@ -74,7 +74,7 @@ void BeatClock::snap(int beat, uint32_t at_ms) {
 
 int BeatClock::beat_at(uint32_t now_ms) const {
     if (beat_ == 0 || period_ms_ == 0) return beat_;
-    const int32_t since = static_cast<int32_t>(now_ms - edge_ms_);
+    const int32_t since = static_cast<int32_t>(now_ms + lead_ms_ - edge_ms_);
     if (since <= 0) return beat_;
     uint32_t ahead = static_cast<uint32_t>(static_cast<float>(since) / period_ms_);
     if (ahead > static_cast<uint32_t>(kPredictBeats)) ahead = kPredictBeats;
