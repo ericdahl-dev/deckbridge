@@ -36,6 +36,7 @@ struct Face {
     int32_t phase_bar_x = 0;
     int32_t phase_bar_w = 0;
     int32_t phase_tick = 0;
+    uint32_t phase_tick_color = palette::kWhite;  ///< dark on a light deck, so it shows on the locked bar (#721)
     int32_t level_px = 0;  ///< the meter's fill from the bottom, 0 to layout::kMeterH
     uint32_t beat_color[4] = {palette::kTrack, palette::kTrack, palette::kTrack, palette::kTrack};  ///< each block
     /// Play, cue, sync, master, loop: each lamp's box and text.
@@ -56,7 +57,7 @@ struct Face {
 /// from this list. A new field goes in Face and here; one left out of here fails to compile.
 #define DECK_FACE_FIELDS(ONE, MANY)                                                                                  \
     ONE(deck_color) ONE(progress_px) ONE(progress_color) ONE(phase_track_color) ONE(phase_bar_x) ONE(phase_bar_w)   \
-    ONE(phase_tick) ONE(level_px) MANY(beat_color, 4) MANY(lamp_color, kLamps) MANY(lamp_text_color, kLamps)        \
+    ONE(phase_tick) ONE(phase_tick_color) ONE(level_px) MANY(beat_color, 4) MANY(lamp_color, kLamps) MANY(lamp_text_color, kLamps)        \
     ONE(deck) ONE(title) ONE(artist) ONE(key) ONE(bpm) ONE(tempo) ONE(elapsed) ONE(remaining) ONE(loop_label)
 
 /// A part of the screen that redraws on its own: one per field, one per element of an array field.
