@@ -109,4 +109,42 @@ struct VersionQuestionTests {
         Self.runningPanel(local, answering: "deck panel: build 1d0683f, version 1.2.0 local")
         #expect(await local.screen().panel.detail == "Build 1d0683f")
     }
+
+    // Each speed that read no build says why in the log (#710's owner run: "build not read" and nothing else). Counts
+    // only: never the panel's own text, which may carry Wi-Fi names or addresses.
+
+    @Test("A silent panel: the log says nothing came back, at each speed")
+    func logsNothingBack() async {
+        let rig = Rig()
+        Screen.panel(rig, printing: [])
+        _ = await rig.finder.find()
+        #expect(rig.log.lines.contains("deck panel: asked at 921600, nothing back"))
+        #expect(rig.log.lines.contains("deck panel: asked at 115200, nothing back"))
+    }
+
+    @Test("Lines but no answer: the log gives the count, not the lines")
+    func logsLineCount() async {
+        let rig = Rig()
+        Screen.panel(rig, printing: ["frame avg 12 ms, ssid HomeNet", "heap 120k"])
+        _ = await rig.finder.find()
+        #expect(rig.log.lines.contains("deck panel: asked at 921600, 2 lines, no build line"))
+        #expect(!rig.log.text.contains("HomeNet"))
+    }
+
+    @Test("The answer torn into another line (#754's perf build): the log says so, and the build isn't read from it")
+    func logsTornAnswer() async {
+        let rig = Rig()
+        Self.runningPanel(rig, answering: "frame avg 1deck panel: build bf7268c, version 1.2.0")
+        #expect(await rig.finder.find().panel == .onSerial(build: nil))
+        #expect(rig.log.lines.contains("deck panel: asked at 921600, 1 line, build line torn inside another line"))
+        #expect(!rig.log.text.contains("frame avg"))
+    }
+
+    @Test("An answer that isn't well formed: the log says the build line was bad, not that there was none")
+    func logsBadAnswer() async {
+        let rig = Rig()
+        Self.runningPanel(rig, answering: "deck panel: build 1d0683f, version 1.x")
+        _ = await rig.finder.find()
+        #expect(rig.log.lines.contains("deck panel: asked at 921600, 1 line, build line not well formed"))
+    }
 }
