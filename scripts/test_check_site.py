@@ -551,6 +551,19 @@ class CheckSiteTests(unittest.TestCase):
         for words in ("lib.scrub(", "lib.reduced()", ".db-fader"):
             self.assertIn(words, script)
 
+    def test_the_hero_pill_lights_four_decks_once_without_motion_for_reduced(self):
+        # #753: four dots on the hero pill, hidden from screen readers. With motion they light 1-2-3-4 once, then hold
+        # on deck 1; without it (and before CSS animates) deck 1 is simply lit.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        self.assertRegex(home, r'<p class="pill"><span class="db-decks" aria-hidden="true">(<i></i>){4}</span>')
+        with open(os.path.join(site, "site.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertIn(".db-decks i:first-child", css)
+        motion = css[css.index("@media (prefers-reduced-motion: no-preference)"):]
+        self.assertIn("db-decks", motion)
+
     def test_the_404_page_says_track_not_found_and_links_home(self):
         # #753: a page the server sends for any path it doesn't have, in the site's own words.
         self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])
