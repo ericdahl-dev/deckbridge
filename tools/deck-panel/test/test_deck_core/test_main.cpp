@@ -674,6 +674,48 @@ void test_a_bad_element_does_not_lose_the_good_ones() {
     TEST_ASSERT_EQUAL_STRING("", screen.last().title.c_str());
 }
 
+// #750: every bundle starts with DeckBridge's sequence number; the core counts the numbers it never saw, per source.
+static Bytes numbered(int32_t seq, const std::vector<Bytes>& rest) {
+    std::vector<Bytes> all{int_message(prefix + "seq", seq)};
+    all.insert(all.end(), rest.begin(), rest.end());
+    return bundle(all);
+}
+
+void test_numbered_bundles_count_the_ones_that_never_came() {
+    deck_core::DeckCore core;
+    TEST_ASSERT_FALSE(core.seq_seen());
+    feed(core, numbered(1, {int_message(prefix + "deck", 2)}), 100);
+    feed(core, numbered(2, {int_message(prefix + "beat", 1)}), 133);
+    // 3 and 4 lost; this one switches the deck in front, and still counts.
+    feed(core, numbered(5, {int_message(prefix + "deck", 3), int_message(prefix + "playing", 0)}), 166);
+    TEST_ASSERT_TRUE(core.seq_seen());
+    TEST_ASSERT_EQUAL_UINT32(2, core.lost());
+}
+
+// Wi-Fi and the cable at once: each counts its own numbers, and the lost total is both.
+void test_each_source_counts_its_own_numbers() {
+    deck_core::DeckCore core;
+    for (int32_t n = 1; n <= 3; ++n) {
+        Bytes w = numbered(n, {int_message(prefix + "beat", n)});
+        core.feed(w.data(), w.size(), 100 + n, deck_core::Source::wifi);
+        Bytes c = numbered(n, {int_message(prefix + "beat", n)});
+        core.feed(c.data(), c.size(), 100 + n, deck_core::Source::cable);
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
+    Bytes c = numbered(6, {});
+    core.feed(c.data(), c.size(), 200, deck_core::Source::cable);
+    TEST_ASSERT_EQUAL_UINT32(2, core.lost());
+}
+
+// A DeckBridge from before #750 numbers nothing: nothing seen, so no count can be told.
+void test_an_unnumbered_feed_is_not_seen() {
+    deck_core::DeckCore core;
+    feed(core, bundle({int_message(prefix + "deck", 2)}), 100);
+    feed(core, int_message(prefix + "beat", 1), 133);
+    TEST_ASSERT_FALSE(core.seq_seen());
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
+}
+
 // The feed never nests bundles: one inside is skipped, its messages unread; the bundle's own messages still count.
 void test_a_nested_bundle_is_skipped() {
     deck_core::DeckCore core;
@@ -1105,6 +1147,9 @@ int main(int, char**) {
     RUN_TEST(test_the_core_says_what_it_holds);
     RUN_TEST(test_a_bad_element_does_not_lose_the_good_ones);
     RUN_TEST(test_a_nested_bundle_is_skipped);
+    RUN_TEST(test_numbered_bundles_count_the_ones_that_never_came);
+    RUN_TEST(test_each_source_counts_its_own_numbers);
+    RUN_TEST(test_an_unnumbered_feed_is_not_seen);
     RUN_TEST(test_a_clipped_stream_after_boot_never_says_no_track_loaded);
     RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
     RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);

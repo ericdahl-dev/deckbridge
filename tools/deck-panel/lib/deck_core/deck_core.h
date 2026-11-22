@@ -10,6 +10,7 @@
 #include "beat_clock.h"
 #include "deck_face.h"
 #include "deck_types.h"
+#include "feed_seq.h"
 
 namespace deck_core {
 
@@ -57,11 +58,15 @@ public:
     bool waiting() const { return shown_waiting_; }
     /// Tells `screen` what to show at `now_ms`, only when that changed since the last call.
     void render(Screen& screen, uint32_t now_ms);
+    /// Feed datagrams that never came since boot, from DeckBridge's bundle numbers (#750): Wi-Fi's and the cable's.
+    uint32_t lost() const { return seq_[0].lost() + seq_[1].lost(); }
+    /// A numbered bundle came on either source: without one (a DeckBridge from before #750) lost() can't tell.
+    bool seq_seen() const { return seq_[0].seen() || seq_[1].seen(); }
 
 private:
     WaitingView waiting_view() const;
     /// One message: applied if it's one the panel takes; true if it keeps the feed alive.
-    bool apply(const uint8_t* bytes, size_t length, uint32_t now_ms);
+    bool apply(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source);
 
     DeckView view_;
     bool heard_ = false;
@@ -72,6 +77,8 @@ private:
     uint32_t last_heard_ms_ = 0;
     /// The USB cable's feed (#667), apart from Wi-Fi's: heard on it, and when last. Within kWaitAfterMs it needs no Wi-Fi.
     bool cable_heard_ = false;
+    /// Each source's bundle numbers (#750): [0] Wi-Fi, [1] the cable.
+    feed_seq::Counter seq_[2];
     uint32_t last_cable_ms_ = 0;
     Network network_ = Network::connected;
     char ip_[16] = "";
