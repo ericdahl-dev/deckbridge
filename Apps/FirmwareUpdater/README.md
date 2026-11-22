@@ -83,8 +83,8 @@ Denon's updater at hand. Note what the panel runs now (build and Wi-Fi network).
 2. Check the panel.
    - **See:** it starts, its screen shows the new build, and it joins the same Wi-Fi network as before (Wi-Fi kept).
 3. Cancel, once at each step: while connecting, while writing, while restarting.
-   - **See:** before writing: "Cancelled. The panel was restarted.", and the panel runs its old firmware. While
-     writing: "Cancelled while writing. The panel may not start: try again before unplugging it." Then flash again;
+   - **See:** before writing: "Canceled. The panel was restarted.", and the panel runs its old firmware. While
+     writing: "Canceled while writing. The panel may not start: try again before unplugging it." Then flash again;
      the panel must end up working.
 4. With DeckBridge sending over the cable, start the update.
    - **See:** "DeckBridge is using the panel's cable. Turn off "Send over the USB cable" in DeckBridge, then try
