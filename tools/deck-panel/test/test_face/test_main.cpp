@@ -262,6 +262,15 @@ void test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked
     }
 }
 
+// #721, the owner's pick: the locked tick is dark on a light deck, so it shows on the bar in the deck color. A deck with
+// no color shows white, so its tick is dark; a red deck's is white.
+void test_the_locked_tick_is_dark_on_a_light_deck_and_white_on_a_dark_one() {
+    DeckView v = loaded_deck();  // red, locked
+    TEST_ASSERT_EQUAL_HEX32(0xFFFFFF, deck_core::face(v).phase_tick_color);
+    v.color = 0;  // no color: white
+    TEST_ASSERT_EQUAL_HEX32(0x000000, deck_core::face(v).phase_tick_color);
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -330,6 +339,7 @@ int main(int, char**) {
     RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
     RUN_TEST(test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track);
     RUN_TEST(test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked);
+    RUN_TEST(test_the_locked_tick_is_dark_on_a_light_deck_and_white_on_a_dark_one);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
