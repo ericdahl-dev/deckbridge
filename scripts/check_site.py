@@ -17,6 +17,9 @@
   showrecorder.app's does (PRIVACY_STATEMENTS)
 - a sentence saying nothing goes to the network, that the app talks or sends only to Syndicate, or that nothing
   leaves the Mac names the display feed; the privacy page discloses the feed in the owner's wording (#632)
+- the home page has an In the lab section with the owner's disclaimers; what it holds (the deck panel, the drawn jog
+  display, a reflashed chip) is named nowhere else, and no page says how to flash anything (#647)
+- once the site says 1.1 or later, the home page, index.md and llms.txt each name 1.1's features (#647)
 - no other company's logo is in the site
 - the whole site stays under 2 MB
 Standard library only. Run: python3 -I scripts/check_site.py [website]   (exits 1 on any problem)
@@ -71,6 +74,7 @@ class Page(HTMLParser):
         self.refs = []  # (url, loaded): loaded is "script" for a <script src>, True for other resources, False for links
         self.scripts = []  # src of every <script src>
         self.untracked_mailto = []  # href of every mailto: link without a data-track
+        self.images = []  # (src, alt) of every <img>
         self.no_alt = []  # src of every <img> without an alt attribute
         self.json_ld = []  # the text of each <script type="application/ld+json">
         self.controllers = []  # (data-controller, data-status) of each element that names one (#201), in order
@@ -101,6 +105,8 @@ class Page(HTMLParser):
             self.refs.append((attrs["href"], not rels or not set(rels) <= LINK_RELS))
         if tag == "script" and (attrs.get("type") or "").strip().lower() == "application/ld+json":
             self._ld = []
+        if tag == "img":
+            self.images.append((attrs.get("src") or "", attrs.get("alt") or ""))
         if attrs.get("data-controller") is not None:
             self.controllers.append((attrs["data-controller"], attrs.get("data-status") or ""))
         if tag == "img" and "alt" not in attrs:
@@ -234,6 +240,44 @@ META_CONTENT = re.compile(r'<meta\s[^>]*(?:name|property)="(?:description|og:des
                           r'content="([^"]*)"', re.IGNORECASE)
 
 
+# "In the lab" (#647): what needs hardware or firmware others can't get, on the home page in <section id="lab">, in
+# index.md under "## In the lab", in llms.txt on a "- In the lab:" line. It says the owner's disclaimers; what it holds
+# is named nowhere else, and no page says how to flash anything.
+LAB_SECTION = re.compile(r'<section\b[^>]*\bid="lab"[^>]*>(.*?)</section>', re.S | re.I)
+LAB_STATEMENTS = ["not part of the deckbridge app", "not offered for download",
+                  "never includes or distributes denon's firmware", "no kit or firmware to download"]
+LAB_ONLY = ["deck panel", "drawn jog display", "reflashed"]
+FLASHING = ["bootloader", "dfu-util", "dfu mode", "flashing", "flash the", "flash it"]
+
+
+# What 1.1 brings (#647), named on each product page, worded as the CHANGELOG (#648) and the What to Test do.
+NEW_IN_1_1 = ["jog display", "transpose", "exact colors", "key display", "needle drop", "display feed"]
+NEW_IN_1_1_FILES = ["index.html", "index.md", "llms.txt"]
+
+
+def plain_words(text, markup=True):
+    """Lowercased words, curly apostrophes made straight; HTML's tags dropped (only HTML's: Markdown's <autolinks> aren't)."""
+    if markup:
+        text = html.unescape(re.sub(r"<[^>]+>", " ", text))
+    return " ".join(text.replace("\u2019", "'").lower().split())
+
+
+def outside_lab(file, text):
+    if file.endswith(".html"):
+        return LAB_SECTION.sub(" ", text)
+    if file.endswith(".md"):
+        return re.sub(r"(?ms)^## In the lab\n.*?(?=^## |\Z)", "", text)
+    return "\n".join(line for line in text.split("\n") if not line.startswith("- In the lab:"))
+
+
+def lab_problems(file, text):
+    markup = file.endswith(".html")
+    outside = plain_words(outside_lab(file, text), markup)
+    out = [f'{file}: names "{words}" outside In the lab' for words in LAB_ONLY if words in outside]
+    said = plain_words(text, markup)
+    return out + [f'{file}: says "{words}": no flashing instructions on the site' for words in FLASHING if words in said]
+
+
 def network_problems(file, text):
     # Inline tags sit inside a sentence; any other tag ends one.
     plain = text
@@ -285,6 +329,14 @@ def check_page(root, file, text):
     out += [f'{file}: <img src="{src}"> has no alt' for src in page.no_alt]
     if COMPANY not in " ".join(" ".join(page.footer_text).split()):
         out.append(f'{file}: the footer doesn\'t name "{COMPANY}"')
+    # v1.1 ships the jog display: it's shown by the app's own renderer (img/jog-display-*), whose alt says what the
+    # ring (the master clock) and the needle (the deck's bar) show; the old teaser art is gone.
+    for src, alt in page.images:
+        name = os.path.basename(urlsplit(src).path)
+        if name == TEASER_ART:
+            out.append(f"{file}: shows the v1.1 teaser art (img/{TEASER_ART}); use the renderer's images (img/jog-display-*)")
+        elif name.startswith("jog-display-") and not ("ring" in alt.lower() and "needle" in alt.lower()):
+            out.append(f"{file}: the alt of {src} doesn't say what the ring and the needle show")
     if not any(target(root, file, src) == os.path.join(os.path.normpath(root), ANALYTICS)
                for src in page.scripts if not is_external(src)):
         out.append(f"{file}: doesn't load {ANALYTICS}")
@@ -307,6 +359,13 @@ def check_page(root, file, text):
         if not any(CAPTURE_URL in block for block in page.json_ld):
             out.append(f"{file}: its JSON-LD doesn't name {CAPTURE_URL}")
         out += check_price(file, page.json_ld)
+    if file == HOME:
+        lab = LAB_SECTION.search(text)
+        if not lab:
+            out.append(f'{file}: has no In the lab section (<section id="lab">)')
+        else:
+            said = plain_words(lab.group(1))
+            out += [f'{file}: the In the lab section doesn\'t say "{words}"' for words in LAB_STATEMENTS if words not in said]
     if file == PRIVACY:
         said = " ".join(" ".join(page.text).split()).lower()
         out += [f'{file}: doesn\'t say "{words}"' for words in PRIVACY_STATEMENTS if words not in said]
@@ -355,6 +414,85 @@ def check_capture_prompts(root, app_prompts):
         if a.read() != b.read():
             return [f"{CAPTURE_PROMPTS}: isn't the app's prompt list byte for byte; copy it from {app_prompts}"]
     return []
+
+
+# A DeckBridge version on the site (#v1.1): "Version 1.0.1", "version 1.0.1 is on TestFlight", "DeckBridge 1.0.1". Three
+# parts, and not in parentheses, so "Syndicate's mapping (version 0.3.7)" is free. A two-part "DeckBridge 1.2" is
+# PLANNED_MENTION's: allowed only once the app has reached it (#652's audit: "from DeckBridge 1.2" for a 1.0.2 feature).
+VERSION_MENTION = re.compile(r"(?:\b[Vv]ersion|\bDeckBridge) (\d+\.\d+\.\d+)(?![\d.]|\s*\))")
+PLANNED_MENTION = re.compile(r"\bDeckBridge (\d+\.\d+)(?!\.?\d)")
+
+# The capture's button before 1.1 (#652's audit): 1.1 replaced it with Help add it… and Controller not found?.
+OLD_CAPTURE_BUTTON = "Help add a controller\u2026"
+
+# The channel fader is the plain Needle Drop touch since #729 (before 1.1.0), and Shift seeks: never "Shift + Needle Drop"
+# moving it, in a sentence, a heading or "Shift + Needle Drop on the channel fader".
+SHIFT_FADER = re.compile(r"shift \+ needle drop[^.<]{0,40}channel fader", re.IGNORECASE)
+
+
+TEASER_ART = "jog-art.png"
+
+# "Coming in v1.1": a feature promised for a version, which can't still be coming once that version ships.
+COMING = re.compile(r"coming in v(\d+(?:\.\d+){1,2})", re.IGNORECASE)
+
+
+def version_tuple(version):
+    parts = [int(p) for p in version.split(".")]
+    return tuple(parts + [0] * (3 - len(parts)))
+
+
+# The web capture's app_version, "web x.y.z" (#190): the site's version too.
+CAPTURE_PAGE_JS = "capture/capture-page.js"
+CAPTURE_VERSION = re.compile(r'APP_VERSION\s*=\s*"web (\d+\.\d+\.\d+)"')
+
+
+def feature_list(root):
+    """The home page JSON-LD's SoftwareApplication featureList, lowercased and joined; "" if it has none."""
+    page = Page()
+    with open(os.path.join(root, HOME), encoding="utf-8") as f:
+        page.feed(f.read())
+    def find(node):
+        if isinstance(node, dict):
+            if node.get("@type") == "SoftwareApplication" and isinstance(node.get("featureList"), list):
+                return node["featureList"]
+            return next((v for v in map(find, node.values()) if v), None)
+        if isinstance(node, list):
+            return next((v for v in map(find, node) if v), None)
+        return None
+    for block in page.json_ld:
+        try:
+            found = find(json.loads(block))
+        except ValueError:
+            continue
+        if found:
+            return plain_words(" ".join(str(item) for item in found), False)
+    return ""
+
+
+def app_version(root):
+    """The home page JSON-LD's SoftwareApplication softwareVersion: the one version the site may name."""
+    path = os.path.join(root, HOME)
+    if not os.path.isfile(path):
+        return None
+    page = Page()
+    with open(path, encoding="utf-8") as f:
+        page.feed(f.read())
+    def find(node):
+        if isinstance(node, dict):
+            if node.get("@type") == "SoftwareApplication" and isinstance(node.get("softwareVersion"), str):
+                return node["softwareVersion"]
+            return next((v for v in map(find, node.values()) if v), None)
+        if isinstance(node, list):
+            return next((v for v in map(find, node) if v), None)
+        return None
+    for block in page.json_ld:
+        try:
+            version = find(json.loads(block))
+        except ValueError:
+            continue
+        if version:
+            return version
+    return None
 
 
 CONTROLLERS = "controllers.json"
@@ -440,6 +578,12 @@ def problems(root, app_prompts=None, release=None):
     files = sorted(os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                    for d, _, names in os.walk(root) for f in names)
     out = [f"{page}: missing" for page in PAGES + ROOT_FILES if page not in files]
+    app_version = globals()["app_version"](root)
+    if HOME in files and not app_version:
+        out.append(f"{HOME}: the JSON-LD has no SoftwareApplication softwareVersion")
+    if HOME in files and app_version and version_tuple(app_version) >= (1, 1):
+        listed = feature_list(root)
+        out += [f'{HOME}: the JSON-LD featureList doesn\'t name 1.1\'s "{words}"' for words in NEW_IN_1_1 if words not in listed]
     controllers, controller_problems = load_controllers(root)
     out += controller_problems
     if not controller_problems and HOME in files:
@@ -456,12 +600,40 @@ def problems(root, app_prompts=None, release=None):
                 text = f.read()
             out += company_problems(file, text)
             out += network_problems(file, text)
+            out += lab_problems(file, text)
+            if file in NEW_IN_1_1_FILES and app_version and version_tuple(app_version) >= (1, 1):
+                said = plain_words(text, file.endswith(".html"))
+                out += [f'{file}: doesn\'t name 1.1\'s "{words}"' for words in NEW_IN_1_1 if words not in said]
             if release:
                 out += version_problems(file, text, release)
             if PLACEHOLDER.search(text):
                 out.append(f"{file}: still has a TODO(user) TestFlight placeholder")
+            if app_version:
+                shipped = version_tuple(app_version)
+                for coming in sorted(set(m.lower() for m in COMING.findall(text))):
+                    if version_tuple(coming) <= shipped:
+                        out.append(f"{file}: says coming in v{coming}, but the app is {app_version}")
+                for mentioned in sorted(set(VERSION_MENTION.findall(text)) - {app_version}):
+                    out.append(f"{file}: says DeckBridge {mentioned}, but the app's softwareVersion is {app_version}")
+                for planned in sorted(set(PLANNED_MENTION.findall(text))):
+                    if version_tuple(planned) > shipped:
+                        out.append(f"{file}: says DeckBridge {planned}, a version that hasn't shipped (the app is {app_version})")
+            if SHIFT_FADER.search(plain_words(text, file.endswith(".html"))):
+                out.append(f"{file}: says Shift + Needle Drop moves the channel fader; since #729 the plain touch does, "
+                           "and Shift seeks")
+            # A tag between them ("<b>Controller not found?</b>.") counts: tags become spaces in plain_words.
+            if re.search(r"\?\s*\.(?!\.)", plain_words(text, file.endswith(".html"))):
+                out.append(f'{file}: has "?." (a question mark then a full stop)')
+            if OLD_CAPTURE_BUTTON in text:
+                out.append(f"{file}: names the button {OLD_CAPTURE_BUTTON}, which 1.1 replaced with Help add it\u2026 "
+                           "and Controller not found?")
             if file.endswith(".html"):
                 out += check_page(root, file, text)
+        if file == CAPTURE_PAGE_JS and app_version:
+            with open(path, encoding="utf-8") as f:
+                for written in CAPTURE_VERSION.findall(f.read()):
+                    if written != app_version:
+                        out.append(f"{file}: writes captures as web {written}, but the app's softwareVersion is {app_version}")
         elif file.endswith(".css"):
             with open(path, encoding="utf-8") as f:
                 css = f.read()

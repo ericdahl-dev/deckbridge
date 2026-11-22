@@ -200,7 +200,7 @@
     </div>
   </section>
 
-  <!-- liquid-type: the coming feature's headline ripples under the pointer -->
+  <!-- liquid-type: the v1.1 feature's headline ripples under the pointer -->
   <section class="section" id="controls" aria-labelledby="controls-h">
     <div class="wrap">
       <div class="grid grid--top">
@@ -212,29 +212,35 @@
       <dl class="db-map db-map--cols">
           <div><dt>Pitch fader</dt><dd>Tempo at full 14-bit resolution, with pickup so the tempo never jumps</dd></div>
           <div><dt>Jog wheel, playing</dt><dd>Phase bend, released 80 ms after the wheel stops</dd></div>
+          <div><dt>VINYL</dt><dd>Switches the playing jog between bending (off, the default) and seeking (on), for each deck layer; its light is full while seeking</dd></div>
           <div><dt>Jog wheel, paused</dt><dd>Seeks through the track</dd></div>
           <div><dt>Needle Drop strip</dt><dd>Moves the deck’s channel fader. With Shift, seeks while you touch it.</dd></div>
-          <div><dt>Play, Cue, Sync, Master</dt><dd>Play/pause, cue (hold), tempo sync, tempo master</dd></div>
+          <div><dt>Play, Cue, Sync, Master</dt><dd>Play/pause, cue (hold), tempo sync, tempo master. PLAY while CUE is held keeps the deck playing; Shift + CUE goes back to the cue point and stops</dd></div>
+          <div><dt>Shift + Sync (OFF)</dt><dd>Turns sync off on a synced deck; it never turns sync on</dd></div>
           <div><dt>Pads: Hot Cue mode</dt><dd>Hot cues 1 to 8, press and hold</dd></div>
+          <div><dt>Shift + pad, Hot Cue mode</dt><dd>On a stopped deck, goes to that cue without playing, at once. The first press on each cue blips once while DeckBridge learns where it is. For the jump it turns the deck’s quantize off in Syndicate, then sets it to Use Global</dd></div>
           <div><dt>Pads: Roll mode</dt><dd>Slip loops from 1/32 to 4 beats, while held</dd></div>
           <div><dt>Pads: Loop mode</dt><dd>Saved cue loops</dd></div>
-          <div><dt>Loop In, Loop Out, Auto Loop</dt><dd>Loop in, loop out, loop; turning the Auto Loop knob halves or doubles it</dd></div>
+          <div><dt>Loop In, Loop Out, Auto Loop</dt><dd>Loop in, loop out, loop; turning the Auto Loop knob halves or doubles it, and Shift + turn moves the loop by its own length</dd></div>
           <div><dt>Beat Jump ◀ ▶</dt><dd>Skip a beat back or forward; with Shift, a bar</dd></div>
           <div><dt>Censor</dt><dd>Reverse while held; Shift + Censor latches it</dd></div>
-          <div><dt>Key Lock, Slip</dt><dd>Pitch preserve, slip cue; Shift + Key Lock resets the tempo to 0</dd></div>
+          <div><dt>Key Lock</dt><dd>Pitch preserve; Shift + Key Lock resets the tempo to 0</dd></div>
+          <div><dt>Deck select (printed Slip)</dt><dd>Steps to the next deck layer; Shift + deck select steps the unit’s own layer, and DeckBridge follows</dd></div>
           <div><dt>Pitch Bend − +</dt><dd>Nudges the tempo while held</dd></div>
+          <div><dt>Shift + Pitch Bend − +</dt><dd>Transposes the deck down or up a semitone, turning its key lock on first, as Syndicate needs</dd></div>
           <div><dt>Param ◀ ▶</dt><dd>Skip a beat back or forward</dd></div>
           <div><dt>Browse knob, Back, Forward, Track ◀ ▶</dt><dd>Moves through the library; press to load (Shift + press: Enter)</dd></div>
+          <div><dt>Shift + browse knob (ZOOM)</dt><dd>Zooms the deck in front’s waveform, one step per click</dd></div>
         </dl>
     </div>
   </section>
 
   <section class="section statement" id="next" data-moment="liquid-type" aria-labelledby="next-h">
     <div class="wrap">
-      <p class="t-label">Coming in v1.1</p>
+      <p class="t-label">New in v1.1</p>
       <h2 class="mo-lt__type db-big" id="next-h">Art on the LC6000 jog wheel</h2>
-      <p class="t-lead db-next">DeckBridge will show art on the LC6000’s jog-wheel display in real time, right under your hand.</p>
-      <div class="db-jog"><div class="db-jog__ring"><img src="../../img/jog-art.png" alt="The DeckBridge deck-ring art, made for the LC6000’s round jog-wheel display" width="198" height="198" loading="lazy" decoding="async"></div></div>
+      <p class="t-lead db-next">Each deck’s track, key and BPM on the LC6000’s jog display, with Syndicate’s master clock around the ring and the deck’s own bar in the needle. Diagnostics shows the same picture on your Mac.</p>
+      <div class="db-jog"><div class="db-jog__ring"><img src="../../img/jog-display-deck1.webp" alt="Deck 1 on the LC6000’s jog display: Daybreak, A#m, 128 BPM. The ring lights the master clock’s beat 2, and the needle shows the deck’s own bar." width="198" height="198" loading="lazy" decoding="async"></div></div>
     </div>
   </section>
 
@@ -257,7 +263,7 @@
         </div>
         <div class="db-faq span-6 start-7">
           <details><summary>What is DeckBridge?</summary><p>DeckBridge is a native Mac menu-bar app that lets you play Syndicate from a Denon LC6000 PRIME by bridging the controller’s MIDI to Syndicate OSC. It sends the 14-bit jog wheel and pitch fader to Syndicate at full resolution and lights the controller’s LEDs from Syndicate’s OSC feedback.</p></details>
-          <details><summary>Which controllers does DeckBridge support?</summary><p>DeckBridge supports one controller today, the <a class="link" href="./">Denon LC6000 PRIME</a>, connected over USB. A single LC6000 drives all four Syndicate decks through its own deck layers. To help add yours, DeckBridge 1.2’s <strong>Help add it…</strong> (in the panel) or <strong>Controller not found?</strong> (in Settings) records what your controller sends, and you choose whether to email the file. Without the app, <a class="link" href="../../capture/">record it in your browser</a> (Chrome, Edge or Firefox).</p></details>
+          <details><summary>Which controllers does DeckBridge support?</summary><p>DeckBridge supports one controller today, the <a class="link" href="./">Denon LC6000 PRIME</a>, connected over USB. A single LC6000 drives all four Syndicate decks through its own deck layers. To help add yours, DeckBridge’s <strong>Help add it…</strong> (in the panel) or <strong>Controller not found?</strong> (in Settings) records what your controller sends, and you choose whether to email the file. Without the app, <a class="link" href="../../capture/">record it in your browser</a> (Chrome, Edge or Firefox).</p></details>
           <details><summary>What are the requirements for DeckBridge?</summary><p>DeckBridge needs macOS 26 or later, Syndicate with OSC input enabled, and a Denon LC6000 PRIME connected over USB. It runs in the menu bar with no Dock icon.</p></details>
           <details><summary>How much does DeckBridge cost?</summary><p>DeckBridge is free. Version 1.1.0 is in beta on TestFlight now, and the Mac App Store version is coming soon.</p></details>
           <details><summary>How does DeckBridge setup work?</summary><p>To set up DeckBridge, you change four settings in Syndicate once: turn on OSC input (port 9090), point OSC feedback at 127.0.0.1 port 9096, turn on the listed feedback subscriptions, and turn the LC6000’s MIDI input off in Syndicate. DeckBridge opens a setup guide with these steps on first launch, and it shows “Done: feedback live” once Syndicate answers.</p></details>
@@ -267,7 +273,7 @@
           <details><summary>Can I try DeckBridge without an LC6000?</summary><p>Yes, DeckBridge’s demo controller runs a scripted controller against a simulated Syndicate, so you can see it work without an LC6000. Nothing goes to the network unless you turn on the display feed, and then only unencrypted to the one address you set on your local network. Demo mode is off again at the next launch.</p></details>
           <details><summary>Can I use two LC6000s, or run Syndicate on another Mac?</summary><p>Yes, DeckBridge can drive a second LC6000 on another Syndicate deck, and it can reach Syndicate running on another Mac over your local network. Add the second unit under Settings › Add controller; both share Syndicate’s one feedback stream. For another Mac, set Syndicate’s host to that Mac’s IP address and set feedback to listen on All networks. macOS asks once for local-network permission.</p></details>
           <details><summary>Where do I get DeckBridge?</summary><p>DeckBridge 1.1.0 is available now as a beta on TestFlight, and it’s coming soon to the Mac App Store. Join the beta at <a class="link" href="https://testflight.apple.com/join/HWcpqqpz" data-track="join_beta_clicked" data-track-destination="testflight">testflight.apple.com/join/HWcpqqpz</a>.</p></details>
-          <details><summary>What’s coming next for DeckBridge?</summary><p>Coming in v1.1, DeckBridge will show art on the LC6000’s jog-wheel display in real time. Version 1.1.0 is in beta on TestFlight now, so this LC6000 Syndicate setup keeps growing from there.</p></details>
+          <details><summary>What’s new in DeckBridge 1.1?</summary><p>DeckBridge 1.1 shows the deck in front on the LC6000’s jog-wheel display: its title, artist, key and BPM, Syndicate’s master clock around the ring, and the deck’s own bar in the needle. Diagnostics › Jog display shows the same picture on your Mac. It also adds Shift + Pitch Bend to transpose, CDJ-style cue, Needle Drop on the channel fader, exact colors on the ring and pads, a key display in traditional or Camelot, and a display feed to a display on your local network, off by default. Version 1.1.0 is in beta on TestFlight now.</p></details>
         </div>
       </div>
     </div>

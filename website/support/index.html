@@ -141,7 +141,7 @@
      "name": "My controller isn’t an LC6000. Can I help add it?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes, from DeckBridge 1.2. With your controller plugged in, click Help add it… in the panel, or choose Controller not found? from the Controller menu in Settings › Controller, and follow the steps: press, move and turn each control while DeckBridge records what it sends. It takes about five minutes. At the end, Save… the file or click Email to DeckBridge, which opens a message in your own mail app. Nothing is sent unless you send it."
+      "text": "Yes. With your controller plugged in, click Help add it… in the panel, or choose Controller not found? from the Controller menu in Settings › Controller, and follow the steps: press, move and turn each control while DeckBridge records what it sends. It takes about five minutes. At the end, Save… the file or click Email to DeckBridge, which opens a message in your own mail app. Nothing is sent unless you send it."
      }
     }
    ]
@@ -196,7 +196,53 @@
     </div>
   </section>
 
+  <!-- v1.1: the jog display, and its preview in Diagnostics (images from the app's own renderer) -->
+  <section class="section" id="jog" aria-labelledby="jog-h">
+    <div class="wrap">
+      <div class="grid grid--top">
+        <div class="span-5 stack-4">
+          <h2 id="jog-h">The jog display</h2>
+          <p><strong>Show the deck on the jog display</strong> is on by default (Settings › Controller). The LC6000’s jog display shows the deck in front: its title, artist, key and BPM, Syndicate’s master clock around the ring, and the deck’s own bar in the needle.</p>
+          <p>Settings › Controller › Firmware (shown with the jog display on): leave it on Denon unless your unit runs custom firmware.</p>
+          <p>Settings › Controller › Key display (with the jog display on) writes keys as Syndicate does, traditional or Camelot. Match Syndicate’s own key setting.</p>
+          <p class="muted">Diagnostics › Jog display shows the same picture on your Mac for every deck, even with no LC6000 connected.</p>
+        </div>
+        <div class="span-6 start-7">
+          <img class="db-shotimg" src="../img/jog-display-diagnostics.webp" alt="Diagnostics › Jog display: decks 1, 2 and 3 as their jog displays would show them. Every ring lights the master clock’s beat, each needle shows that deck’s own bar, and deck 1 is the one on the LC6000." width="1440" height="920" loading="lazy" decoding="async">
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- The FAQPage JSON-LD in the head repeats these words exactly: change both together. -->
+  <section class="section" id="fader" aria-labelledby="fader-h">
+    <div class="wrap">
+      <div class="grid grid--top">
+        <div class="span-5 stack-4">
+          <h2 id="fader-h">Needle Drop: the channel fader</h2>
+          <p>Needle Drop moves the deck’s channel fader in Syndicate, from where it is (Relative) or straight to where you touch (Jump) (Settings › Controller, on by default). With Shift, it seeks while you touch it.</p>
+          <p class="muted">Relative needs Syndicate’s Volume feedback: turn it on in Syndicate’s OSC feedback, or the fader can’t start from where it is.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="feed" aria-labelledby="feed-h">
+    <div class="wrap">
+      <div class="grid grid--top">
+        <div class="span-5 stack-4">
+          <h2 id="feed-h">The display feed</h2>
+          <p>DeckBridge can send the deck in front to a display on your local network, unencrypted to the one address you set (Settings › Syndicate › Display feed, off by default).</p>
+          <p>Give it the display’s host and port. The status line under them says whether it’s sending. While it’s on, DeckBridge also asks Syndicate for its Meter and PhaseOffset feedback, and says so if they’re off.</p>
+          <p class="muted">Leave it off if you have no display listening.</p>
+        </div>
+        <div class="span-6 start-7">
+          <img class="db-shotimg" src="../img/settings-display-feed.webp" alt="Settings › Syndicate: Syndicate’s OSC input and feedback ports, and the Display feed section with its switch off and the status Off." width="880" height="952" loading="lazy" decoding="async">
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="faq" aria-labelledby="faq-h">
     <div class="wrap">
       <div class="grid grid--top">
@@ -207,7 +253,7 @@
           <details><summary>Why does nothing happen when I press buttons?</summary><p>Quit any other DJ app that was using the LC6000 PRIME first, then power-cycle the controller: some apps switch its MIDI mode until it restarts. Then check <strong>Diagnostics › MIDI Monitor</strong>: each button press should show up there.</p></details>
           <details><summary>Can Syndicate run on another Mac?</summary><p>Yes. Set the Syndicate host in DeckBridge’s Settings to that Mac’s IP address, and set <strong>Listen on</strong> to <strong>All networks</strong>. macOS asks once for local-network permission; allow it, or no feedback arrives.</p></details>
           <details><summary>Can I try it without a controller?</summary><p>Yes. Click <strong>Demo controller: Off</strong> in the panel. A scripted controller plays against a simulated session. Nothing goes to the network unless you turn on the display feed, and then only unencrypted to the one address you set on your local network.</p></details>
-          <details id="add-controller"><summary>My controller isn’t an LC6000. Can I help add it?</summary><p>Yes, from DeckBridge 1.2. With your controller plugged in, click <strong>Help add it…</strong> in the panel, or choose <strong>Controller not found?</strong> from the <strong>Controller</strong> menu in <strong>Settings › Controller</strong>, and follow the steps: press, move and turn each control while DeckBridge records what it sends. It takes about five minutes. At the end, <strong>Save…</strong> the file or click <strong>Email to DeckBridge</strong>, which opens a message in your own mail app. Nothing is sent unless you send it.</p></details>
+          <details id="add-controller"><summary>My controller isn’t an LC6000. Can I help add it?</summary><p>Yes. With your controller plugged in, click <strong>Help add it…</strong> in the panel, or choose <strong>Controller not found?</strong> from the <strong>Controller</strong> menu in <strong>Settings › Controller</strong>, and follow the steps: press, move and turn each control while DeckBridge records what it sends. It takes about five minutes. At the end, <strong>Save…</strong> the file or click <strong>Email to DeckBridge</strong>, which opens a message in your own mail app. Nothing is sent unless you send it.</p></details>
         </div>
       </div>
     </div>

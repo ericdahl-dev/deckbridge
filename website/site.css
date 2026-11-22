@@ -39,11 +39,18 @@
 /* the coming feature's picture: the art made for the LC6000's round jog-wheel display (tools/lc6000-display, #165),
    in a round jog frame, under the words below 1024 (liquid-type is plain type on touch screens). On a tablet it
    takes what the screen leaves under the words, and is left out on a screen under 720px tall, where the words
-   nearly fill it; on a phone the section fits its content, so it has a fixed size. A desktop has none. */
+   nearly fill it; on a phone the section fits its content, so it has a fixed size. On a desktop (v1.1) it sits beside
+   the headline. */
 .db-jog { display: none; }
 .db-jog__ring { aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center;
   background: #0d0d0d; box-shadow: 0 0 0 10px #262626, 0 0 0 11px rgb(255 255 255 / .12), 0 30px 70px -30px rgb(0 0 0 / .8); }
-.db-jog__ring img { width: 74%; height: auto; border-radius: 22%; }
+.db-jog__ring img { width: 100%; height: auto; border-radius: 50%; }  /* v1.1: the renderer's round 198×198 display */
+/* v1.1: on a desktop the shipped display sits beside the headline */
+@media (min-width: 1024px) {
+  #next > .wrap { position: relative; }
+  .db-jog { display: block; position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
+  .db-jog__ring { width: 198px; }  /* the display's own pixels, never upscaled */
+}
 @media (min-width: 640px) and (max-width: 1023px) and (min-height: 720px) {
   .db-jog { display: flex; flex: 1 1 auto; align-items: center; justify-content: center; margin: var(--s-6) 0 0; }
   .db-jog__ring { width: min(64vw, 280px, 100svh - 600px); }  /* 600: the words above it and the section's padding */
@@ -200,3 +207,6 @@ i.db-wire { display: block; height: 2px; padding: 0; background: linear-gradient
   #why { min-height: 0; }
   main > :is(section, .section) > .wrap > :is(.fill, .db-split) { flex: none; }
 }
+
+/* v1.1: a screenshot in a doc section */
+.db-shotimg { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }
