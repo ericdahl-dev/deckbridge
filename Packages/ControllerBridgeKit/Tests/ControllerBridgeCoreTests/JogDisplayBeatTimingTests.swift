@@ -1,0 +1,53 @@
+import Foundation
+@testable import ControllerBridgeCore
+import Testing
+
+/// The jog display's master beat on time (#720), through the Coordinator on a fake display port and clock: the beat
+/// message the display already gets goes when the beat clock says it's due, not when Syndicate's message arrives.
+@Suite("Jog display beat timing")
+struct JogDisplayBeatTimingTests {
+    typealias Live = DrawnDisplayLiveTests
+    typealias Rig = ProfileMatchingTests.ProfileRig
+
+    /// The beats the drawn display got (op 08), in order.
+    static func beats(_ port: DrawnDisplayHandshakeTests.Port) -> [UInt8] { Live.ops(port, 0x08).map { $0[10] } }
+
+    /// Ticks every 10 ms from the clock's now to `until` (seconds).
+    static func tick(_ rig: Rig, until: Double) {
+        while rig.clock.now < until - 1e-9 {
+            rig.clock.now = ((rig.clock.now + 0.01) * 100).rounded() / 100
+            rig.coordinator.tick()
+        }
+    }
+
+    /// Syndicate's master beat arriving now.
+    static func clock(_ rig: Rig, _ beat: Int, at time: Double) {
+        tick(rig, until: time)
+        Live.clock(rig, beat)
+    }
+
+    @Test("Drawing: the next beat goes when it's due, before Syndicate's message for it, and only once")
+    func nextBeatBeforeItsMessage() throws {
+        let (rig, port) = try Live.playing()
+        Self.clock(rig, 1, at: 1.00)
+        Self.clock(rig, 2, at: 1.47)  // 470 ms a beat
+        Self.tick(rig, until: 1.93)
+        #expect(Self.beats(port) == [1, 2])
+        Self.tick(rig, until: 1.94)   // due at 1.94
+        #expect(Self.beats(port) == [1, 2, 3])
+        Self.clock(rig, 3, at: 1.97)  // Syndicate's message, 30 ms behind
+        Self.tick(rig, until: 2.00)
+        #expect(Self.beats(port) == [1, 2, 3])
+    }
+
+    @Test("With Syndicate's master BPM one beat is enough: the next goes a beat length on, before its message")
+    func masterBPMTimesTheFirstBeat() throws {
+        let (rig, port) = try Live.playing()
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(120)]))
+        Self.clock(rig, 1, at: 1.00)
+        Self.tick(rig, until: 1.49)
+        #expect(Self.beats(port) == [1])
+        Self.tick(rig, until: 1.50)
+        #expect(Self.beats(port) == [1, 2])
+    }
+}

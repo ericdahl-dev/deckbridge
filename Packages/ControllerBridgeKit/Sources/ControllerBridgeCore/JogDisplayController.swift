@@ -11,6 +11,9 @@ final class JogDisplayController {
     private var lastPlaying: [Int: Bool] = [:]
     /// Syndicate's master tempo, for a deck whose own BPM isn't known yet.
     private(set) var masterBPM: Double?
+    /// The master clock's beat on time (#720): from Syndicate's beat messages and master BPM, so the display's beat
+    /// goes when it's due, not when a message happens to arrive.
+    private var beatClock = BeatClock()
     /// The LC6000's jog display, when the app found its WD port.
     private var driver: JogDisplayDriver?
     /// Settings' "Show the deck on the jog display" (ADR-0005): while off, nothing goes to the display's ports, not
@@ -50,11 +53,21 @@ final class JogDisplayController {
             // On the meter's dB scale (#582), so the fall runs evenly down the drawn arc.
             meters[channel, default: MeterBallistics()].sample(MeterScale.position(level), at: clock.now)
         }
-        if address.hasSuffix("/header/bpm"), let bpm = message.arguments.first?.number, bpm > 0 { masterBPM = bpm }
+        if address.hasSuffix("/header/bpm"), let bpm = message.arguments.first?.number, bpm > 0 {
+            masterBPM = bpm
+            beatClock.setTempo(bpm)
+        }
         // The master clock is the lit ring segment, the same on every deck (the user's pick).
         if address.hasSuffix("/header/clock"), let beat = message.arguments.first?.wholeNumber, (1...4).contains(beat) {
-            driver?.masterBeat(beat)
+            beatClock.edge(beat, at: clock.now)
+            masterBeatTick()
         }
+    }
+
+    /// The beat clock's beat now to the display; the driver sends only a change.
+    private func masterBeatTick() {
+        let beat = beatClock.beat(at: clock.now)
+        if beat != 0 { driver?.masterBeat(beat) }
     }
 
     /// A deck's mixer meter as the drawn meter shows it, 0-1; 0 before its channel reports (#617).
@@ -163,6 +176,7 @@ final class JogDisplayController {
         for channel in meters.keys { meters[channel]?.step(at: clock.now) }
         guard let driver else { return }
         driver.tick()
+        masterBeatTick()
         let front = Self.front(entries, previewDeck: previewDeck)
         // The live cadence (#592): the needle, then the meter and the phase below, in the same tick.
         let live = nextLiveDue.map { clock.now >= $0 - 1e-9 } ?? true
