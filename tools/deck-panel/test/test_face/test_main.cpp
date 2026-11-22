@@ -241,6 +241,24 @@ void test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick() {
     TEST_ASSERT_EQUAL(0, f.phase_bar_w);
 }
 
+// #721: off phase the track dims to 35% of the deck color over the dark track (red: 0.35 x 0xFF + 0.65 x 0x26 = 0x72,
+// 0.65 x 0x26 = 0x19), no tick, and a bar grows from the center (352) toward the error: behind left, ahead right. The
+// length is #462's curve on the 352 px half: 352 x g(0.01)/g(0.5), g(p) = p/(p + 0.02), = 122 px for 0.01 of a beat.
+void test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track() {
+    DeckView v = loaded_deck();
+    v.phase = 0.49f;  // 0.01 of a beat behind
+    Face f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    TEST_ASSERT_EQUAL(0, f.phase_tick);
+    TEST_ASSERT_EQUAL(230, f.phase_bar_x);
+    TEST_ASSERT_EQUAL(122, f.phase_bar_w);
+    v.phase = 0.51f;  // ahead
+    f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    TEST_ASSERT_EQUAL(352, f.phase_bar_x);
+    TEST_ASSERT_EQUAL(122, f.phase_bar_w);
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -308,6 +326,7 @@ int main(int, char**) {
     RUN_TEST(test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar);
     RUN_TEST(test_no_phase_is_the_plain_dark_bar);
     RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
+    RUN_TEST(test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
