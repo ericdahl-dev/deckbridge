@@ -41,6 +41,9 @@ public:
     /// Feeds waiting datagrams to `core`, stamped `now_ms`, until the socket is empty or `clock` has run kBudgetMs;
     /// returns how many were fed. Without a clock, only kMaxPerFrame bounds it.
     int run(Socket& socket, deck_core::DeckCore& core, uint32_t now_ms, Clock clock = nullptr);
+    /// The same, but the budget is the frame's, counted from `since_ms` on `clock` (the read step's start), so a second
+    /// drain in one frame (the USB cable's after Wi-Fi's, #667) gets only what's left. It always takes one datagram.
+    int run(Socket& socket, deck_core::DeckCore& core, uint32_t now_ms, Clock clock, uint32_t since_ms);
     /// Since boot: datagrams seen on the socket, fed to the core, and dropped for being bigger than kMaxDatagram.
     /// received - processed - too_big is always 0: what a frame leaves waits on the socket, unseen yet.
     uint32_t received() const { return received_; }

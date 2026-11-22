@@ -88,6 +88,28 @@ void test_a_frame_stops_at_its_time_budget() {
     TEST_ASSERT_EQUAL(40 - read, socket.waiting.size());
 }
 
+// The USB cable's drain runs after Wi-Fi's in the same frame (#667): the budget is the frame's, counted from the read
+// step's start, so the second gets only what the first left (and always one datagram, so neither source starves).
+void test_a_second_drain_in_the_same_frame_gets_only_what_is_left_of_the_budget() {
+    FakeSocket socket;
+    for (int i = 0; i < 40; ++i) socket.waiting.push_back(deck_message(2));
+    deck_core::DeckCore core;
+    feed_drain::Drain drain;
+    g_clock_ms = feed_drain::kBudgetMs - 1;  // the first drain took all but 1 ms of the frame's budget
+    const int read = drain.run(socket, core, 100, ticking_clock, 0);
+    TEST_ASSERT_TRUE(read >= 1);
+    TEST_ASSERT_TRUE(read <= 2);
+}
+
+void test_a_drain_whose_frame_budget_is_spent_still_takes_one() {
+    FakeSocket socket;
+    for (int i = 0; i < 3; ++i) socket.waiting.push_back(deck_message(2));
+    deck_core::DeckCore core;
+    feed_drain::Drain drain;
+    g_clock_ms = 50;
+    TEST_ASSERT_EQUAL(1, drain.run(socket, core, 100, ticking_clock, 0));
+}
+
 void test_a_datagram_too_big_is_dropped_and_counted() {
     FakeSocket socket;
     std::vector<uint8_t> big = deck_message(4);
@@ -164,6 +186,8 @@ int main(int, char**) {
     RUN_TEST(test_waiting_datagrams_go_to_the_core_in_order);
     RUN_TEST(test_a_frame_reads_until_the_socket_is_empty);
     RUN_TEST(test_a_frame_stops_at_its_time_budget);
+    RUN_TEST(test_a_second_drain_in_the_same_frame_gets_only_what_is_left_of_the_budget);
+    RUN_TEST(test_a_drain_whose_frame_budget_is_spent_still_takes_one);
     RUN_TEST(test_a_datagram_too_big_is_dropped_and_counted);
     RUN_TEST(test_a_1200_byte_bundle_gets_through_and_one_over_the_limit_does_not);
     RUN_TEST(test_the_drain_counts_received_processed_and_too_big);
