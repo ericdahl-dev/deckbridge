@@ -338,13 +338,13 @@ class CheckSiteTests(unittest.TestCase):
         with open(readme, encoding="utf-8") as f:
             self.assertEqual(check_site.company_problems("README.md", f.read()), [])
 
-    def test_the_readme_documents_shift_needle_drop(self):
-        # Shift + Needle Drop on the channel fader (#609): the README's LC6000 controls table has a row for it, with the
-        # address it sends, both modes, the Volume feedback Relative needs, and the Settings switch.
+    def test_the_readme_documents_the_needle_drop_fader(self):
+        # Needle Drop on the channel fader (#609), the plain touch since #729: the README's LC6000 controls table has a
+        # row for it, with the address it sends, both modes, the Volume feedback Relative needs, and the Settings switch.
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
-            rows = [line for line in f if line.startswith("| Shift + Needle Drop")]
-        self.assertEqual(len(rows), 1, "one Shift + Needle Drop row")
+            rows = [line for line in f if line.startswith("| Needle Drop strip")]
+        self.assertEqual(len(rows), 1, "one Needle Drop row")
         for words in ("Mixer/CH", "Volume", "Relative", "Jump", "Settings"):
             self.assertIn(words, rows[0])
 
@@ -367,11 +367,12 @@ class CheckSiteTests(unittest.TestCase):
             self.assertIn(words, rows[0])
 
     def test_the_readme_says_paused_seeks_reset_quantize(self):
-        # Paused jog and needle seeks hold quantize at None, then Use Global (#366): their README rows say so.
+        # Paused jog and needle seeks hold quantize at None, then Use Global (#366): their README rows say so. The
+        # needle's seek is Shift + the strip since #729.
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
             lines = f.readlines()
-        for row in ("| Jog while paused", "| Needle Drop strip"):
+        for row in ("| Jog while paused", "| Shift + Needle Drop strip"):
             found = [line for line in lines if line.startswith(row)]
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)

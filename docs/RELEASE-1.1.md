@@ -75,9 +75,10 @@ Controller:
   #364).
 - The jog and the Needle Drop strip seek a paused deck exactly where you put them, with quantize off while seeking
   (#375).
-- Shift + Needle Drop moves the deck's channel fader in Syndicate, from where it is (Relative) or straight to where you
-  touch (Jump) (Settings › Controller, on by default). Relative needs Syndicate's Volume feedback, which the panel's
-  subscription list names (#609).
+- The Needle Drop strip moves the deck's channel fader in Syndicate, from where it is (Relative) or straight to where you
+  touch (Jump), and Shift + the strip seeks (#609, #729). Settings › Controller switches the fader (on by default) and
+  picks the mode; switched off, the strip seeks with or without Shift. Relative needs Syndicate's Volume feedback, which
+  the panel's subscription list names.
 - Shift + the Auto Loop knob moves the loop (#470). A plain press of Slip steps the deck layer 1 → 2 → 3 → 4, as
   Shift + Slip does; Syndicate has no slip mode (#420).
 - VINYL switches what the jog does on a playing deck: bend the tempo or seek (#540).

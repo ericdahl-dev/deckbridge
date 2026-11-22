@@ -233,6 +233,7 @@ void DeckScreen::draw(const deck_core::Face& f, const deck_core::Changes& c) {
         set_hidden(phase_bar_, f.phase_bar_w <= 0);
     }
     if (c.has(Part::phase_tick)) set_hidden(phase_tick_, f.phase_tick == 0);
+    if (c.has(Part::phase_tick_color)) lv_obj_set_style_bg_color(phase_tick_, lv_color_hex(f.phase_tick_color), 0);
     if (c.has(Part::level_px)) lv_obj_set_height(level_fill_, f.level_px);
 
     Lamp* lamps[] = {&play_, &cue_, &sync_, &master_, &loop_};

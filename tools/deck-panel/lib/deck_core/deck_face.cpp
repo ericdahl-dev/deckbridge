@@ -86,6 +86,13 @@ int32_t phase_bar_length(float beats) {
     return static_cast<int32_t>(length < 1 ? 1 : length > kPhaseHalf ? kPhaseHalf : length);
 }
 
+/// A color light enough that a white mark on it barely shows (#721): its lightness, Rec. 709's weights over 256,
+/// at least 160 of 255.
+bool light(uint32_t color) {
+    const uint32_t r = color >> 16 & 0xFF, g = color >> 8 & 0xFF, b = color & 0xFF;
+    return (54 * r + 183 * g + 19 * b) >> 8 >= 160;
+}
+
 }  // namespace
 
 Face face(const DeckView& view) {
@@ -133,6 +140,7 @@ Face face(const DeckView& view) {
     if (view.phase == 0.5f) {
         f.phase_track_color = f.deck_color;
         f.phase_tick = 1;
+        f.phase_tick_color = light(f.deck_color) ? palette::kBlack : palette::kWhite;
     } else if (view.phase >= 0) {
         f.phase_track_color = dimmed(f.deck_color);
         const float off = view.phase - 0.5f;  // beats: below 0 behind
