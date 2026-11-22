@@ -16,7 +16,7 @@ class CableQuestion : public serial_feed::Text {
 public:
     CableQuestion(const build_info::Build& build, Write write) : build_(build), write_(write) {}
     void put(char c) override;
-    /// Writes the answer if a question came since the last call.
+    /// Writes the answer, a newline first, if a question came since the last call.
     void answer();
 
 private:

@@ -56,7 +56,22 @@ void test_a_version_line_between_two_frames_is_answered_once_and_both_frames_sti
     question.answer();
     question.answer();
     TEST_ASSERT_EQUAL(1, (int)g_answers.size());
-    TEST_ASSERT_EQUAL_STRING("deck panel: build abc1234, version 1.2.0", g_answers[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("\ndeck panel: build abc1234, version 1.2.0", g_answers[0].c_str());
+}
+
+// A perf line may be on the cable already, cut short (two readers splitting it, or a print not yet ended): the answer
+// starts its own line, so the updater's line reader, which wants the line's start, still finds it (#754 owner run).
+void test_the_answer_starts_its_own_line() {
+    g_answers.clear();
+    FakeCable cable;
+    cable_question::CableQuestion question(kBuild, write_answer);
+    serial_feed::SerialFeed feed(cable, &question);
+    cable.add("version\n");
+    drain(feed);
+    question.answer();
+    TEST_ASSERT_EQUAL(1, (int)g_answers.size());
+    TEST_ASSERT_EQUAL('\n', g_answers[0][0]);
+    TEST_ASSERT_EQUAL_STRING("deck panel: build abc1234, version 1.2.0", g_answers[0].c_str() + 1);
 }
 
 void test_the_word_version_inside_a_frame_is_never_answered() {
@@ -120,6 +135,7 @@ void test_a_whole_frame_with_version_lines_inside_is_never_answered() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_a_version_line_between_two_frames_is_answered_once_and_both_frames_still_come_through);
+    RUN_TEST(test_the_answer_starts_its_own_line);
     RUN_TEST(test_the_word_version_inside_a_frame_is_never_answered);
     RUN_TEST(test_the_updaters_ask_with_a_newline_first_is_answered);
     RUN_TEST(test_a_version_ask_right_after_a_cut_frame_is_answered_once_the_cut_frame_is_dropped);
