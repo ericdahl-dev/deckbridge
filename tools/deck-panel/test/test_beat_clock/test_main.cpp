@@ -123,8 +123,8 @@ void test_beats_after_a_gap_start_over() {
 
 
 // 8 beats in time at 128 BPM from 1000 ms: the last (beat 4) at 4281.
-static BeatClock locked() {
-    BeatClock clock;
+static BeatClock locked(uint32_t lead_ms = 0) {
+    BeatClock clock(lead_ms);
     int beat = 1;
     for (int k = 0; k < 8; ++k) {
         clock.edge(beat, static_cast<uint32_t>(1000 + k * 468.75 + 0.5));
@@ -232,6 +232,13 @@ void test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge() {
     TEST_ASSERT_EQUAL(4, clock.beat_at(2357));
 }
 
+// #718: the lead is time, not part of a beat: after a tempo change the next box lights the same 50 ms early.
+void test_a_lead_holds_through_a_tempo_change() {
+    BeatClock clock = locked(50);  // 128 BPM; the last edge, beat 4, at 4281
+    clock.set_tempo(140);          // 428.6 ms: due at 4709.6, lit at 4659.6
+    TEST_ASSERT_UINT32_WITHIN(2, 4660, first_shows(clock, 1, 4281, 5000));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -254,5 +261,6 @@ int main(int, char**) {
     RUN_TEST(test_a_clock_bpm_after_a_stop_doesnt_restart_it);
     RUN_TEST(test_a_lead_lights_the_next_beat_that_much_early);
     RUN_TEST(test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge);
+    RUN_TEST(test_a_lead_holds_through_a_tempo_change);
     return UNITY_END();
 }
