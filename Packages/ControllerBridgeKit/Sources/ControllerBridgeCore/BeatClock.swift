@@ -21,6 +21,17 @@ struct BeatClock {
     /// A boundary hit exactly is the beat's: times are sums of seconds, so allow for their rounding.
     private static let epsilon = 1e-9
 
+    /// The longest lead (cos, #720): the jog display's path (USB, the chip's draw) may need more than the panel's 99 ms.
+    /// Past half a beat the beat just heard shows only briefly, and past a whole beat (200 ms at 300 BPM) not at all.
+    static let longestLead = 0.200
+    /// Each beat shows this long before it's due, so it lands with Syndicate's click, not the path's delay behind it.
+    let lead: Double
+
+    /// `lead`: seconds, kept to 0...`longestLead`.
+    init(lead: Double = 0) {
+        self.lead = min(max(lead, 0), Self.longestLead)
+    }
+
     /// The last beat heard; 0 for none.
     private var beat = 0
     /// When it's taken to have started.
@@ -105,7 +116,7 @@ struct BeatClock {
     /// The beat to show at `now`, 1-4; 0 for none.
     func beat(at now: Double) -> Int {
         guard beat != 0, period > 0 else { return beat }
-        let since = now - edgeAt
+        let since = now + lead - edgeAt
         guard since > 0 else { return beat }
         let ahead = min(Int(((since + Self.epsilon) / period).rounded(.down)), Self.predictBeats)
         var shown = beat

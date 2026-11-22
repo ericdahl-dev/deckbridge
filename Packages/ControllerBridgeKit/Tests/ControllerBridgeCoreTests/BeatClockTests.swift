@@ -114,8 +114,8 @@ struct BeatClockTests {
     }
 
     /// 8 beats in time at 128 BPM from 1000 ms: the last (beat 4) at 4281.
-    static func locked() -> BeatClock {
-        var clock = BeatClock()
+    static func locked(lead: Double = 0) -> BeatClock {
+        var clock = BeatClock(lead: lead)
         for k in 0..<8 { clock.edge(beat(k), at: ms((1000 + Double(k) * 468.75).rounded())) }
         return clock
     }
@@ -189,5 +189,56 @@ struct BeatClockTests {
         clock.stop()
         clock.setTempo(120)
         #expect(clock.beat(at: Self.ms(6000)) == 4)
+    }
+
+    @Test("A lead shows the next beat that much early (#718's model)")
+    func leadShowsEarly() {
+        var clock = BeatClock(lead: Self.ms(50))
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1469))
+        #expect(clock.beat(at: Self.ms(1887)) == 2)
+        #expect(clock.beat(at: Self.ms(1888)) == 3)  // due at 1938, less 50
+    }
+
+    @Test("A lead longer than the time since an edge just heard: that beat still shows, no beat skipped or shown twice")
+    func leadLongerThanSinceEdge() {
+        var clock = BeatClock(lead: Self.ms(50))
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1469))
+        for t in 1469..<1888 { #expect(clock.beat(at: Self.ms(Double(t))) == 2) }
+        for t in 1888..<1938 { #expect(clock.beat(at: Self.ms(Double(t))) == 3) }
+        clock.edge(3, at: Self.ms(1938))
+        for t in 1938..<2357 { #expect(clock.beat(at: Self.ms(Double(t))) == 3) }
+        #expect(clock.beat(at: Self.ms(2357)) == 4)
+    }
+
+    @Test("The lead is time, not part of a beat: after a tempo change the next beat shows the same 50 ms early")
+    func leadHoldsThroughTempoChange() throws {
+        var clock = Self.locked(lead: Self.ms(50))  // the last edge, beat 4, at 4281
+        clock.setTempo(140)                         // 428.6 ms: due at 4709.6, shown at 4659.6
+        let shown = try #require(Self.firstShows(clock, 1, from: 4281, to: 5000))
+        #expect(abs(shown - 4660) <= 2)
+    }
+
+    @Test("A lead shows nothing past what predicting allows: never two past the last edge, the beat heard once stopped")
+    func leadNeverPastPredicting() {
+        let none = BeatClock(lead: Self.ms(50))
+        #expect(none.beat(at: Self.ms(1000)) == 0)
+        var one = BeatClock(lead: Self.ms(50))
+        one.edge(3, at: Self.ms(1000))
+        #expect(one.beat(at: Self.ms(5000)) == 3)
+        var clock = Self.locked(lead: Self.ms(50))
+        #expect(clock.beat(at: Self.ms(4720)) == 1)  // early (due 4750)
+        #expect(clock.beat(at: Self.ms(9000)) == 1)  // and never 2
+        clock.stop()
+        #expect(clock.beat(at: Self.ms(4730)) == 4)
+        #expect(clock.beat(at: Self.ms(9000)) == 4)
+    }
+
+    @Test("The jog display's lead is 0 to 200 ms (cos, #720: its USB path and draw may need more than the panel's 99)",
+          arguments: [(-0.010, 0.0), (0.0, 0.0), (0.200, 0.200), (0.201, 0.200), (1.0, 0.200)])
+    func leadClamped(asked: Double, kept: Double) {
+        #expect(BeatClock(lead: asked).lead == kept)
+        #expect(BeatClock.longestLead == 0.200)
     }
 }
