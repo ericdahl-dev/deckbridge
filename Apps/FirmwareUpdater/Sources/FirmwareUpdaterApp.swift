@@ -25,7 +25,7 @@ enum Live {
     static let usbChanges = IOKitUSBChanges()
     static func updater() -> Updater {
         Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
-                changes: usbChanges.changes, log: FileLog.shared)
+                changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow)
     }
 }
 
