@@ -17,6 +17,8 @@ void BeatClock::edge(int beat, uint32_t at_ms) {
         return;
     }
     if (beat == beat_) return;  // a keepalive
+    // The first beat after a stop starts a new run: the time since the last before it is the pause, not a beat (#718).
+    const bool resumed = stopped_;
     stopped_ = false;
     // Unsigned difference: the clock wrapping is no jump.
     const float since_last = static_cast<float>(at_ms - edge_ms_);
@@ -26,8 +28,8 @@ void BeatClock::edge(int beat, uint32_t at_ms) {
         snap(beat, at_ms);  // out of turn: a cue jump on the master
         return;
     }
-    if (beat_ == 0 || beat != next(beat_) || gap) {
-        // A first beat, or not the next one: a new run starts here.
+    if (beat_ == 0 || beat != next(beat_) || gap || resumed) {
+        // A first beat, not the next one, or the first after a stop: a new run starts here.
         beat_ = beat;
         edge_ms_ = first_ms_ = at_ms;
         edges_ = 0;

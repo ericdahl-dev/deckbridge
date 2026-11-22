@@ -255,6 +255,37 @@ void test_a_lead_never_shows_more_than_predicting_allows() {
     TEST_ASSERT_EQUAL(4, clock.beat_at(9000));
 }
 
+// #718 (agent1's case, #720): the master stops, then plays again soon after. The pause isn't a beat: the clock starts
+// over at the first beat back, with the BPM's length, so the next beat lights the lead early, not a pause late.
+void test_after_a_stop_a_quick_resume_takes_the_bpms_length_not_the_pause() {
+    BeatClock clock = locked(50);  // 128 BPM; the last edge, beat 4, at 4281
+    clock.set_tempo(128);
+    clock.stop();
+    clock.edge(1, 5081);
+    clock.edge(2, 5550);
+    TEST_ASSERT_UINT32_WITHIN(3, 5969, first_shows(clock, 3, 5550, 7000));  // due 6019, less 50
+}
+
+// The same without a BPM (agent1's second case): after the stop, the edges give the length again from the first beat
+// back, never from the pause.
+void test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length() {
+    BeatClock clock = locked();  // 128 BPM from the edges; the last, beat 4, at 4281
+    clock.stop();
+    clock.edge(1, 5081);
+    clock.edge(2, 5550);
+    clock.edge(3, 6019);
+    TEST_ASSERT_UINT32_WITHIN(3, 6488, first_shows(clock, 4, 6019, 7500));
+}
+
+// Stopped, the master's BPM changes (120: 500 ms); the resume takes the new length from its first beat (firmware review).
+void test_a_bpm_change_while_stopped_times_the_resume() {
+    BeatClock clock = locked();  // 128 BPM from the edges; the last, beat 4, at 4281
+    clock.stop();
+    clock.set_tempo(120);
+    clock.edge(1, 5081);
+    TEST_ASSERT_UINT32_WITHIN(2, 5581, first_shows(clock, 2, 5081, 6500));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -279,5 +310,8 @@ int main(int, char**) {
     RUN_TEST(test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge);
     RUN_TEST(test_a_lead_holds_through_a_tempo_change);
     RUN_TEST(test_a_lead_never_shows_more_than_predicting_allows);
+    RUN_TEST(test_after_a_stop_a_quick_resume_takes_the_bpms_length_not_the_pause);
+    RUN_TEST(test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length);
+    RUN_TEST(test_a_bpm_change_while_stopped_times_the_resume);
     return UNITY_END();
 }
