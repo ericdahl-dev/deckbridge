@@ -29,6 +29,10 @@ from urllib.parse import urlsplit
 PAGES = ["index.html", "support/index.html", "privacy/index.html", "capture/index.html",
          "for/lc6000/index.html"]  # /for/<controller>/: one page per supported controller (#268)
 ROOT_FILES = ["robots.txt", "sitemap.xml", "llms.txt"]
+# The page the server sends for a path it doesn't have (#753), in the site's own words, with a link home.
+NOT_FOUND = "404.html"
+NOT_FOUND_HEADING = "Track not found."
+NOT_FOUND_LINK = "Back to DeckBridge"
 SITE = "https://getdeckbridge.app/"
 LLMS_HEADING = "# DeckBridge"
 PRIVACY = "privacy/index.html"
@@ -139,8 +143,12 @@ def css_refs(css):
 
 
 def target(root, file, url):
-    """The file a relative URL on a page points to."""
-    return os.path.normpath(os.path.join(os.path.dirname(os.path.join(root, file)), urlsplit(url).path))
+    """The file a URL on a page points to: relative to the page, or from the site's root when it starts with / (the 404
+    page's, #753: the server sends it for any path, so its own links can't be relative)."""
+    path = urlsplit(url).path
+    if path.startswith("/"):
+        return os.path.normpath(os.path.join(root, path.lstrip("/")))
+    return os.path.normpath(os.path.join(os.path.dirname(os.path.join(root, file)), path))
 
 
 def resolves(root, file, url):
@@ -439,7 +447,7 @@ def problems(root, app_prompts=None, release=None):
     state; None skips it."""
     files = sorted(os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                    for d, _, names in os.walk(root) for f in names)
-    out = [f"{page}: missing" for page in PAGES + ROOT_FILES if page not in files]
+    out = [f"{page}: missing" for page in PAGES + ROOT_FILES + [NOT_FOUND] if page not in files]
     controllers, controller_problems = load_controllers(root)
     out += controller_problems
     if not controller_problems and HOME in files:
@@ -466,6 +474,13 @@ def problems(root, app_prompts=None, release=None):
             with open(path, encoding="utf-8") as f:
                 css = f.read()
             out += check_refs(root, file, [(url, True) for url in css_refs(css)])
+    if NOT_FOUND in files:
+        with open(os.path.join(root, NOT_FOUND), encoding="utf-8") as f:
+            text = f.read()
+        if NOT_FOUND_HEADING not in html.unescape(re.sub(r"<[^>]+>", " ", text)):
+            out.append(f'{NOT_FOUND}: doesn\'t say "{NOT_FOUND_HEADING}"')
+        if not re.search(r'<a [^>]*href="/"[^>]*>\s*' + re.escape(NOT_FOUND_LINK) + r"\s*</a>", text):
+            out.append(f'{NOT_FOUND}: no "{NOT_FOUND_LINK}" link to /')
     if "llms.txt" in files:
         with open(os.path.join(root, "llms.txt"), encoding="utf-8") as f:
             llms = f.read()

@@ -53,6 +53,8 @@ GOOD = {
     "capture/index.html": page(body='<a href="../">Home</a>'),
     "for/lc6000/index.html": page(body='<a href="../../">Home</a>'),
     "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + FEED + WEBSITE),
+    "404.html": page(title="Track not found · DeckBridge", body='<h1>Track not found.</h1><p>This page isn\u2019t in the '
+                     'crate. The decks are still running.</p><a href="/">Back to DeckBridge</a>'),
     "style.css": '@font-face { font-family: Inter; src: url("fonts/Inter-Regular.ttf"); } body { color: #EDEDEA; }',
     "fonts/Inter-Regular.ttf": "font",
     "img/icon.png": "png",
@@ -511,6 +513,15 @@ class CheckSiteTests(unittest.TestCase):
             found = [line for line in lines if line.startswith(row)]
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)
+
+    def test_the_404_page_says_track_not_found_and_links_home(self):
+        # #753: a page the server sends for any path it doesn't have, in the site's own words.
+        self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])
+        wrong = GOOD["404.html"].replace("Track not found.", "Not found").replace('href="/"', 'href="index.html"')
+        self.assertEqual(check_site.problems(self.site({"404.html": wrong})), [
+            '404.html: doesn\'t say "Track not found."',
+            '404.html: no "Back to DeckBridge" link to /',
+        ])
 
     def test_a_third_party_logo_file_fails(self):
         root = self.site({"img/denon-logo.svg": "<svg/>", "img/Syndicate_logo.png": "png"})
