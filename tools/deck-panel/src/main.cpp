@@ -1,7 +1,9 @@
 // The deck panel (#490, #620): joins Wi-Fi, listens for DeckBridge's display feed and shows the deck in front, or the
-// waiting screen with its address and port. Everything runs on Arduino's loop task: the core isn't thread-safe, so
-// the UDP socket is polled here, never read from a callback. Built with DECK_PANEL_TEST_SCREEN (env crowpanel-test),
-// it shows the test screen (#615) instead, with no Wi-Fi.
+// waiting screen with its address and port. The core and LVGL run on Arduino's loop task (core 1): the core isn't
+// thread-safe. By default (#713) the loop's frame reads the feed's socket itself, in its read step. Built with
+// FEED_RX_TASK=1 (lib/feed_flags), a receive task on core 0 owns the socket instead (#664): it stamps each datagram as
+// it arrives into a fixed queue (lib/feed_intake), and the loop's frame drains that into the core. Built with
+// DECK_PANEL_TEST_SCREEN (env crowpanel-test), it shows the test screen (#615) instead, with no Wi-Fi.
 //
 // One frame clock (#663, lib/frame_clock): loop() is one frame. It waits for the panel's latch and the vsync after it
 // (about 1.9 ms later), reads the feed that came since, holds until 4.3 ms after the latch (PANEL_DRAW_AT_US: the
@@ -14,9 +16,12 @@
 #include <esp_timer.h>
 #include <lvgl.h>
 
+#include <atomic>
+
 #include "board_pins.h"
 #include "build_info.h"
 #include "display_driver.h"
+#include "feed_flags.h"
 #include "frame_clock.h"
 #include "panel_mcu.h"
 #include "perf_log.h"
@@ -27,7 +32,7 @@
 #else
 #include "deck_core.h"
 #include "deck_view.h"
-#include "feed_drain.h"
+#include "feed_intake.h"
 #include "feed_udp.h"
 #include "hold_reset.h"
 #include "wifi_link.h"
@@ -86,15 +91,92 @@ frame_clock::Clock g_clock(display_frame_us(), kGuardUs);
 #endif
 
 #ifndef DECK_PANEL_TEST_SCREEN
-// Static, not loop() locals: the drain's 512-byte buffer and the view's text stay off the loop task's 8 KB stack.
+// Static, not loop() locals: the view's text stays off the loop task's 8 KB stack.
 deck_core::DeckCore g_core;
+#if FEED_RX_TASK
+// The feed's intake (#664): the receive task's datagrams, stamped as they arrive, for the loop's frame. 16 slots of
+// 1488 B (on the ESP32: 8 B stamp, 4 B length, the source, 1472 B, rounded to 8), about 23.8 KB. A plain static, so
+// .bss in internal RAM (this sdkconfig puts no .bss in PSRAM), and it must stay there: the drain reads it in the gap
+// before the draw, where a PSRAM read can evict the bounce copy's preload (PANEL_DRAW_AT_US). One producer (the
+// receive task), one consumer (the loop), as feed_intake.h says.
+feed_intake::Intake g_intake;
+// The receive task's alone: it opens, waits on, reads and closes it. A close on one task under another's select() or
+// recvfrom() is what one owner rules out, so the loop never touches it; it only says how Wi-Fi is.
+FeedUdp g_udp;
+std::atomic<bool> g_feed_connected{false};
+std::atomic<uint32_t> g_feed_joins{0};
+#else
+// FEED_RX_TASK=0 (feed_flags.h), the default: no receive task. The drain's 512-byte buffer stays off the loop task's stack.
 feed_drain::Drain g_drain;
 FeedUdp g_udp;
+#endif
 DeckScreen g_screen;
 wifi_setup::HoldReset g_hold;
 uint32_t g_too_big = 0;
+uint32_t g_dropped = 0;
 uint32_t g_health_ms = 0;
 int g_read = 0;  // this frame's drain, for the perf build's count
+
+#if FEED_RX_TASK
+// The receive task (#664). Core 0, lwIP's and Wi-Fi's: the loop's core 1 stays the panel's. Priority 5: above the
+// loop's 1, so a datagram is stamped within a tick of landing however busy the idle side is, and well under lwIP's 18
+// and Wi-Fi's 23, which it waits on anyway. The stack is the core's own UDP task's (CONFIG_ARDUINO_UDP_TASK_STACK_SIZE
+// 4096): lwip_select()'s fd_set copies and callback record (well under 200 B), recvfrom() with no address, and
+// poll()'s printf, the deepest at about 1-1.5 KB; the peek buffer is FeedUdp's, not the stack's. The health line
+// prints what's left. Static, so it can't fail for want of heap.
+constexpr uint32_t kReceiveStackBytes = 4096;
+constexpr UBaseType_t kReceivePriority = 5;
+constexpr BaseType_t kReceiveCore = 0;
+static_assert(sizeof(StackType_t) == 1, "IDF counts a task's stack in bytes");
+StackType_t g_receive_stack[kReceiveStackBytes];
+StaticTask_t g_receive_tcb;
+TaskHandle_t g_receive_task = nullptr;
+
+/// esp_timer, all 64 bits: the intake's clock. The low 32 wrap every 71 minutes, and the core's millisecond stamps
+/// are made from it.
+uint64_t clock_us() { return static_cast<uint64_t>(esp_timer_get_time()); }
+
+/// Waits on the socket (select, FeedUdp::wait) for up to FEED_RX_WAIT_MS, 5 ms: woken by lwIP when a datagram lands,
+/// so it's stamped (at pump()'s find, its clock) microseconds after arrival, and with none, 200 wakes a second, not
+/// #713's 1000 looks. Off Wi-Fi the socket is shut and wait() sleeps the same 5 ms: no spin. The wait is bounded, never
+/// forever, for two reasons: poll() must see a join to reopen the socket, and the USB cable's feed (#711) is pumped
+/// here too, and Serial isn't an lwIP descriptor, so select() can't wake on it. FEED_RX_DELAY_TICKS=N (feed_flags.h)
+/// is #713's look-then-sleep instead, for the A/B builds.
+void receive_loop(void*) {
+    for (;;) {
+        g_udp.poll(g_feed_connected.load(std::memory_order_relaxed), g_feed_joins.load(std::memory_order_relaxed),
+                   millis());
+#if FEED_RX_DELAY_TICKS
+        g_intake.pump(g_udp, clock_us);
+        vTaskDelay(FEED_RX_DELAY_TICKS);
+#else
+        if (g_udp.wait(FEED_RX_WAIT_MS)) g_intake.pump(g_udp, clock_us);
+        // A pump takes at most kMostPerPump; if more are still waiting (a flood), give core 0's idle task a tick, or
+        // wait() returns at once forever and the task watchdog fires (#713's firmware review).
+        if (g_udp.next_size() > 0) vTaskDelay(1);
+#endif
+        // #711, the USB cable: pump its reader here, after each wake, into the same intake (one producer, this task):
+        //   g_intake.pump(g_cable, clock_us, deck_core::Source::cable);
+        // It runs at least every FEED_RX_WAIT_MS, since nothing above waits longer; it must not block either.
+    }
+}
+
+void receive_begin() {
+    g_receive_task = xTaskCreateStaticPinnedToCore(receive_loop, "feed_rx", kReceiveStackBytes, nullptr,
+                                                   kReceivePriority, g_receive_stack, &g_receive_tcb, kReceiveCore);
+    if (g_receive_task == nullptr) Serial.println("deck panel: no feed receive task; the feed won't show");
+}
+
+unsigned receive_stack_free() {
+    return g_receive_task ? unsigned(uxTaskGetStackHighWaterMark(g_receive_task) * sizeof(StackType_t)) : 0u;
+}
+uint32_t feed_too_big() { return g_intake.too_big(); }
+uint32_t feed_dropped() { return g_intake.dropped(); }
+#else
+unsigned receive_stack_free() { return 0; }
+uint32_t feed_too_big() { return g_drain.too_big(); }
+uint32_t feed_dropped() { return 0; }
+#endif
 
 /// Once a minute on serial: the loop task's spare stack and internal RAM, the numbers a long run needs.
 void log_health(uint32_t now_ms) {
@@ -102,10 +184,11 @@ void log_health(uint32_t now_ms) {
     if (now_ms - g_health_ms < kEveryMs) return;
     g_health_ms = now_ms;
 #ifdef PANEL_PERF_LOG
-    display_note_print(96);  // about the line below
+    display_note_print(128);  // about the line below
 #endif
-    Serial.printf("deck panel: loop stack free %u B, internal heap free %u B (lowest %u B)\n",
+    Serial.printf("deck panel: loop stack free %u B, receive stack free %u B, internal heap free %u B (lowest %u B)\n",
                   unsigned(uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t)),
+                  receive_stack_free(),
                   unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
                   unsigned(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL)));
 }
@@ -133,9 +216,9 @@ void build_screen() {
 // framebuffers are PSRAM, its fonts flash rodata) can evict the preload, and then the copy runs cold, 667-969 us
 // against its 666 us margin. That copy ends by +4.26 ms at worst (the slowest seen, cold); with the loop asleep it
 // ran at most 589 us (owner's run c4), ending by about +3.9 ms. So render and refresh start at +4.3 ms, past even
-// the cold worst. The feed's drain runs in the gap: it reads lwIP's buffers and WiFiUDP's, both internal RAM (under
-// the 4096 B PSRAM threshold; Wi-Fi and lwIP buffers not in PSRAM), and feeds the core, a static in internal RAM
-// with no heap. Only its code and a few flash constants pass through the caches. -DPANEL_DRAW_AT_US=0 drops the hold.
+// the cold worst. The feed's drain runs in the gap and feeds the core, with no heap. By default it reads the socket
+// (two recvfrom calls a datagram, a peek and the read, as WiFiUDP did); with the receive task it reads the intake's
+// slots (g_intake, a static in internal RAM) and makes no socket call. -DPANEL_DRAW_AT_US=0 drops the hold.
 #ifndef PANEL_DRAW_AT_US
 #define PANEL_DRAW_AT_US 4300
 #endif
@@ -189,9 +272,38 @@ class PanelBoard : public frame_clock::Board {
     void read_feed() override {
         MARK(read);
 #ifndef DECK_PANEL_TEST_SCREEN
-        // At the frame's start, the vsync after the latch, in the gap before the draw (PANEL_DRAW_AT_US): until the
-        // socket is empty, within the drain's time budget (#636).
+        // At the frame's start, the vsync after the latch, in the gap before the draw (PANEL_DRAW_AT_US): the feed
+        // that came since the last frame. With the receive task, what it queued, each datagram at its arrival (#664),
+        // never more than 16 and no socket call; by default, the socket itself, drained here (feed_drain).
+#if FEED_RX_TASK
+        const feed_intake::Drained got = g_intake.drain(g_core);
+        g_read = got.count;
+#if defined(PANEL_PERF_LOG) && FEED_STAMP_AT_READ
+        // FEED_STAMP_AT_READ=1 (feed_flags.h): the ledger sees the drain's time, as main's did, not the arrivals.
+        if (got.count > 0) {
+            const uint32_t at = now_us();
+            perf_log::feed_seen(at);
+            perf_log::feed_read(at);
+        }
+#elif defined(PANEL_PERF_LOG)
+        // The ledger (#662, in perf_log, the loop's task) learns the arrivals here, not on the receive task: the
+        // oldest for its skip, the newest for its lag, then the read. Each hook replays the latches first. Nothing
+        // read, nothing told: a read with no arrival would count from the read's time.
+        if (got.count > 0) {
+            // TODO(#666): the skip needs the latch before the waking one at its own time. perf_log's replay_latches()
+            // tells only the newest (display_latch()), so after a late frame latches_[1] is an older latch and a skip
+            // can go uncounted. With Scan::latches() ({count, us, previous_us}) replay_latches() would tell
+            // g_ledger.vsync(previous_us) then g_ledger.vsync(us) when count moved by 2 or more (one vsync(us) when by
+            // 1). That change is perf_log.cpp's; nothing to call from here.
+            perf_log::feed_seen(static_cast<uint32_t>(got.oldest_us));
+            perf_log::feed_seen(static_cast<uint32_t>(got.newest_us));
+            perf_log::feed_read(now_us());
+        }
+#endif
+#else
+        // FEED_RX_TASK=0: main's drain, verbatim, on the raw socket now; FeedUdp stamps the ledger (feed_udp.cpp).
         g_read = g_drain.run(g_udp, g_core, millis(), [] { return static_cast<uint32_t>(millis()); });
+#endif
 #endif
     }
 
@@ -229,7 +341,14 @@ class PanelBoard : public frame_clock::Board {
         wifi_link::poll(now);
         g_core.set_network(wifi_link::state(), wifi_link::ip());
         MARK(udp);
+        // For the receive task, which opens the socket on each join and closes it off Wi-Fi (FeedUdp::poll); wifi_link
+        // is this task's, so it's told, not asked. A join seen a millisecond before its state only reopens late.
+#if FEED_RX_TASK
+        g_feed_joins.store(wifi_link::joins(), std::memory_order_relaxed);
+        g_feed_connected.store(wifi_link::state() == deck_core::Network::connected, std::memory_order_relaxed);
+#else
         g_udp.poll(wifi_link::state() == deck_core::Network::connected, wifi_link::joins(), now);
+#endif
         // Touch only off the deck: the waiting, joining and setup screens, where the hold reset lives. On the deck
         // touch_pressed() keeps the last waiting-screen state, which only ever stops a hold (HoldReset), and the
         // first poll back on the waiting screen comes before the hold sees it.
@@ -242,12 +361,17 @@ class PanelBoard : public frame_clock::Board {
         MARK(perf);
         // Serial last, and only with time left; what waits prints at a later frame.
         const bool may_print = time_left(until_us);
-        perf_log::tick(now, g_read, g_drain.too_big(), may_print, g_clock);
+        perf_log::tick(now, g_read, feed_too_big(), feed_dropped(), may_print, g_clock);
         g_read = 0;
         if (!may_print) return;
-        if (g_drain.too_big() != g_too_big) {
-            g_too_big = g_drain.too_big();
-            Serial.printf("deck panel: %lu feed datagrams too big, dropped\n", static_cast<unsigned long>(g_too_big));
+        // Read once: the receive task may count another meanwhile.
+        const uint32_t too_big = feed_too_big();
+        const uint32_t dropped = feed_dropped();
+        if (too_big != g_too_big || dropped != g_dropped) {
+            g_too_big = too_big;
+            g_dropped = dropped;
+            Serial.printf("deck panel: feed datagrams dropped since boot: %lu too big, %lu with the intake full\n",
+                          static_cast<unsigned long>(too_big), static_cast<unsigned long>(dropped));
         }
         log_health(now);
         // The updater's version question (#695), answered with time left: a question waits in Serial's buffer.
@@ -271,6 +395,12 @@ void setup() {
     char boot[96];
     build_info::boot_line(kBuild, boot, sizeof boot);
     Serial.println(boot);
+#if FEED_FLAGS_OFF_DEFAULT
+    // Only off the defaults (feed_flags.h), so a run's log says which build it was.
+    Serial.printf("deck panel: feed flags FEED_RX_TASK=%d FEED_STAMP_AT_READ=%d FEED_RX_WAIT_MS=%d "
+                  "FEED_RX_DELAY_TICKS=%d\n",
+                  FEED_RX_TASK, FEED_STAMP_AT_READ, FEED_RX_WAIT_MS, FEED_RX_DELAY_TICKS);
+#endif
     Wire.begin(board::I2C_SDA, board::I2C_SCL, board::I2C_HZ);
     // The companion chip can come up after the ESP32 (seen at power-on on a V1.4): wait up to 2 s for it, quietly,
     // then let begin() log what it found once.
@@ -293,6 +423,9 @@ void setup() {
 #ifdef DECK_PANEL_TEST_SCREEN
     Serial.println("deck panel: test screen up");
 #else
+#if FEED_RX_TASK
+    receive_begin();     // before Wi-Fi, so the first join's socket opens on it
+#endif
     wifi_link::begin();  // after the backlight: joining takes seconds and must not hold the first frame
     Serial.println("deck panel: deck view up");
 #endif

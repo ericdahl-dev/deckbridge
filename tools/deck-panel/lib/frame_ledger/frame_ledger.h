@@ -20,15 +20,18 @@ class Ledger {
     // Lags kept per window for the median: a 5 s window at the panel's 39 frames/s is about 195.
     static constexpr int kCapacity = 256;
 
-    // A feed datagram was seen waiting on the socket, not read yet.
+    // A feed datagram arrived at `us`, stamped where it came in (#664); it may be told after later vsyncs. Lag counts
+    // from the newest arrival since the last read, the skip from the oldest.
     void arrived(uint32_t us);
-    // A feed datagram was read and handed to the core.
+    // A feed datagram was read and handed to the core. Its frame is skipped if the oldest arrival since the last read came before the latch ahead of
+    // the one that woke this read: a frame went by that could have taken it. The waking latch must already have been
+    // told (vsync), or the count is one short.
     void read(uint32_t us);
     // The frame was handed to the panel.
     void swapped(uint32_t us);
     // A refresh after the read drew nothing: what was read changed nothing on screen, so it waits for no frame.
     void nothing_drawn();
-    // Every vsync, drawing or not.
+    // Every vsync (latch), drawing or not, in order.
     void vsync(uint32_t us);
     // The swap's release: the start of the scan-out that shows the frame. "On glass" means that moment; a row further
     // down shows later by a constant (the deck's beat row about 22 ms), so a camera's numbers differ by that much.
@@ -40,7 +43,11 @@ class Ledger {
     // Seen on the socket, not read yet: the newest.
     bool arrived_ = false;
     uint32_t arrived_us_ = 0;
-    bool arrived_late_ = false;  // a vsync passed since the first of them arrived
+    // The last latches' times, newest at latches_[0]; 0 told so far are unknown.
+    static constexpr int kLatches = 2;
+    uint32_t latches_[kLatches] = {};
+    int latches_told_ = 0;
+    uint32_t oldest_us_ = 0;  // the oldest of them
     // Read, waiting for a frame to be handed over.
     bool waiting_ = false;
     uint32_t waiting_us_ = 0;
