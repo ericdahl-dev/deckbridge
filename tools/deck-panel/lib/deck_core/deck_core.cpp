@@ -187,11 +187,11 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source
                                   uint32_t(bytes[at + 2]) << 8 | uint32_t(bytes[at + 3]);
             at += 4;
             if (size == 0 || size % 4 != 0 || size > length - at) break;  // the framing can't be trusted past here
-            alive = apply(bytes + at, size, now_ms) || alive;
+            alive = apply(bytes + at, size, now_ms, source) || alive;
             at += size;
         }
     } else {
-        alive = apply(bytes, length, now_ms);
+        alive = apply(bytes, length, now_ms, source);
     }
     if (goodbye_) {
         // The waiting screen at once; the deck is kept for the next snapshot.
@@ -208,7 +208,7 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source
     last_heard_ms_ = now_ms;
 }
 
-bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
+bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     Message message;
     if (!parse(bytes, length, message)) return false;
     // DeckBridge's goodbye (ADR 0011, #651): not the deck's state but the feed's end, so not a table row. 1 is the
@@ -216,6 +216,17 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     if (std::strcmp(message.name, "goodbye") == 0) {
         if (message.type == 'i' && message.i == 1) goodbye_ = true;
         return false;
+    }
+    // DeckBridge's bundle number (#750), first in every bundle: counted per source, before anything else is read.
+    if (std::strcmp(message.name, "seq") == 0) {
+        if (message.type == 'i') {
+            const int at = source == Source::cable ? 1 : 0;
+            // Quiet past the wait (an outage, maybe with a DeckBridge restart in it, #750's review): count afresh.
+            if (static_cast<int32_t>(now_ms - seq_ms_[at]) > static_cast<int32_t>(kWaitAfterMs)) seq_[at].restart();
+            seq_ms_[at] = now_ms;
+            seq_[at].saw(static_cast<uint32_t>(message.i));
+        }
+        return true;
     }
     // An address this panel doesn't know is a newer DeckBridge's (ADR 0011): ignored, but the feed is alive.
     bool alive = true;

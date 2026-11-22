@@ -114,6 +114,7 @@ DeckScreen g_screen;
 wifi_setup::HoldReset g_hold;
 uint32_t g_too_big = 0;
 uint32_t g_dropped = 0;
+bool g_seq_seen = false;  // the health line's last word on it, so it says again once a numbered feed comes (#750)
 uint32_t g_health_ms = 0;
 int g_read = 0;  // this frame's drain, for the perf build's count
 
@@ -171,12 +172,12 @@ unsigned receive_stack_free() {
     return g_receive_task ? unsigned(uxTaskGetStackHighWaterMark(g_receive_task) * sizeof(StackType_t)) : 0u;
 }
 uint32_t feed_too_big() { return g_intake.too_big(); }
-uint32_t feed_dropped() { return g_intake.dropped(); }
 #else
 unsigned receive_stack_free() { return 0; }
 uint32_t feed_too_big() { return g_drain.too_big(); }
-uint32_t feed_dropped() { return 0; }
 #endif
+// Datagrams that never came, from DeckBridge's bundle numbers (#750): lwIP's drops and the intake's alike, per source.
+uint32_t feed_dropped() { return g_core.lost(); }
 
 /// Once a minute on serial: the loop task's spare stack and internal RAM, the numbers a long run needs.
 void log_health(uint32_t now_ms) {
@@ -361,17 +362,23 @@ class PanelBoard : public frame_clock::Board {
         MARK(perf);
         // Serial last, and only with time left; what waits prints at a later frame.
         const bool may_print = time_left(until_us);
-        perf_log::tick(now, g_read, feed_too_big(), feed_dropped(), may_print, g_clock);
+        perf_log::tick(now, g_read, feed_too_big(), feed_dropped(), g_core.seq_seen(), may_print, g_clock);
         g_read = 0;
         if (!may_print) return;
         // Read once: the receive task may count another meanwhile.
         const uint32_t too_big = feed_too_big();
         const uint32_t dropped = feed_dropped();
-        if (too_big != g_too_big || dropped != g_dropped) {
+        const bool seq_seen = g_core.seq_seen();
+        if (too_big != g_too_big || dropped != g_dropped || seq_seen != g_seq_seen) {
+            g_seq_seen = seq_seen;
             g_too_big = too_big;
             g_dropped = dropped;
-            Serial.printf("deck panel: feed datagrams dropped since boot: %lu too big, %lu with the intake full\n",
-                          static_cast<unsigned long>(too_big), static_cast<unsigned long>(dropped));
+            if (seq_seen)
+                Serial.printf("deck panel: feed datagrams since boot: %lu too big, %lu lost (sequence gaps)\n",
+                              static_cast<unsigned long>(too_big), static_cast<unsigned long>(dropped));
+            else
+                Serial.printf("deck panel: feed datagrams since boot: %lu too big, lost n/a (no sequence)\n",
+                              static_cast<unsigned long>(too_big));
         }
         log_health(now);
         // The updater's version question (#695), answered with time left: a question waits in Serial's buffer.

@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   var C = window.DeckBridgeCapture;
-  var APP_VERSION = "web 1.0.1";
+  var APP_VERSION = "web 1.1.0";
   var IDLE_SECONDS = 5;
 
   function $(id) { return document.getElementById(id); }

@@ -28,7 +28,14 @@ LC6000 PRIME <--MIDI LEDs-- DeckBridge  <--OSC feedback, port 9096--  Syndicate
 - **Demo controller:** try DeckBridge without hardware. A scripted controller plays against a simulated session.
 - **A second controller:** a second LC6000 can drive another deck.
 - **Syndicate on another Mac:** DeckBridge can reach Syndicate over the local network.
-- **Coming in v1.1:** the jog-wheel display showing art in real time.
+- **New in v1.1:**
+  - The jog display: the jog-wheel display shows the deck's track, key and BPM, with Syndicate's master clock around the ring and the deck's own bar in the needle.
+  - Transpose: Shift + Pitch Bend − / + transposes the deck a semitone, turning its key lock on first.
+  - CDJ-style cue: PLAY while CUE is held keeps the deck playing; Shift + CUE goes back to the cue point and stops. Shift + a hot cue pad jumps there at once.
+  - Channel fader: Needle Drop moves the deck's channel fader in Syndicate, from where it is (Relative) or straight to where you touch (Jump) (Settings › Controller, on by default).
+  - Exact colors: the platter ring and pads light in the deck's and cues' exact colors, with no firmware change (Settings › Decks › Exact colors on the LC6000, on by default); Light brightness sets how bright.
+  - Key display: Settings › Controller › Key display (with the jog display on) writes keys as Syndicate does, traditional or Camelot.
+  - Display feed: DeckBridge can send the deck in front to a display on your local network, unencrypted to the one address you set (Settings › Syndicate › Display feed, off by default).
 
 ## Requirements
 
@@ -52,6 +59,13 @@ Quit djay Pro, Engine DJ or any other app using the controller first, and power-
 Full steps: https://getdeckbridge.app/support/
 
 <!-- FAQ:START: provisional; the final FAQ copy will be synced here later. Keep every Q&A between these markers. -->
+## In the lab
+
+Not in your hands yet: projects on our own desk.
+
+- **A drawn jog display:** on our own LC6000, a reflashed display chip draws the deck itself: its number in the deck color, title and artist, key and BPM, the beat ring, phase against the master, the last minute's warning and the channel meter, live from DeckBridge. This needs custom firmware that is not part of the DeckBridge app and is not offered for download, and DeckBridge never includes or distributes Denon's firmware. On the LC6000's own firmware, DeckBridge shows the deck on the jog display as described above: leave Settings › Controller › Firmware on Denon.
+- **A deck panel:** a 7-inch Wi-Fi display beside the controller shows the deck in front (track, key, BPM, tempo, time left, beat, phase and level) from DeckBridge's display feed. The feed is in DeckBridge, off by default, and sends unencrypted to the one address you set on your local network. The panel is a project on our desk: there's no kit or firmware to download.
+
 ## FAQ
 
 ### Does DeckBridge need djay Pro or Engine DJ?
@@ -60,7 +74,7 @@ No. DeckBridge works with Syndicate only. Quit djay Pro, Engine DJ or any other 
 
 ### Which controllers are supported?
 
-Only the Denon LC6000 PRIME, today. To help add yours, DeckBridge 1.2's Help add it… (in the panel) or Controller not found? (in Settings) records what your controller sends, and you choose whether to email the file: https://getdeckbridge.app/support/#add-controller
+Only the Denon LC6000 PRIME, today. To help add yours, DeckBridge's Help add it… (in the panel) or Controller not found? (in Settings) records what your controller sends, and you choose whether to email the file: https://getdeckbridge.app/support/#add-controller
 
 ### The controller works, but the LEDs stay dark.
 

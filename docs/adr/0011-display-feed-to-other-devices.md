@@ -30,6 +30,7 @@ Every address is under `/DeckBridge/Display/` and carries exactly one value, of 
 | `phase` | `f` | Against the master, 0-1: 0.5 in phase, below behind, above ahead (a half beat at the ends), by the drawn display's phase rule. **-1 is unknown** (the deck stopped, or no offset since it loaded): the one value outside its range |
 | `level` | `f` | The deck's mixer meter, 0-1, on the drawn meter's dB scale (-36 to +16 dB) and ballistics |
 | `goodbye` | `i` | 1: DeckBridge is quitting or the feed was turned off; nothing more follows until a snapshot. A display shows its own idle look (#651). |
+| `seq` | `i` | The bundle's number (#750, 2026-11-22): first in every bundle, counting 1, 2, 3 … the bundles sent to this destination, from 1 each time it opens; a UInt32's bit pattern, so it wraps. A display can count the numbers it never saw as lost datagrams. A number a little behind the last is a late datagram, not a loss; 1, one far behind, or the first after 3 s quiet starts a new count. Not part of the deck's state, and never in a snapshot's comparison |
 
 `bpm`, `tempo`, `clockBpm`, `progress`, `phase` and `level` can follow Syndicate's feedback rate, so they go out together, in one slot about 30 times a second, the latest value winning; nothing is queued. A full snapshot also goes out every 2 seconds as a keepalive, so a message lost on Wi-Fi or dropped while DeckBridge's sender was behind is fixed within 2 s. While the feed is on, DeckBridge asks Syndicate for its Meter and PhaseOffset feedback.
 
