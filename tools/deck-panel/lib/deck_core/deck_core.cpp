@@ -218,6 +218,7 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     }
     // An address this panel doesn't know is a newer DeckBridge's (ADR 0011): ignored, but the feed is alive.
     bool alive = true;
+    const bool was_playing = view_.playing;
     for (const Row& row : kRows) {
         if (std::strcmp(row.name, message.name) != 0) continue;
         alive = row.type == message.type && row.apply(view_, message);
@@ -226,8 +227,9 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     if (alive && std::strcmp(message.name, "beat") == 0) clock_.edge(view_.beat, now_ms);
     if (alive && std::strcmp(message.name, "clockBpm") == 0) clock_.set_tempo(view_.clock_bpm);
     // The deck in front is the master and stopped: so did the master clock, at once (#660). Another deck's pause
-    // says nothing about it.
-    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && !view_.playing) clock_.stop();
+    // says nothing about it, and nor does `playing 0` again (DeckBridge's keepalive, #718): only 1 to 0 is a stop.
+    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && was_playing && !view_.playing)
+        clock_.stop();
     return alive;
 }
 
