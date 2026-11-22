@@ -14,7 +14,7 @@ Work down the steps, and stop at the first one that brings the unit back.
 
 Switch the LC6000 off, wait 5 seconds, and switch it on with no buttons held.
 
-Update mode only lasts until a power cycle. A chip whose update was written and checked starts its new image now. A chip that was only read starts its old one. This has been seen on hardware for both chips (2026-11-19).
+Update mode only lasts until a power cycle. A chip whose update was written and checked starts its new image now. A chip that was only read starts its old one. This has been seen on hardware for both chips (2026-11-19), and again by the owner for the display chip after the updater's update-mode step (2026-11-22).
 
 ## 2. Restore your backup with the updater
 
