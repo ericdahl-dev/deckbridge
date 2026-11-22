@@ -66,6 +66,9 @@ private:
     DeckView view_;
     bool heard_ = false;
     bool goodbye_ = false;  ///< the datagram being read had DeckBridge's goodbye
+    /// The deck in front when the datagram being read began (#718): a `playing` 1 to 0 after the front switched in it
+    /// is the new deck's, not the master stopping.
+    int datagram_deck_ = 0;
     uint32_t last_heard_ms_ = 0;
     /// The USB cable's feed (#667), apart from Wi-Fi's: heard on it, and when last. Within kWaitAfterMs it needs no Wi-Fi.
     bool cable_heard_ = false;
