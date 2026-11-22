@@ -151,6 +151,10 @@ struct PanelUpdateView: View {
                     Text(model.screen.update ?? "")
                     Spacer()
                     Button("Cancel") { model.cancelUpdate() }
+                        .disabled(!model.canCancel)
+                }
+                if let note = model.screen.cancelNote {
+                    Text(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 if let text = model.screen.update { Text(text).fixedSize(horizontal: false, vertical: true) }

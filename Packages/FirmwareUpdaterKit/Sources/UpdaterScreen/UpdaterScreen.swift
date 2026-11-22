@@ -53,8 +53,9 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
     public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, deckBridgeSilent: Bool = false,
-                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil) {
+                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil, writing: Bool = false) {
         self.update = update
+        cancelNote = writing ? Self.noCancelWhileWriting : nil
         self.panelUpdate = panelUpdate
         firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
         switch found.panel {
@@ -86,6 +87,11 @@ public struct UpdaterScreen: Sendable, Equatable {
     public let update: String?
     /// The update offered for the panel over its cable (#687); nil when there's none.
     public let panelUpdate: PanelUpdateOffer?
+    /// Why there's no Cancel: the panel is being written (#744); nil otherwise.
+    public let cancelNote: String?
+
+    public static let noCancelWhileWriting =
+        "The panel can't be stopped while it's written: it has one app slot, so stopping now would leave it unable to start."
 
     /// The log's first look (#734): what each section found, in status words only, never a build, serial number or
     /// port, so the launch smoke check can match it exactly. The LC6000's words don't wait for its warning.

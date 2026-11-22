@@ -88,14 +88,22 @@ public final class Updater {
         return flasher.offer(for: build)
     }
 
-    /// Stops the update: the flasher resets the panel into its app and says what that leaves.
-    public func cancelUpdate() { flashing?.cancel() }
+    /// The update can still be stopped: only before the first erase. The panel has one app slot (until #690), so a
+    /// stop once it's being written would leave it unable to start (#744's live run).
+    public private(set) var canCancel = false
+
+    /// Stops the update before it writes: the flasher resets the panel into its app. Once writing has begun, nothing.
+    public func cancelUpdate() {
+        guard canCancel else { return }
+        flashing?.cancel()
+    }
 
     /// Updates the panel over its cable (#687). DeckBridge is asked for the port first (#710). With no answer (it isn't
     /// running, or it's from before #710) the port is tried anyway; only a busy port then says to free it by hand.
     public func updatePanel() async {
         guard let flasher, !updating else { return }
         updating = true
+        canCancel = true
         let lend = borrow?()
         let outcome = await lend?.borrow() ?? .noAnswer
         let (steps, step) = AsyncStream<PanelUpdate.Step>.makeStream()
@@ -104,6 +112,7 @@ public final class Updater {
             step.finish()
         }
         for await next in steps {
+            if case .writing = next { canCancel = false }
             if case .failed(.portBusy) = next, let text = UpdaterScreen.handoff(outcome) {
                 updateText = text
             } else {
@@ -113,6 +122,7 @@ public final class Updater {
         }
         lend?.giveBack()
         flashing = nil
+        canCancel = false
         updating = false
         // The panel restarted into its new build: look again so the section shows it.
         await refresh()
@@ -156,7 +166,8 @@ public final class Updater {
 
     private func show() {
         screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort,
-                               deckBridgeSilent: deckBridgeSilent, update: updateText, panelUpdate: offer)
+                               deckBridgeSilent: deckBridgeSilent, update: updateText, panelUpdate: offer,
+                               writing: updating && !canCancel)
     }
 
     /// The panel's port busy: DeckBridge holds it for the cable feed. Ask for it, look while it's lent, give it back.

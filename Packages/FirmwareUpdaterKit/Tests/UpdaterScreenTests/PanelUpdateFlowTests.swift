@@ -54,20 +54,33 @@ final class StubFlasher: PanelFlashing, @unchecked Sendable {
     }
 }
 
-/// A flasher that writes until it is canceled, then says so as PanelUpdate does.
-final class WaitingFlasher: PanelFlashing, @unchecked Sendable {
-    func offer(for build: PanelBuild) -> PanelUpdateOffer? { nil }
-    private let state = Mutex((runs: 0, writing: false))
+/// A flasher that reports `first`, then holds until the test finishes it or the update is canceled, and says which.
+final class HeldFlasher: PanelFlashing, @unchecked Sendable {
+    let first: PanelUpdate.Step
+    private let state = Mutex((runs: 0, holding: false, finished: false, sawCancel: false))
     var started: Int { state.withLock { $0.runs } }
-    var writing: Bool { state.withLock { $0.writing } }
+    var holding: Bool { state.withLock { $0.holding } }
+    var sawCancel: Bool { state.withLock { $0.sawCancel } }
+
+    init(first: PanelUpdate.Step) { self.first = first }
+
+    func offer(for build: PanelBuild) -> PanelUpdateOffer? { nil }
+    func finish() { state.withLock { $0.finished = true } }
 
     func flash(report: @escaping @Sendable (PanelUpdate.Step) -> Void) async {
         state.withLock { $0.runs += 1 }
-        report(.writing(0.1))
-        state.withLock { $0.writing = true }
-        while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
-        report(.failed(.canceled))
+        report(first)
+        state.withLock { $0.holding = true }
+        while !state.withLock({ $0.finished }) && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+        if Task.isCancelled {
+            state.withLock { $0.sawCancel = true }
+            report(.failed(.canceled))
+        } else {
+            report(Self.done)
+        }
     }
+
+    static let done = PanelUpdate.Step.done(PanelBuild(sha: "2b7e9c1"))
 }
 
 /// Updating the panel over its cable from the app (#687), with DeckBridge asked for the port first (#710).
@@ -121,31 +134,50 @@ struct PanelUpdateFlowTests {
         #expect(flasher.started == 2)
     }
 
-    @Test("Cancel while writing: the flasher is stopped, says so, and the port goes back")
-    func cancel() async {
+    static func held(_ flasher: HeldFlasher, _ deckBridge: StubDeckBridge = StubDeckBridge(answers: true),
+                     finder: DeviceFinder = Rig().finder) async -> (Updater, Task<Void, Never>) {
+        let updater = Updater(finder: finder, changes: AsyncStream { $0.finish() }, borrow: deckBridge.borrow, flasher: flasher)
+        let run = Task { await updater.updatePanel() }
+        while !flasher.holding { try? await Task.sleep(for: .milliseconds(5)) }
+        return (updater, run)
+    }
+
+    @Test("Cancel before writing: offered, the flasher stops, says so, and the port goes back")
+    func cancelBeforeWriting() async {
         let deckBridge = StubDeckBridge(answers: true)
-        let flasher = WaitingFlasher()
-        let waiting = Updater(finder: Rig().finder, changes: AsyncStream { $0.finish() }, borrow: deckBridge.borrow,
-                              flasher: flasher)
-        let run = Task { await waiting.updatePanel() }
-        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
-        #expect(waiting.updating)
-        waiting.cancelUpdate()
+        let flasher = HeldFlasher(first: .connecting)
+        let (updater, run) = await Self.held(flasher, deckBridge)
+        #expect(updater.updating)
+        #expect(updater.canCancel)
+        updater.cancelUpdate()
         await run.value
-        #expect(waiting.screen.update == "Canceled. The panel was restarted.")
+        #expect(flasher.sawCancel)
+        #expect(updater.screen.update == "Canceled. The panel was restarted.")
         #expect(deckBridge.posted == [.release, .done])
-        #expect(!waiting.updating)
+        #expect(!updater.updating)
+    }
+
+    @Test("Once writing has begun there's no cancel: it says why, a cancel asked for does nothing, and the write ends")
+    func noCancelWhileWriting() async {
+        let flasher = HeldFlasher(first: .writing(0))
+        let (updater, run) = await Self.held(flasher)
+        #expect(!updater.canCancel)
+        #expect(updater.screen.cancelNote == "The panel can't be stopped while it's written: it has one app slot, so stopping now would leave it unable to start.")
+        updater.cancelUpdate()
+        try? await Task.sleep(for: .milliseconds(30))
+        #expect(!flasher.sawCancel)
+        flasher.finish()
+        await run.value
+        #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+        #expect(updater.screen.cancelNote == nil)
     }
 
     @Test("An update asked for while one runs doesn't start a second")
     func oneAtATime() async {
-        let flasher = WaitingFlasher()
-        let only = Updater(finder: Rig().finder, changes: AsyncStream { $0.finish() },
-                           borrow: StubDeckBridge(answers: true).borrow, flasher: flasher)
-        let run = Task { await only.updatePanel() }
-        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
-        await only.updatePanel()
-        only.cancelUpdate()
+        let flasher = HeldFlasher(first: .writing(0))
+        let (updater, run) = await Self.held(flasher)
+        await updater.updatePanel()
+        flasher.finish()
         await run.value
         #expect(flasher.started == 1)
     }
@@ -155,14 +187,11 @@ struct PanelUpdateFlowTests {
         let rig = Rig()
         let usb = SlowUSB()
         let finder = DeviceFinder(usb: usb, midi: rig.midi, serial: rig.serial, log: rig.log)
-        let flasher = WaitingFlasher()
-        let updater = Updater(finder: finder, changes: AsyncStream { $0.finish() },
-                              borrow: StubDeckBridge(answers: true).borrow, flasher: flasher)
-        let run = Task { await updater.updatePanel() }
-        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
+        let flasher = HeldFlasher(first: .writing(0))
+        let (updater, run) = await Self.held(flasher, finder: finder)
         await updater.refresh()
         #expect(usb.reads == 0)
-        updater.cancelUpdate()
+        flasher.finish()
         await run.value
         #expect(usb.reads == 1)   // the one look after the update
     }
