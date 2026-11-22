@@ -224,3 +224,20 @@ i.db-wire { display: block; height: 2px; padding: 0; background: linear-gradient
   @keyframes db-deck-blip { from, to { background: var(--muted); } 1%, 99% { background: var(--accent); } }
   @keyframes db-deck-first { 0%, 24.9% { background: var(--accent); } 25%, 99.9% { background: var(--muted); } 100% { background: var(--accent); } }
 }
+
+/* #753: reading progress as the phase bar, four beat segments along the header's foot, filling as the page scrolls.
+   Only where scroll timelines exist and motion is welcome; anywhere else there's no bar. aria-hidden. */
+.db-phase { display: none; }
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .db-phase { display: flex; gap: 3px; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; pointer-events: none; }
+    .db-phase i { flex: 1; position: relative; background: color-mix(in srgb, var(--muted) 35%, transparent); overflow: hidden; }
+    .db-phase i::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left;
+      animation: db-phase-fill linear both; animation-timeline: scroll(root); }
+    .db-phase i:nth-child(1)::after { animation-range: 0% 25%; }
+    .db-phase i:nth-child(2)::after { animation-range: 25% 50%; }
+    .db-phase i:nth-child(3)::after { animation-range: 50% 75%; }
+    .db-phase i:nth-child(4)::after { animation-range: 75% 100%; }
+    @keyframes db-phase-fill { to { transform: scaleX(1); } }
+  }
+}

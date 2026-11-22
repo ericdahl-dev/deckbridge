@@ -564,6 +564,21 @@ class CheckSiteTests(unittest.TestCase):
         motion = css[css.index("@media (prefers-reduced-motion: no-preference)"):]
         self.assertIn("db-decks", motion)
 
+    def test_the_header_has_a_four_beat_reading_bar_only_with_scroll_timelines_and_motion(self):
+        # #753: a 2px bar of four beat segments in the home page's header fills as you scroll, through
+        # animation-timeline: scroll(); without support, or under reduced motion, there's no bar at all.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        header = home[home.index('<header class="nav'):home.index("</header>")]
+        self.assertRegex(header, r'<span class="db-phase" aria-hidden="true">(<i></i>){4}</span>')
+        with open(os.path.join(site, "site.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertRegex(css, r"\.db-phase \{[^}]*display: none")
+        shown = css[css.index("@supports (animation-timeline: scroll())"):]
+        self.assertIn("@media (prefers-reduced-motion: no-preference)", shown)
+        self.assertIn("animation-timeline: scroll(", shown)
+
     def test_the_404_page_says_track_not_found_and_links_home(self):
         # #753: a page the server sends for any path it doesn't have, in the site's own words.
         self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])
