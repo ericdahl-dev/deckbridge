@@ -241,4 +241,37 @@ struct BeatClockTests {
         #expect(BeatClock(lead: asked).lead == kept)
         #expect(BeatClock.longestLead == 0.200)
     }
+
+    // Beyond the panel's cases (#720 review): each pins a line the ported cases let through.
+
+    @Test("One message 30 ms late moves the next beat only a quarter of the clipped 10 ms: within 5 ms of due")
+    func lateMessageIsClipped() throws {
+        var clock = BeatClock()
+        for k in 0..<8 {
+            clock.edge(Self.beat(k), at: Self.ms((1000 + Double(k) * 468.75).rounded() + (k == 7 ? 30 : 0)))
+        }
+        let shown = try #require(Self.firstShows(clock, Self.beat(8), from: 4600, to: 4900))
+        #expect(abs(shown - 4750) <= 5)
+    }
+
+    @Test("A snap early in a run keeps the tempo it had: the next beats aren't averaged back to the run's first edge")
+    func snapEarlyKeepsTempo() throws {
+        var clock = BeatClock()
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1469))
+        clock.edge(4, at: Self.ms(1700))  // out of turn: 3 was next
+        clock.edge(1, at: Self.ms(2169))
+        let shown = try #require(Self.firstShows(clock, 2, from: 2169, to: 3000))
+        #expect(abs(shown - 2638) <= 3)
+    }
+
+    @Test("With the BPM, an edge late inside the snap distance moves the beat's place but never its length")
+    func bpmLateEdgeKeepsLength() throws {
+        var clock = BeatClock()
+        clock.setTempo(128)
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1500))  // 31 ms late: clipped to 10, a quarter of it taken
+        let shown = try #require(Self.firstShows(clock, 3, from: 1500, to: 2100))
+        #expect(abs(shown - 1940) <= 3)
+    }
 }
