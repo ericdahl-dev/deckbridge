@@ -26,7 +26,14 @@ WEBSITE = ('<h2>This website</h2><p>It counts visits with PostHog and sets no co
            ' To have your visits removed, email us. On the capture page it counts only that a capture started and finished.</p>'
            '<p>The web capture saves the file on your computer; nothing is uploaded.</p>')
 
-CAPTURE_LD = '<script type="application/ld+json">{"text": "Record it at https://getdeckbridge.app/capture/."}</script>'
+FEED = ('<p>If you turn on the display feed, it also sends the deck in front\'s state, including track title and artist,'
+        ' unencrypted to the one address you set on your local network.</p>')
+
+CAPTURE_LD = ('<script type="application/ld+json">{"@type": "FAQPage", "mainEntity": [{"@type": "Question", '
+              '"name": "Which controllers does DeckBridge support?", "acceptedAnswer": {"@type": "Answer", '
+              '"text": "The LC6000 PRIME. Record yours at https://getdeckbridge.app/capture/."}}]}</script>')
+
+CONTROLLERS = '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}]\n'
 
 PRICE_LD = ('<script type="application/ld+json">{"@graph": [{"@type": "SoftwareApplication", '
             '"offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}, {"@type": "FAQPage", "mainEntity": '
@@ -34,15 +41,18 @@ PRICE_LD = ('<script type="application/ld+json">{"@graph": [{"@type": "SoftwareA
             '"text": "DeckBridge is free."}}]}]}</script>')
 
 GOOD = {
+    "controllers.json": CONTROLLERS,
     "index.html": page(head='<link rel="stylesheet" href="style.css"><link rel="icon" href="img/icon.png">' + CAPTURE_LD + PRICE_LD,
                        body='<a href="support/">Support</a> <a href="privacy/">Privacy</a> <img src="img/icon.png" alt="">'
                             ' <a href="capture/">record it in your browser</a>'
+                            ' <ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" data-status="supported">'
+                            'Denon DJ LC6000 PRIME</li></ul>'
                             ' <a href="for/lc6000/">DeckBridge for the LC6000</a>'
                             ' <a href="https://testflight.apple.com/join/XXXX">TestFlight</a>'),
     "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'),
     "capture/index.html": page(body='<a href="../">Home</a>'),
     "for/lc6000/index.html": page(body='<a href="../../">Home</a>'),
-    "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + WEBSITE),
+    "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + FEED + WEBSITE),
     "style.css": '@font-face { font-family: Inter; src: url("fonts/Inter-Regular.ttf"); } body { color: #EDEDEA; }',
     "fonts/Inter-Regular.ttf": "font",
     "img/icon.png": "png",
@@ -108,6 +118,8 @@ class CheckSiteTests(unittest.TestCase):
                                body='<img src="//cdn.example.com/a.png" alt=""> <script src="http://x.example/t.js"></script>'
                                     ' <a href="https://testflight.apple.com/join/XXXX">ok</a>'
                                     ' <a href="support/">s</a> <a href="privacy/">p</a> <a href="capture/">c</a>'
+                                    ' <ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" data-status="supported">'
+                                    'x</li></ul>'
                                     ' <a href="for/lc6000/">l</a>'),
             "style.css": '@import url("https://fonts.example/x.css"); body { background: url(https://x.example/bg.png); }',
         })
@@ -220,12 +232,66 @@ class CheckSiteTests(unittest.TestCase):
         self.assertEqual(check_site.problems(root), ["support/index.html: no <title>",
                                                      "support/index.html: no meta description"])
 
+    def test_saying_nothing_goes_to_the_network_must_name_the_display_feed(self):
+        """With the display feed on, the deck in front goes to the address the DJ sets (#632, ADR 0011): a sentence
+        that says nothing goes to the network must say so, in its HTML text, its JSON-LD and index.md alike."""
+        root = self.site({
+            "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                                            '<p>A scripted controller plays, with nothing sent to the network.</p>'),
+            "for/lc6000/index.html": page(head='<script type="application/ld+json">{"text": "Nothing goes to the network, and it\'s off at launch."}</script>',
+                                          body='<a href="../../">Home</a>'),
+            "index.md": "Yes. Nothing goes to the network.\n",
+        })
+        self.assertEqual(check_site.problems(root), [
+            'for/lc6000/index.html: says nothing goes to the network without naming the display feed: "Nothing goes to the network, and it\'s off at launch."',
+            'index.md: says nothing goes to the network without naming the display feed: "Nothing goes to the network."',
+            'support/index.html: says nothing goes to the network without naming the display feed: "A scripted controller plays, with nothing sent to the network."',
+        ])
+
+    def test_naming_the_display_feed_in_that_sentence_passes(self):
+        root = self.site({
+            "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                                            '<p>Nothing goes to the network unless you turn on the display feed, and then only'
+                                            ' unencrypted to the one address you set on your local network.</p>'),
+        })
+        self.assertEqual(check_site.problems(root), [])
+
+    def test_the_privacy_page_must_disclose_the_display_feed(self):
+        """The owner's wording (#632): what the feed sends, unencrypted, to the one address set on the local network."""
+        root = self.site({"privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + WEBSITE)})
+        self.assertEqual(check_site.problems(root), [
+            'privacy/index.html: doesn\'t say "display feed"',
+            'privacy/index.html: doesn\'t say "including track title and artist"',
+            'privacy/index.html: doesn\'t say "unencrypted to the one address you set on your local network"',
+        ])
+
+    def test_saying_only_syndicate_or_nothing_leaves_the_mac_must_name_the_display_feed(self):
+        root = self.site({"support/index.html": page(
+            body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                 '<p>It only talks to your LC6000 controller and to Syndicate. Nothing leaves your Mac except OSC.'
+                 ' It only sends OSC messages to Syndicate, and the display feed if you turn it on.</p>')})
+        self.assertEqual(check_site.problems(root), [
+            'support/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It only talks to your LC6000 controller and to Syndicate."',
+            'support/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "Nothing leaves your Mac except OSC."',
+        ])
+
+    def test_the_rule_reads_meta_descriptions_and_sends_only_to(self):
+        root = self.site({
+            "capture/index.html": page(description="It only talks to your LC6000 controller and to Syndicate.",
+                                       body='<a href="../">Home</a>'),
+            "index.md": "It sends OSC messages only to Syndicate, on this Mac by default.\n",
+        })
+        self.assertEqual(check_site.problems(root), [
+            'capture/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It only talks to your LC6000 controller and to Syndicate."',
+            'index.md: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It sends OSC messages only to Syndicate, on this Mac by default."',
+        ])
+
     def test_the_privacy_page_must_say_no_data_is_collected(self):
-        root = self.site({"privacy/index.html": page(body="<p>We care about your privacy.</p>" + WEBSITE)})
+        root = self.site({"privacy/index.html": page(body="<p>We care about your privacy.</p>" + FEED + WEBSITE)})
         self.assertEqual(check_site.problems(root), ['privacy/index.html: doesn\'t say "collects no data"'])
 
     def test_the_privacy_page_must_disclose_the_website_analytics(self):
-        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data. This site uses no cookies.</p>")})
+        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data. This site uses no cookies.</p>" + FEED)})
         self.assertEqual(check_site.problems(root), [
             'privacy/index.html: doesn\'t say "posthog"',
             'privacy/index.html: doesn\'t say "anonymous hash that changes every day"',
@@ -240,7 +306,7 @@ class CheckSiteTests(unittest.TestCase):
     def test_the_privacy_page_must_disclose_the_web_capture(self):
         without = WEBSITE.replace(" On the capture page it counts only that a capture started and finished.", "").replace(
             "<p>The web capture saves the file on your computer; nothing is uploaded.</p>", "")
-        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data.</p>" + without)})
+        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data.</p>" + FEED + without)})
         self.assertEqual(check_site.problems(root), [
             'privacy/index.html: doesn\'t say "web capture"',
             'privacy/index.html: doesn\'t say "nothing is uploaded"',
@@ -284,7 +350,7 @@ class CheckSiteTests(unittest.TestCase):
 
     def test_the_home_page_links_the_web_capture_in_the_faq_and_its_json_ld(self):
         no_link = GOOD["index.html"].replace(' <a href="capture/">record it in your browser</a>', "")
-        no_ld = GOOD["index.html"].replace(CAPTURE_LD, "")
+        no_ld = GOOD["index.html"].replace(" Record yours at https://getdeckbridge.app/capture/.", "")
         self.assertEqual(check_site.problems(self.site({"index.html": no_link})),
                          ["index.html: doesn't link the web capture (capture/)"])
         self.assertEqual(check_site.problems(self.site({"index.html": no_ld})),
@@ -310,6 +376,49 @@ class CheckSiteTests(unittest.TestCase):
                           "not https://getdeckbridge.app/for/lc6000/"])
         self.assertEqual(check_site.problems(self.site({"for/lc6000/index.html": own})), [])
 
+    def test_controllers_json_is_the_one_list_of_controllers(self):
+        self.assertEqual(check_site.problems(self.site(remove=["controllers.json"])), ["controllers.json: missing"])
+        bad = check_site.problems(self.site({"controllers.json": "[{"}))
+        self.assertEqual(len(bad), 1, bad)
+        self.assertTrue(bad[0].startswith("controllers.json: doesn't parse as JSON: "), bad)
+        self.assertEqual(check_site.problems(self.site({"controllers.json": '[{"name": "", "maker": "Denon DJ"}, {"maker": "x"}]'})), [
+            "controllers.json[0]: needs a name and a maker",
+            "controllers.json[1]: needs a name and a maker",
+            "controllers.json: lists no supported controller",
+        ])
+        self.assertEqual(check_site.problems(self.site({"controllers.json":
+            '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}, {"name": "DDJ-400", "maker": "Pioneer DJ", "status": "soon"}]'})),
+            ['controllers.json[1]: status "soon" isn\'t one of supported, in progress'])
+
+    def test_the_home_page_lists_exactly_controllers_json(self):
+        drifted = GOOD["index.html"].replace('data-controller="Denon DJ LC6000 PRIME"', 'data-controller="Denon DJ LC6000"')
+        self.assertEqual(check_site.problems(self.site({"index.html": drifted})), [
+            "index.html: its controller list (Denon DJ LC6000: supported) isn't controllers.json's "
+            "(Denon DJ LC6000 PRIME: supported)",
+        ])
+        missing = GOOD["index.html"].replace('<ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" '
+                                             'data-status="supported">Denon DJ LC6000 PRIME</li></ul>', "")
+        self.assertEqual(check_site.problems(self.site({"index.html": missing})), [
+            "index.html: its controller list (none) isn't controllers.json's (Denon DJ LC6000 PRIME: supported)",
+        ])
+
+    def test_the_faq_json_ld_names_every_supported_controller(self):
+        home = GOOD["index.html"].replace("The LC6000 PRIME.", "One controller.")
+        self.assertEqual(check_site.problems(self.site({"index.html": home})), [
+            'index.html: the JSON-LD answer to "Which controllers does DeckBridge support?" doesn\'t name LC6000 PRIME',
+        ])
+        no_question = GOOD["index.html"].replace("Which controllers does DeckBridge support?", "What is it?")
+        self.assertEqual(check_site.problems(self.site({"index.html": no_question})), [
+            'index.html: the JSON-LD has no "Which controllers does DeckBridge support?" question',
+        ])
+
+    def test_an_in_progress_controller_is_allowed(self):
+        home = GOOD["index.html"].replace("</ul>", '<li data-controller="Pioneer DJ DDJ-400" data-status="in progress">'
+                                                    'Pioneer DJ DDJ-400, in progress</li></ul>')
+        root = self.site({"index.html": home, "controllers.json":
+            '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}, {"name": "DDJ-400", "maker": "Pioneer DJ", "status": "in progress"}]'})
+        self.assertEqual(check_site.problems(root), [])
+
     def test_the_price_and_the_faq_answer_agree(self):
         paid = GOOD["index.html"].replace('"price": "0"', '"price": "9.99"')
         self.assertEqual(check_site.problems(self.site({"index.html": paid})), [
@@ -333,20 +442,54 @@ class CheckSiteTests(unittest.TestCase):
         root = self.site({"support/index.html": page(body='<a href="../">Home</a>', footer="<footer></footer>")})
         self.assertEqual(check_site.problems(root), ['support/index.html: the footer doesn\'t name "Untitled Audio Syndicate Ltd."'])
 
+    def test_the_stated_beta_version_is_the_latest_release(self):
+        # The site says which version is on TestFlight; it's CHANGELOG.md's newest release, in text and JSON-LD.
+        page = ('<p>Version 1.0.1 is in beta on TestFlight now.</p><p>DeckBridge 1.0.1 is available now as a beta.</p>'
+                '<script type="application/ld+json">{"softwareVersion": "1.0.1"}</script>')
+        self.assertEqual(check_site.version_problems("index.html", page, "1.1.0"), [
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+        ])
+        self.assertEqual(check_site.version_problems("index.html", page.replace("1.0.1", "1.1.0"), "1.1.0"), [])
+        self.assertEqual(check_site.version_problems("llms.txt", "- Status: version 1.0.1 is on TestFlight", "1.1.0"),
+                         ['llms.txt: says version 1.0.1, not the latest release 1.1.0'])
+        self.assertEqual(check_site.version_problems("index.md", "- **Version 1.0.1** is in beta", "1.1.0"),
+                         ['index.md: says version 1.0.1, not the latest release 1.1.0'])
+        # Not a statement of the beta: the plan for v1.1, the web capture's own version, Syndicate's version.
+        self.assertEqual(check_site.version_problems("x.js", 'Coming in v1.1. var APP_VERSION = "web 1.0.1";', "1.1.0"), [])
+        self.assertEqual(check_site.version_problems("index.md", "Syndicate's own MIDI mapping (version 0.3.7) can't", "1.1.0"), [])
+
+    def test_the_latest_release_is_the_changelogs_newest(self):
+        self.assertEqual(check_site.latest_release("# Changes\n\n## 1.1.0\n\n- x\n\n## 1.0.2\n"), "1.1.0")
+        changelog = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "CHANGELOG.md")
+        with open(changelog, encoding="utf-8") as f:
+            release = check_site.latest_release(f.read())
+        website = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        self.assertEqual([p for p in check_site.problems(website, release=release) if "latest release" in p], [])
+
     def test_the_readme_names_the_company_in_full(self):
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
             self.assertEqual(check_site.company_problems("README.md", f.read()), [])
 
-    def test_the_readme_documents_shift_needle_drop(self):
-        # Shift + Needle Drop on the channel fader (#609): the README's LC6000 controls table has a row for it, with the
-        # address it sends, both modes, the Volume feedback Relative needs, and the Settings switch.
+    def test_the_readme_documents_the_needle_drop_fader(self):
+        # Needle Drop on the channel fader (#609), the plain touch since #729: the README's LC6000 controls table has a
+        # row for it, with the address it sends, both modes, the Volume feedback Relative needs, and the Settings switch.
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
-            rows = [line for line in f if line.startswith("| Shift + Needle Drop")]
-        self.assertEqual(len(rows), 1, "one Shift + Needle Drop row")
+            rows = [line for line in f if line.startswith("| Needle Drop strip")]
+        self.assertEqual(len(rows), 1, "one Needle Drop row")
         for words in ("Mixer/CH", "Volume", "Relative", "Jump", "Settings"):
             self.assertIn(words, rows[0])
+
+    def test_the_lc6000_page_says_needle_drop_moves_the_fader(self):
+        # #729, the owner's wording: the strip moves the deck's channel fader, and Shift + the strip seeks.
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website", "for", "lc6000", "index.html")
+        with open(page, encoding="utf-8") as f:
+            rows = [line.strip() for line in f if "<dt>Needle Drop strip</dt>" in line]
+        self.assertEqual(rows, ["<div><dt>Needle Drop strip</dt><dd>Moves the deck’s channel fader. With Shift, seeks"
+                                " while you touch it.</dd></div>"])
 
     def test_the_readme_documents_shift_hot_cue(self):
         # Shift + hot cue pad on a stopped deck (#358, #363): the README's LC6000 controls table has a row for it, naming
@@ -359,11 +502,12 @@ class CheckSiteTests(unittest.TestCase):
             self.assertIn(words, rows[0])
 
     def test_the_readme_says_paused_seeks_reset_quantize(self):
-        # Paused jog and needle seeks hold quantize at None, then Use Global (#366): their README rows say so.
+        # Paused jog and needle seeks hold quantize at None, then Use Global (#366): their README rows say so. The
+        # needle's seek is Shift + the strip since #729.
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
             lines = f.readlines()
-        for row in ("| Jog while paused", "| Needle Drop strip"):
+        for row in ("| Jog while paused", "| Shift + Needle Drop strip"):
             found = [line for line in lines if line.startswith(row)]
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)
@@ -377,7 +521,7 @@ class CheckSiteTests(unittest.TestCase):
     def test_titles_and_headings_dont_use_other_companies_names(self):
         root = self.site({
             "support/index.html": page(title="Syndicate Bridge Support", body='<h1>Denon <em>Controller</em> Help</h1><a href="../">Home</a>'),
-            "privacy/index.html": page(body="<h1>Privacy</h1><p>Works with Syndicate. DeckBridge collects no data.</p>" + WEBSITE),
+            "privacy/index.html": page(body="<h1>Privacy</h1><p>Works with Syndicate. DeckBridge collects no data.</p>" + FEED + WEBSITE),
         })
         self.assertEqual(check_site.problems(root), ['support/index.html: the <title> names Syndicate',
                                                      'support/index.html: the <h1> names Denon'])

@@ -26,7 +26,13 @@ class Meter {
   public:
     explicit Meter(uint32_t budget_ns) : budget_ns_(budget_ns) {}
     // One chunk's copy took this long.
-    void copied(uint32_t took_us);
+    // In the header so the board's IRAM copy wrapper inlines it: no flash call per chunk (#666).
+    void copied(uint32_t took_us) {
+        ++window_.chunks;
+        if (took_us > window_.worst_us) window_.worst_us = took_us;
+        if (static_cast<uint64_t>(took_us) * 1000u > budget_ns_) ++window_.late;
+        if (static_cast<uint64_t>(took_us) * 1000u > 2ull * budget_ns_) ++window_.past_glass;
+    }
     // This window's numbers, and a new window.
     Report take();
 

@@ -429,9 +429,10 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var lsbCC: Int
         public var touchNote: Int
         public var requireTouch: Bool
-        /// Whether Shift + the strip moves the deck's channel fader (#609) instead of seeking.
+        /// Whether the strip moves the deck's channel fader (#609): on a plain touch since #729, with Shift + the strip
+        /// seeking; off, the strip seeks either way. `shift_fader` keeps #609's name so existing profiles still load.
         public var shiftFader: Bool
-        /// How Shift + the strip moves the channel fader (#609): from its level by the travel, or to the finger.
+        /// How the strip moves the channel fader (#609): from its level by the travel, or to the finger.
         public var shiftFaderMode: ShiftFaderMode
 
         public enum ShiftFaderMode: String, Equatable, Sendable, Codable, CaseIterable {

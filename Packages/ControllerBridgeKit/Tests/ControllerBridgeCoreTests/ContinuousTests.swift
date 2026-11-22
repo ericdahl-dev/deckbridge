@@ -189,11 +189,12 @@ struct ContinuousTests {
         cc(rig, 65, lsb)
     }
 
-    @Test("Needle Drop seeks only while the strip is touched: 127/127 seeks to the end, 64/0 just past the middle")
+    @Test("Shift + Needle Drop seeks only while the strip is touched: 127/127 seeks to the end, 64/0 just past the middle")
     func needleSeeksWhileTouched() throws {
         let rig = try Self.started()
         Self.strip(rig, 64, 0)
         #expect(rig.osc.sent == [])
+        rig.coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)   // Shift: seek (#729)
         rig.coordinator.midi(.noteOn(channel: 0, note: 70, velocity: 127), source: Rig.lc6000.id)
         Self.strip(rig, 127, 127)
         Self.strip(rig, 64, 0)   // 8192 / 16383

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "beat_clock.h"
 #include "deck_face.h"
 #include "deck_types.h"
 
@@ -49,6 +50,8 @@ public:
     void set_network(Network state, const char* ip);
     /// The setup network's name and password, for the waiting screen while Network::setup (#622).
     void set_setup(const char* name, const char* password);
+    /// The firmware's version and SHA as one short line, for every waiting screen (#695); the board sets it once.
+    void set_build(const char* label);
     /// Whether the last render() showed the waiting screen (joining and setup included), not the deck: true before the
     /// first render. Hold-to-reset counts only then (#622), never while a deck shows, cable or Wi-Fi (#667).
     bool waiting() const { return shown_waiting_; }
@@ -58,11 +61,14 @@ public:
 private:
     WaitingView waiting_view() const;
     /// One message: applied if it's one the panel takes; true if it keeps the feed alive.
-    bool apply(const uint8_t* bytes, size_t length);
+    bool apply(const uint8_t* bytes, size_t length, uint32_t now_ms);
 
     DeckView view_;
     bool heard_ = false;
     bool goodbye_ = false;  ///< the datagram being read had DeckBridge's goodbye
+    /// The deck in front when the datagram being read began (#718): a `playing` 1 to 0 after the front switched in it
+    /// is the new deck's, not the master stopping.
+    int datagram_deck_ = 0;
     uint32_t last_heard_ms_ = 0;
     /// The USB cable's feed (#667), apart from Wi-Fi's: heard on it, and when last. Within kWaitAfterMs it needs no Wi-Fi.
     bool cable_heard_ = false;
@@ -71,10 +77,13 @@ private:
     char ip_[16] = "";
     char setup_name_[24] = "";
     char setup_password_[16] = "";
+    char build_[48] = "";
     // What the screen was last told.
     bool shown_ = false;
     bool shown_waiting_ = true;
     DeckView shown_view_;
+    int shown_beat_ = 0;  ///< the clock's beat the screen was last told
+    BeatClock clock_{BeatClock::kLeadMs};
     /// What the deck page was last told, the face its objects hold; drawn_ once it has been told once.
     Face shown_face_;
     bool drawn_ = false;
