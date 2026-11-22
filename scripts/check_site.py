@@ -179,6 +179,25 @@ def company_problems(file, text):
     return [f'{file}: names "Untitled Audio" without "Syndicate Ltd."'] if BARE_COMPANY.search(text) else []
 
 
+# The version the site says is on TestFlight: CHANGELOG.md's newest release, in the text and the JSON-LD.
+# DeckBridge's version as a statement ("Version 1.1.0 is in beta", "DeckBridge 1.1.0 on TestFlight"), not Syndicate's.
+STATED_VERSION = re.compile(r'(?:\b(?:[Vv]ersion|DeckBridge)\s+(\d+\.\d+\.\d+)(?=\**\s+(?:is|on)\b)'
+                            r'|"softwareVersion":\s*"(\d+\.\d+\.\d+)")')
+RELEASE_HEADING = re.compile(r"^## (\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
+
+
+def latest_release(changelog):
+    """CHANGELOG.md's newest release: its first "## x.y.z" heading."""
+    found = RELEASE_HEADING.search(changelog)
+    return found.group(1) if found else None
+
+
+def version_problems(file, text, release):
+    """Each place the file states a version other than the latest release."""
+    return [f"{file}: says version {v}, not the latest release {release}"
+            for v in ("".join(m) for m in STATED_VERSION.findall(text)) if v != release]
+
+
 def json_ld_nodes(blocks):
     """Every object in the page's JSON-LD blocks, at any depth."""
     out = []
@@ -414,9 +433,10 @@ def questions(node):
     return found
 
 
-def problems(root, app_prompts=None):
+def problems(root, app_prompts=None, release=None):
     """`app_prompts`: the app's capture prompt list (#190), which the site's capture/prompts.json must equal byte for
-    byte; None skips the check (a site checked on its own)."""
+    byte; None skips the check (a site checked on its own). `release`: CHANGELOG.md's newest, the version the site must
+    state; None skips it."""
     files = sorted(os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                    for d, _, names in os.walk(root) for f in names)
     out = [f"{page}: missing" for page in PAGES + ROOT_FILES if page not in files]
@@ -436,6 +456,8 @@ def problems(root, app_prompts=None):
                 text = f.read()
             out += company_problems(file, text)
             out += network_problems(file, text)
+            if release:
+                out += version_problems(file, text, release)
             if PLACEHOLDER.search(text):
                 out.append(f"{file}: still has a TODO(user) TestFlight placeholder")
             if file.endswith(".html"):
@@ -463,7 +485,12 @@ def main():
     root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
     # The app's prompt list, when this repo has it (on the site branch before main is merged in, it may not).
     app = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", APP_PROMPTS)
-    found = problems(root, app_prompts=app if os.path.isfile(app) else None)
+    changelog = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "CHANGELOG.md")
+    release = None
+    if os.path.isfile(changelog):
+        with open(changelog, encoding="utf-8") as f:
+            release = latest_release(f.read())
+    found = problems(root, app_prompts=app if os.path.isfile(app) else None, release=release)
     for problem in found:
         print("FAIL:", problem)
     print("== Site check passed" if not found else f"== {len(found)} site problem(s)")
