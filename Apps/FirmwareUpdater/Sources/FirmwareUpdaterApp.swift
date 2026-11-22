@@ -10,7 +10,11 @@ struct FirmwareUpdaterApp: App {
         Window("Firmware Updater", id: "updater") {
             UpdaterView(model: model)
                 .frame(minWidth: 480, minHeight: 360)
-                .task { await model.refresh() }
+                .task {
+                    await model.refresh()
+                    FileLog.shared.log(model.screen.firstLookLine)
+                    if SmokeLaunch.isOn { SmokeLaunch.finish() }
+                }
         }
         .windowResizability(.contentSize)
     }
