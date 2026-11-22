@@ -21,7 +21,7 @@ public struct WritePlan: Sendable, Equatable {
         self.chip = chip
         self.backup = backup
         var sectors: [Sector] = [], changed = 0
-        for (start, length) in chip.sectors {
+        for (start, length) in chip.flashSectors {
             // Below the app area (the start-up code, the settings) is never written.
             guard start >= chip.app.address else { continue }
             let from = Int(start - chip.app.address), to = from + length
@@ -68,7 +68,7 @@ public struct WritePlan: Sendable, Equatable {
 extension ChipKind {
     /// The flash sectors, as the chip's layout in update mode gives them (UpdateModeDevices): four 16 KB, one 64 KB,
     /// then 128 KB ones, seven on the display chip's 1 MB and one on the top panel chip's 256 KB.
-    var sectors: [(UInt32, Int)] {
+    public var flashSectors: [(UInt32, Int)] {
         var out: [(UInt32, Int)] = [], at: UInt32 = 0x0800_0000
         let sizes = [0x4000, 0x4000, 0x4000, 0x4000, 0x1_0000] + Array(repeating: 0x2_0000, count: self == .display ? 7 : 1)
         for size in sizes {
