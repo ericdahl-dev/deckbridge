@@ -46,17 +46,7 @@ final class UpdateModel {
         defer { running = false }
         let outcome = await ChipWriter(transport: usb).write(plan, confirmed: Confirmation(plan))
         flow.finished(outcome)
-        FileLog.shared.log("LC6000 \(flow.chip == .display ? "display" : "top panel") chip: update \(Self.word(outcome))")
-    }
-
-    /// The log's fixed words: never bytes or addresses beyond the outcome.
-    static func word(_ outcome: WriteOutcome) -> String {
-        switch outcome {
-        case .written: "written and read back equal"
-        case .mismatch: "read back different"
-        case .noAnswer: "the chip stopped answering"
-        case .refused: "not sent"
-        }
+        FileLog.shared.log(flow.logLine(outcome))
     }
 }
 

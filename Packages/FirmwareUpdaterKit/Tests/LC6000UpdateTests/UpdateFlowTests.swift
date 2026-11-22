@@ -64,7 +64,7 @@ struct UpdateFlowTests {
     func mismatchThenRestore() throws {
         var flow = try Self.flow()
         flow.finished(.mismatch(at: 0x0800_BDA4))
-        #expect(flow.status == "The chip read back different at 0x0800BDA4, so the update didn't take. Restore your backup now.")
+        #expect(flow.status == "The chip read back different, so the update didn't take. Restore your backup now.")
         #expect(flow.canRestore && flow.restoreButton == "Restore backup" && !flow.canConfirm)
         #expect(flow.restorePlan == flow.plan?.restore)
         flow.finished(.written)
@@ -115,5 +115,27 @@ struct UpdateFlowTests {
         let found = Identified(kind: .topPanel, version: "00.31", refusal: nil)
         #expect(stockFlow.backupLine(files: 2, identified: found)
             == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31.")
+    }
+
+    @Test("The log line for each outcome: fixed words, and where a read-back differed (#763: the address is log only)")
+    func logLines() throws {
+        let flow = try Self.flow()
+        #expect(flow.logLine(.written) == "LC6000 display chip: update written and read back equal")
+        #expect(flow.logLine(.mismatch(at: 0x0800_BDA4)) == "LC6000 display chip: update read back different at 0x0800BDA4")
+        #expect(flow.logLine(.noAnswer) == "LC6000 display chip: update the chip stopped answering")
+        #expect(flow.logLine(.refused) == "LC6000 display chip: update not sent")
+    }
+
+    @Test("No status the owner reads has a hex address (#763)")
+    func noStatusHasHex() throws {
+        var mismatch = try Self.flow()
+        mismatch.finished(.mismatch(at: 0x0800_BDA4))
+        var recovery = try Self.flow()
+        recovery.finished(.noAnswer)
+        var done = try Self.flow()
+        done.finished(.written)
+        for flow in [try Self.flow(patched: true), mismatch, recovery, done] {
+            #expect(flow.status.map { !$0.contains("0x") } ?? true)
+        }
     }
 }

@@ -61,8 +61,8 @@ public struct UpdateFlow: Sendable {
         case .ready:
             if case .alreadyPatched(let version) = state { return "Up to date: \(version) with this app's patch" }
             return nil
-        case .mismatch(let at):
-            return "The chip read back different at \(WritePlan.hex(at)), so the update didn't take. Restore your backup now."
+        case .mismatch:
+            return "The chip read back different, so the update didn't take. Restore your backup now."
         case .done(let text): return text
         case .recovery:
             return "The chip stopped answering during the update, so the LC6000 may not start. Leave it plugged in and "
@@ -84,6 +84,18 @@ public struct UpdateFlow: Sendable {
             if let refusal = found.refusal { lines.append(refusal) }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// The log's line for a write's outcome: fixed words, and the first address that read back different. The
+    /// address is for the log only; the screen never shows hex (#763).
+    public func logLine(_ outcome: WriteOutcome) -> String {
+        let word = switch outcome {
+        case .written: "written and read back equal"
+        case .mismatch(let at): "read back different at \(WritePlan.hex(at))"
+        case .noAnswer: "the chip stopped answering"
+        case .refused: "not sent"
+        }
+        return "LC6000 \(name): update \(word)"
     }
 
     /// The writer's outcome: of the update, or of the restore after a mismatch.
