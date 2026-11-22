@@ -80,7 +80,7 @@ struct BlockBCheckTests {
         #expect(result == .refused("Block A on the display chip has layout 0x0055B470 and this block B is built for 0x00123456: they're from different builds. Install the display chip's image and block B from the same build."))
     }
 
-    @Test("The shipped table: the two block A builds from the 11-19 image names")
+    @Test("The shipped table: the two block A builds (the first confirmed on the owner's unit)")
     func shippedTable() {
         #expect(KnownBlockA.shipped.map(\.sha1) == ["07da7ec9198ec9b22ac02ff143355dcbf2b44347", "9db1e172b34b5775d073d5013d77b15e6840b9e8"])
         #expect(KnownBlockA.shipped.map(\.callsB) == [true, false])

@@ -27,7 +27,7 @@ public struct KnownBlockA: Sendable, Equatable {
     /// not facts: an A that isn't here is refused with its sha1 logged, and added after the owner's run reads it.
     public static let shipped = [
         KnownBlockA(sha1: "07da7ec9198ec9b22ac02ff143355dcbf2b44347", layout: 0x0055_B470, callsB: true,
-                    from: "a9b985d1, 5f7c0a13, ef0e5e6c with ARM_UPPER_PROVEN=1 (from 11-19 file names)"),
+                    from: "a9b985d1, 5f7c0a13, ef0e5e6c with ARM_UPPER_PROVEN=1; confirmed on the owner's unit (display chip read, 11-22)"),
         KnownBlockA(sha1: "9db1e172b34b5775d073d5013d77b15e6840b9e8", layout: 0x0055_B470, callsB: false,
                     from: "a9b985d1, 5f7c0a13 with ARM_UPPER_PROVEN=0, their default (from 11-19 file names)"),
     ]
