@@ -51,8 +51,9 @@ public struct UpdaterScreen: Sendable, Equatable {
     public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
 
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
-    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, update: String? = nil,
-                panelUpdate: PanelUpdateOffer? = nil) {
+    /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
+    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, deckBridgeSilent: Bool = false,
+                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil) {
         self.update = update
         self.panelUpdate = panelUpdate
         firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
@@ -65,7 +66,7 @@ public struct UpdaterScreen: Sendable, Equatable {
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
             let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"
             panel = DeviceSection(status: "Deck panel found", detail: shown + development)
-        case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
+        case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: deckBridgeSilent ? Self.deckBridgeNoAnswer : Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
                             detail: "Build not read")

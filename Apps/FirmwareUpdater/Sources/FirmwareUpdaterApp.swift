@@ -1,5 +1,7 @@
 import DeviceFinder
 import FirmwareCatalog
+import FirmwareRelease
+import Foundation
 import SwiftUI
 import UpdaterScreen
 
@@ -17,14 +19,14 @@ struct FirmwareUpdaterApp: App {
                     if SmokeLaunch.isOn { SmokeLaunch.finish() }
                     await model.watch()
                 }
+                // Beside the devices, not after them: watch() runs until the app quits.
+                .task { await model.loadFirmware() }
         }
         .windowResizability(.contentSize)
     }
 }
 
 /// The app's model, with the real ports: IOKit, CoreMIDI, a listen-only serial port, and IOKit's USB notifications.
-/// Updates over the cable (#687) use the built-in catalog's panel image, the flashing serial port, and DeckBridge's
-/// port handoff (#710). With no panel image in the catalog, no update is offered.
 @MainActor
 enum Live {
     static let usbChanges = IOKitUSBChanges()
@@ -35,7 +37,21 @@ enum Live {
             CatalogFlasher(catalog: $0, usb: usb, finder: finder, opener: FlashingSerialOpener())
         }
         return Updater(finder: finder, changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow,
-                       flasher: flasher)
+                       firmware: firmwareOffer, flasher: flasher)
+    }
+
+    /// The firmware on offer (#704): this project's newest GitHub release if it checks out against the app's keys, else
+    /// the firmware built into the app, and why. One fetch per launch; a checked release is kept in Application Support.
+    @Sendable static func firmwareOffer() async -> FirmwareLine {
+        guard let builtIn = try? Catalog.builtIn() else {
+            return FirmwareLine(source: "The firmware built into this app can't be read", reason: nil)
+        }
+        let support = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                    appropriateFor: nil, create: true))
+            ?? FileManager.default.temporaryDirectory
+        let cache = support.appending(path: "dev.ericdahl.FirmwareUpdater/Releases")
+        let offer = await FirmwareOffer.fetch(http: URLSessionHTTP(), over: builtIn, cache: cache)
+        return FirmwareLine(source: offer.source, reason: offer.reason)
     }
 }
 
@@ -46,6 +62,7 @@ struct UpdaterView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
+            FirmwareRow(line: model.firmware)
             PanelUpdateView(model: model)
             SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
             if model.screen.lc6000.warning == nil { BackupView(model: backup) }
@@ -100,6 +117,25 @@ struct GuideView: View {
             Link("Open WCH's driver download page", destination: guide.link)
         }
         .padding(.top, 4)
+    }
+}
+
+/// The firmware on offer (#704), on its own row: where it comes from and, if the newest release wasn't used, why.
+struct FirmwareRow: View {
+    let line: FirmwareLine?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let line {
+                Text(line.source)
+                if let reason = line.reason { Text(reason).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking for newer firmware…").foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
 
