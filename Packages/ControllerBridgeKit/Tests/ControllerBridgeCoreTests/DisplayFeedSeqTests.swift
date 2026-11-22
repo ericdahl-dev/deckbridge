@@ -53,4 +53,23 @@ struct DisplayFeedSeqTests {
         #expect(bundles.allSatisfy { OSCPacket.bundle([DisplayFeed.seq(.max)] + $0).count <= DisplayFeed.bundleCeiling })
         #expect(bundles.flatMap { $0 } == messages)
     }
+
+    @Test("It wraps: after UInt32.max comes 0, sent as the OSC int's bit pattern")
+    func wraps() {
+        let feed = DisplayFeed()
+        let fake = Rig.FakeOSC()
+        feed.attach(fake)
+        feed.set(DisplayFeedCoordinatorTests.on)
+        feed.resend(at: 0)
+        feed.lastSeq = .max - 1
+        var deck = DisplayFeed.Deck(number: 1, color: [255, 0, 0])
+        feed.update(deck, at: 0)
+        deck.title = "Daybreak"
+        deck.loaded = true
+        feed.update(deck, at: 0.1)
+        deck.title = "Nightfall"
+        feed.update(deck, at: 0.2)
+        #expect(fake.seqs == [.max, 0, 1])
+        #expect(fake.rawBundles.first?.first == OSCMessage("/DeckBridge/Display/seq", [.int(-1)]))
+    }
 }

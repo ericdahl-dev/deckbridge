@@ -175,13 +175,13 @@ final class DisplayFeed {
     /// The feed's sequence number (#750): first in every bundle, so a display can count the datagrams it never got. A
     /// display that doesn't know the address ignores it (ADR 0011). An OSC int carries the UInt32's bit pattern.
     static func seq(_ number: UInt32) -> OSCMessage { OSCMessage(prefix + "seq", [.int(Int32(bitPattern: number))]) }
-    /// The last bundle's number: 0 before the first.
-    private var seq: UInt32 = 0
+    /// The last bundle's number: 0 before the first. Internal for the wrap's test.
+    var lastSeq: UInt32 = 0
 
     /// Sends one bundle, numbered.
     private func send(_ bundle: [OSCMessage], to sender: any OSCSender) {
-        seq &+= 1
-        sender.send(bundle: [Self.seq(seq)] + bundle)
+        lastSeq &+= 1
+        sender.send(bundle: [Self.seq(lastSeq)] + bundle)
     }
 
     /// The goodbye (#651): DeckBridge is quitting or the feed was turned off; a display shows its own idle look.
@@ -251,7 +251,7 @@ final class DisplayFeed {
         sent = [:]
         open = true
         // A display starts counting again here (#750): this bundle is 1, never a gap after the last destination's.
-        seq = 0
+        lastSeq = 0
         holdUntil = now + Self.holdSeconds
         holdSaid = false
         snapshotReason = "destination open"
