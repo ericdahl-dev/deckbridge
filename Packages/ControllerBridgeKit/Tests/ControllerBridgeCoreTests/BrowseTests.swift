@@ -114,6 +114,52 @@ struct BrowseTests {
         ])
     }
 
+    /// A loop from `start` to `end` seconds on deck 1, as Syndicate reports it, at `bpm`.
+    static func loop(_ rig: Rig, bpm: Float, start: Float, end: Float) {
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/BPM", [.float(bpm)]))
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/LoopInfo", [.int(1), .float(start), .float(end)]))
+        rig.osc.sent.removeAll()
+    }
+
+    static func loopMoves(_ rig: Rig) -> [OSCMessage] {
+        rig.osc.sent.filter { $0.address.contains("Loop") || $0.address.contains("Skip") }
+    }
+
+    @Test("Shift + the auto loop knob is Loop Move (#470): each click moves the loop by its own length, forward clockwise; no resize")
+    func loopMove() throws {
+        let rig = try Self.startedRig()
+        // Hardware trace: 0.0561 s to 1.9311 s at 128 BPM is a 4-beat loop.
+        Self.loop(rig, bpm: 128, start: 0.0561, end: 1.9311)
+        Self.holdingShift(rig) {
+            Self.turn(rig, cc: 3, 0x01)   // one click clockwise
+            Self.turn(rig, cc: 3, 0x7F)   // one click counter-clockwise
+            Self.turn(rig, cc: 3, 0x00)
+        }
+        #expect(Self.loopMoves(rig) == [
+            OSCMessage("/Syndicate/Deck/1/LoopMoveBeat", [.int(4)]),
+            OSCMessage("/Syndicate/Deck/1/LoopMoveBeat", [.int(-4)]),
+        ])
+    }
+
+    @Test("Loop Move follows the loop's length: an 8-beat loop moves 8 beats; a loop under a beat moves 1")
+    func loopMoveFollowsLength() throws {
+        let rig = try Self.startedRig()
+        // Hardware trace: 104.3204 s to 108.0127 s at 130 BPM is an 8-beat loop.
+        Self.loop(rig, bpm: 130, start: 104.3204, end: 108.0127)
+        Self.holdingShift(rig) { Self.turn(rig, cc: 3, 0x01) }
+        #expect(Self.loopMoves(rig) == [OSCMessage("/Syndicate/Deck/1/LoopMoveBeat", [.int(8)])])
+        Self.loop(rig, bpm: 120, start: 10, end: 10.25)   // half a beat
+        Self.holdingShift(rig) { Self.turn(rig, cc: 3, 0x01) }
+        #expect(Self.loopMoves(rig) == [OSCMessage("/Syndicate/Deck/1/LoopMoveBeat", [.int(1)])])
+    }
+
+    @Test("With no loop reported, Shift + the auto loop knob sends nothing")
+    func loopMoveWithoutLoop() throws {
+        let rig = try Self.startedRig()
+        Self.holdingShift(rig) { Self.turn(rig, cc: 3, 0x01) }
+        #expect(Self.loopMoves(rig) == [])
+    }
+
     @Test("Beat jump ◀ and ▶ skip a beat back and forward, on press only")
     func beatJump() throws {
         let rig = try Self.startedRig()
@@ -182,5 +228,50 @@ struct BrowseTests {
         rig.osc.sent.removeAll()
         Self.turn(rig, cc: 6, 0x40)
         #expect(rig.osc.sent == Array(repeating: OSCMessage("/Syndicate/Browser/Up", [.int(1)]), count: 64))
+    }
+
+    // #479: the knob is printed SELECT / ZOOM. With Shift held each click zooms the deck in front's waveform.
+
+    static func shiftDown(_ rig: Rig) {
+        rig.coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)
+    }
+
+    @Test("Shift + Select turn zooms the waveform: WaveformZoomIn 1 per clockwise click, WaveformZoomOut 1 per counter-clockwise; no browsing")
+    func shiftTurnZooms() throws {
+        let rig = try Self.startedRig()
+        Self.shiftDown(rig)
+        rig.osc.sent.removeAll()
+        Self.turn(rig, cc: 6, 0x02)
+        Self.turn(rig, cc: 6, 0x7F)
+        #expect(rig.osc.sent == [
+            OSCMessage("/Syndicate/Deck/1/WaveformZoomIn", [.int(1)]),
+            OSCMessage("/Syndicate/Deck/1/WaveformZoomIn", [.int(1)]),
+            OSCMessage("/Syndicate/Deck/1/WaveformZoomOut", [.int(1)]),
+        ])
+    }
+
+    @Test("The zoom follows the deck in front (the mapping's deck)")
+    func shiftTurnZoomsTheDeck() throws {
+        let mapping = try Mapping.bundledDefault(overriddenBy: Data(#"{ "deck": { "number": 3 } }"#.utf8))
+        let osc = Rig.FakeOSC()
+        let coordinator = Coordinator(
+            mapping: mapping,
+            midi: Rig.FakeMIDISystem(sources: [Rig.lc6000], destinations: [Rig.lc6000Out]),
+            osc: osc, clock: Rig.FakeClock(), log: Rig.FakeLog()
+        )
+        coordinator.start()
+        coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)
+        osc.sent.removeAll()
+        coordinator.midi(.controlChange(channel: 0, controller: 6, value: 0x01), source: Rig.lc6000.id)
+        #expect(osc.sent == [OSCMessage("/Syndicate/Deck/3/WaveformZoomIn", [.int(1)])])
+    }
+
+    @Test("Shift + Select press is still Enter")
+    func shiftPressStillEnters() throws {
+        let rig = try Self.startedRig()
+        Self.shiftDown(rig)
+        rig.osc.sent.removeAll()
+        Self.press(rig, 18)
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Browser/Enter", [.int(1)])])
     }
 }

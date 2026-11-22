@@ -127,7 +127,8 @@ public struct JogSimulator: Equatable, Sendable {
         case marker(deck: Int, pitchBend: Int)
         /// The master clock's beat (1-4): the lit ring segment on every deck.
         case masterBeat(Int)
-        case playing(Bool)
+        /// Whether `deck` is playing, from Syndicate's feedback (#317): not the play light, which blinks while paused.
+        case playing(deck: Int, Bool)
     }
 
     private struct Upload: Equatable, Sendable {
@@ -158,8 +159,7 @@ public struct JogSimulator: Equatable, Sendable {
             if let front { uploads[front]?.accepted = false }
         case .marker(let deck, let pitchBend): markers[deck] = pitchBend
         case .masterBeat(let beat): master = beat
-        case .playing(let on):
-            if let front { plays[front] = on }
+        case .playing(let deck, let on): plays[deck] = on
         }
     }
 
@@ -170,10 +170,22 @@ public struct JogSimulator: Equatable, Sendable {
         return .uploaded(slot: upload.slot, bytes: upload.bytes, at: upload.at, accepted: accepted)
     }
 
+    /// Whether the unit really shows this deck: connected, and the deck's upload is the latest. A preview (no
+    /// LC6000, or the switch off) uploads only to itself, so it never counts (#318).
+    public func onUnit(deck: Int) -> Bool { connected && front == deck }
+
+    /// The words under a deck's preview (#318), literal for each case.
+    public func card(deck: Int, timeZone: TimeZone = .current) -> String {
+        guard connected else { return "Preview only: not on an LC6000" }
+        guard front == deck, let upload = uploads[deck] else { return "Not on the LC6000 now" }
+        guard let accepted = upload.accepted else { return "Sending to the LC6000" }
+        return (accepted ? "Shown on the LC6000\n" : "Refused by the LC6000\n") + status(deck: deck).readout(timeZone: timeZone)
+    }
+
     /// The deck's last marker pitch bend (0 until one arrives), for `JogMarkerAngle.degrees(pitchBend:)`.
     public func marker(deck: Int) -> Int { markers[deck] ?? 0 }
 
-    /// Whether the deck's play light is on.
+    /// Whether the deck is playing, as Syndicate reports it.
     public func playing(deck: Int) -> Bool { plays[deck] ?? false }
 
     /// The marker as the renderer takes it (#238): turns clockwise from 12 o'clock.
@@ -182,4 +194,30 @@ public struct JogSimulator: Equatable, Sendable {
     /// The beat section to light (1-4): the master clock's, the same on every deck, paused or not (#165, the user's
     /// pick). The needle is the deck's own phase, so the two together are a sync check. None before the clock runs.
     public func litBeat(deck: Int) -> Int? { master }
+}
+
+/// When a fast stream should hop to the window (#318): never while the window is closed (the state still updates,
+/// off the main actor), once on opening, and while open at most one hop pending, which carries every change made
+/// before it lands.
+public struct VisibleFeed: Sendable {
+    private var visible = false
+    private var pending = false
+
+    public init() {}
+
+    /// The state changed: true to schedule a hop now.
+    public mutating func changed() -> Bool {
+        guard visible, !pending else { return false }
+        pending = true
+        return true
+    }
+
+    /// The hop landed: the window has the latest state.
+    public mutating func published() { pending = false }
+
+    /// The window opened or closed: true to hop once now, with the state as it is.
+    public mutating func setVisible(_ on: Bool) -> Bool {
+        visible = on
+        return on ? changed() : false
+    }
 }

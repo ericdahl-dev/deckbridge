@@ -164,6 +164,25 @@ struct DiagnosticsPresentationTests {
         #expect(lines.shown(.monitor).count == 2)
     }
 
+    @Test("Pause holds: more than `limit` lines arriving while paused don't empty or shift the frozen view (#319)")
+    func pauseHolds() {
+        var lines = DiagnosticsLines(limit: 3)
+        lines.hideStreaming = false
+        lines.collapseStreaming = false
+        for n in 1...3 { lines.append(to: .monitor, message: "note \(n)") }
+        lines.append(to: .osc, message: "OSC <- /Syndicate/Deck/1/Playing 1")
+        lines.append(to: .osc, message: "OSC <- /Syndicate/Deck/1/Position 1.0")
+        let monitorBefore = lines.shown(.monitor), oscBefore = lines.shown(.osc)
+        lines.pause()
+        for n in 4...10 { lines.append(to: .monitor, message: "note \(n)") }
+        for n in 2...9 { lines.append(to: .osc, message: "OSC <- /Syndicate/Deck/1/Position \(n).0") }
+        #expect(lines.shown(.monitor) == monitorBefore)
+        #expect(lines.shown(.osc) == oscBefore)
+        #expect(monitorBefore.map(\.message) == ["note 1", "note 2", "note 3"])
+        lines.resume()
+        #expect(lines.shown(.monitor).map(\.message) == ["note 8", "note 9", "note 10"])
+    }
+
     @Test("Copy takes the visible lines; Save takes the whole history: streaming, filtered-out and post-pause lines too, uncollapsed (#218)")
     func copyVisibleSaveAll() {
         var lines = DiagnosticsLines()

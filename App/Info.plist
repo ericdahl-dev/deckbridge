@@ -27,7 +27,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>DeckBridge listens for OSC feedback from Syndicate running on another Mac on your network.</string>
+	<string>DeckBridge listens for OSC feedback from Syndicate on another Mac, and sends the display feed to a deck panel, on your network.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

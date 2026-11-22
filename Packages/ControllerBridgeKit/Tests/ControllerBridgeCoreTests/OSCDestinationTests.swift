@@ -21,9 +21,12 @@ struct OSCDestinationTests {
         }
         var opened: [Sink] = []
         var refuse: Set<String> = []
+        /// New sockets fail their sends too, as while a host is off the network.
+        var failNew = false
         func open(_ host: String, _ port: Int) throws -> any DatagramSink {
             if refuse.contains(host) { throw POSIXError(.EADDRNOTAVAIL) }
             let sink = Sink("\(host):\(port)")
+            sink.fails = failNew
             opened.append(sink)
             return sink
         }
@@ -55,6 +58,28 @@ struct OSCDestinationTests {
         destination.send(Self.play)
         #expect(resolver.asked == [])
         #expect(sinks.sink("192.168.1.20:9090")?.sent == [Self.play.encoded()])
+    }
+
+    @Test("A bundle goes out as one datagram (#636)")
+    func bundleIsOneDatagram() async throws {
+        let sinks = FakeSinks(), resolver = FakeResolver()
+        let destination = Self.destination(sinks, resolver)
+        #expect(await destination.connect(host: "192.168.1.40", port: 9100) == nil)
+        let messages = [OSCMessage("/DeckBridge/Display/deck", [.int(1)]), OSCMessage("/DeckBridge/Display/loaded", [.int(1)])]
+        destination.send(bundle: messages)
+        #expect(sinks.sink("192.168.1.40:9100")?.sent == [OSCPacket.bundle(messages)])
+    }
+
+    @Test("A sender with no bundle of its own sends a bundle's messages one by one")
+    func bundleFallback() {
+        final class Plain: OSCSender, @unchecked Sendable {
+            var sent: [OSCMessage] = []
+            func send(_ message: OSCMessage) { sent.append(message) }
+        }
+        let plain = Plain()
+        let messages = [OSCMessage("/a", [.int(1)]), OSCMessage("/b", [.int(2)])]
+        plain.send(bundle: messages)
+        #expect(plain.sent == messages)
     }
 
     /// Holds each lookup until the test answers it, so the test can act while a name is resolving.
@@ -189,7 +214,7 @@ struct OSCDestinationTests {
         rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Playing", [.int(0)]))   // the start Resend was answered
         rig.osc.sent.removeAll()
         let pipe = EventPipe()
-        pipe.producer.resync()
+        pipe.producer.send(.resync)
         pipe.producer.finish()
         await Engine(coordinator: rig.coordinator, log: rig.log).run(pipe.events)
         #expect(rig.osc.sent == [OSCMessage("/Syndicate/Feedback/Resend", [.int(1)])])
@@ -256,4 +281,29 @@ struct OSCDestinationTests {
         #expect(sinks.sink("192.168.1.20:9090")?.sent.count == 1)
         #expect(sinks.sink("10.0.0.9:9090") == nil)
     }
+
+    /// For the display feed's status (#618): whether sends are failing now, apart from why a connect failed. Kept
+    /// apart from `lastError`, which the Syndicate link's problem reporting reads and which stays as it was.
+    @Test("A failing send marks sends failing, a good one clears it; lastError still keeps the send failure; a failed connect is the connect problem")
+    func sendsFailingAndConnectProblem() async {
+        let sinks = FakeSinks(), resolver = FakeResolver()
+        let destination = Self.destination(sinks, resolver)
+        _ = await destination.connect(host: "192.168.1.20", port: 9090)
+        #expect(!destination.sendsFailing)
+        sinks.sink("192.168.1.20:9090")?.fails = true
+        destination.send(Self.play)
+        #expect(destination.sendsFailing)
+        #expect(destination.connectProblem == nil)
+        sinks.sink("192.168.1.20:9090")?.fails = false
+        destination.send(Self.play)
+        #expect(!destination.sendsFailing)
+        #expect(destination.lastError == "Couldn't send OSC to 192.168.1.20:9090")  // unchanged: the Syndicate link's
+
+        _ = await destination.connect(host: "nowhere.local", port: 9090)
+        #expect(destination.connectProblem == "Can't find nowhere.local on the network")
+        resolver.answers["panel.local"] = "192.168.1.41"
+        _ = await destination.connect(host: "panel.local", port: 9090)
+        #expect(destination.connectProblem == nil)
+    }
 }
+

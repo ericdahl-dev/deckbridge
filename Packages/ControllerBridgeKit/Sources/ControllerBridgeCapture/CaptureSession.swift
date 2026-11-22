@@ -191,7 +191,7 @@ public struct CaptureSession: Sendable {
         var shift: ShiftLayer?
         if let base = prompt.shiftedOf {
             if let held = Inference.heldAround(bytes) {
-                controls.removeAll { $0.kind == .note && $0.port == held.port && $0.channel == held.channel + 1 && $0.number == held.number }
+                controls = Inference.removing(held, from: controls)
             }
             shift = shiftLayer(of: base, controls.first, before: before)
         }

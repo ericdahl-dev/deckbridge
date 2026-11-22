@@ -8,6 +8,15 @@ public enum RingColors: String, Equatable, Sendable, Codable, CaseIterable {
     case vivid, exact
 }
 
+/// The LC6000's jog display firmware (#425), the DJ's pick in Settings: Denon's own, or one flashed with the slot 16
+/// patch (tools/lc6000-firmware). Denon's is the default, and the only safe choice for a unit that wasn't flashed.
+public enum DisplayFirmware: String, Equatable, Sendable, Codable, CaseIterable {
+    case denon, custom
+
+    /// How many image slots the firmware will show.
+    public var showableSlots: Int { self == .custom ? 16 : 15 }
+}
+
 public struct DeckColors: Equatable, Sendable, Codable {
     /// [r, g, b] for decks 1-4.
     public var rgb: [Int: [Int]]
@@ -30,8 +39,8 @@ public struct DeckColors: Equatable, Sendable, Codable {
     /// [r, g, b] for a deck, or nil for a deck outside 1-4.
     public subscript(deck: Int) -> [Int]? { rgb[deck] }
 
-    /// The color as the controller shows it, for Settings' preview swatch: the ring's velocity through the running
-    /// profile's color table (#197), read back as RGB.
+    /// The color as the controller shows it, for Settings' preview swatch: the ring's velocity through a color table
+    /// (#197), read back as RGB. Settings' swatch is labeled "On the LC6000", so it passes rgb222 (#313).
     public static func ledPreview(_ rgb: [Int], mode: RingColors = .exact, table: ColorTable = .rgb222) -> [Int] {
         guard rgb.count == 3 else { return [0, 0, 0] }
         return table.shown(mode == .vivid ? table.vivid(for: rgb) : table.velocity(for: rgb))
@@ -43,7 +52,7 @@ public struct DeckColors: Equatable, Sendable, Codable {
     /// Before Syndicate's palette arrives: its factory deck colors, cue palette slots 1, 3, 5 and 7 of the same
     /// factory table the pads use (red, yellow, cyan, purple).
     public static let defaults = DeckColors(rgb: Dictionary(uniqueKeysWithValues: (1...4).map {
-        ($0, Bridge.defaultPalette[2 * $0 - 1] ?? [0, 0, 0])
+        ($0, PadModule.defaultPalette[2 * $0 - 1] ?? [0, 0, 0])
     }))
 
     /// The deck whose color a cue palette slot holds: slots 1, 3, 5 and 7 are decks 1-4 (#123). Nil for any other.

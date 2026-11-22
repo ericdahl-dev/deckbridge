@@ -26,8 +26,13 @@ final class BridgeStatus {
     var noDeckData = false
     /// LED subscriptions a loaded deck's answer lacked (#150).
     var missingSubscriptions: [Subscription] = []
+    /// Another DJ app holds the LC6000 as its host (#333).
+    var otherHost = false
+    /// The jog display firmware found on the unit (#456), for Settings' Firmware row.
+    var displayFound: DisplayFound?
     /// What the controllers' profiles need, for the setup guide (#211).
-    var requiredSubscriptions: [Subscription] = Subscription.allCases
+    // The eight every profile needs until the Coordinator says (BarRamp joins only with the jog display on, #165).
+    var requiredSubscriptions: [Subscription] = Subscription.always
     /// The last time Syndicate's feedback stopped, for the menu.
     var lastDropout: String?
     /// When feedback last dropped, as the time to show ("21:14"), stamped as it happens (#66).
@@ -70,6 +75,11 @@ final class BridgeModel {
     private var engine: Task<Void, Never>?
     private var sleepObservers: [any NSObjectProtocol] = []
     private var osc: OSCDestination?
+    /// The display feed's destination (#616): the panel's host and port, by address or by name.
+    private var displayFeedDestination: OSCDestination?
+    /// The deck panel's USB cable (#667) and the queue its frames go out on.
+    private var panelCable: PanelCable?
+    private var cableFeedQueue: DisplayFeedQueue?
     private let storage = UserDefaultsStorage()
     /// What Settings shows and changes (#19). Saved in user defaults.
     /// The running profile's deck layers (#79): empty for a controller without them.
@@ -101,18 +111,24 @@ final class BridgeModel {
     /// Quit: release everything held in Syndicate, then call `done`. Calls it after one second at the latest, so a
     /// stuck engine can't stop the app from quitting.
     /// The Diagnostics window opened or closed: only while it's open does the engine build anything for it.
-    func setDiagnostics(open: Bool) { producer?.diagnostics(open: open) }
-    func startLEDSweep(delay: Double) { producer?.ledSweep(delay: delay) }
-    func stopLEDSweep() { producer?.stopLEDSweep() }
+    func setDiagnostics(open: Bool) {
+        producer?.diagnostics(open: open)
+        jogSimulator.feed.setVisible(open)
+    }
+    func startLEDSweep(delay: Double) { producer?.send(.ledSweep(delay: delay)) }
+    func stopLEDSweep() { producer?.send(.stopLEDSweep) }
+    /// The meter capture (#582): every Meter value for `seconds`, to a CSV in Logs/DeckBridge (Debug builds).
+    func captureMeter(seconds: Double) { producer?.send(.startMeterCapture(seconds: seconds)) }
     /// The deck the jog display preview follows with no controller connected (#221); nil, the first loaded.
-    func setJogPreviewDeck(_ deck: Int?) { producer?.setJogPreviewDeck(deck) }
+    func setJogPreviewDeck(_ deck: Int?) { producer?.send(.setJogPreviewDeck(deck)) }
     /// Turns the demo controller (#64) on or off. In memory only: it is off again at the next launch.
     func setDemo(_ on: Bool) { producer?.demo(on: on) }
-    /// The device the capture window should preselect when it next opens (#200).
-    var captureDevice: String?
+    /// The device the capture window should preselect (#200): read when it opens, or at once if it's already open
+    /// (#316), so it never lingers for a later open.
+    let captureRequest = CaptureRequest()
 
     /// Pauses (a source) or gives back (nil) a controller while the capture window records it (#186).
-    func setCapture(source: MIDIEndpoint.ID?) { producer?.setCapture(source: source) }
+    func setCapture(source: MIDIEndpoint.ID?) { producer?.send(.setCapture(source: source)) }
 
     /// The panel's deck picker (#66): only that controller's deck changes, through the same path as Settings, so a
     /// held control is released on the old deck first.
@@ -171,6 +187,35 @@ final class BridgeModel {
         }
     }
 
+    /// What the display feed is doing (#618), for Settings' status line: from the applied setting and the feed's own
+    /// destination. Read again each second while it shows; "Sending" never means the panel is receiving.
+    var displayFeedStatus: DisplayFeedStatus {
+        guard let settings, let displayFeedDestination else { return .off }
+        return DisplayFeedStatus(settings.displayFeed, displayFeedDestination)
+    }
+
+    /// The USB cable's status line (#667): its switch, and the panel's port as last found.
+    var cableFeedStatus: CableFeedStatus {
+        CableFeedStatus(cable: settings?.displayFeed.cable ?? false, port: panelCable?.state ?? .noPanel)
+    }
+
+    /// The cable's switch (#667): the port opens while it's on, and lets go after the goodbye when it goes off.
+    private func setCable(_ on: Bool) {
+        guard let panelCable, let cableFeedQueue else { return }
+        panelCable.setEnabled(on) { cableFeedQueue.flush(timeout: 0.5) }
+    }
+
+    /// Opens the display feed's host in the background (#616). A failure is logged; Settings shows it from #618.
+    private func connectDisplayFeed(_ feed: DisplayFeedSettings) {
+        guard let displayFeedDestination else { return }
+        let log = UnifiedLogSink()
+        Task { @MainActor in
+            if let problem = await displayFeedDestination.connect(host: feed.host.trimmingCharacters(in: .whitespaces), port: feed.port) {
+                log.log("Display feed: \(problem)")
+            }
+        }
+    }
+
     /// Release held controls before the Mac sleeps, and re-check the devices when it wakes.
     private func observeSleep(_ producer: EventPipe.Producer) {
         let center = NSWorkspace.shared.notificationCenter
@@ -179,7 +224,10 @@ final class BridgeModel {
             center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 producer.wake()
                 // A `.local` host may have a new address after sleep (#84).
-                Task { @MainActor in await self?.osc?.reresolve() }
+                Task { @MainActor in
+                    await self?.osc?.reresolve()
+                    await self?.displayFeedDestination?.reresolve()
+                }
             },
         ]
     }
@@ -218,18 +266,31 @@ final class BridgeModel {
         guard let producer else { return }
         if new.controllers != old.controllers {
             // A controller following its own layers runs as one entry per layer (#79).
-            producer.setControllers(ControllerSettings.expanded(new.controllers, layers: layers))
+            producer.send(.setControllers(ControllerSettings.expanded(new.controllers, layers: layers)))
             status.deck = new.controllers[0].deck
         }
         status.oscPort = new.syndicatePort
-        if new.ledsEnabled != old.ledsEnabled { producer.setLEDs(enabled: new.ledsEnabled) }
+        if new.ledsEnabled != old.ledsEnabled { producer.send(.setLEDs(enabled: new.ledsEnabled)) }
         if new.appearance != old.appearance { NSApplication.shared.appearance = new.appearance.nsAppearance }
         if new.followSyndicateDeckColors != old.followSyndicateDeckColors || new.customDeckColors != old.customDeckColors {
-            producer.setDeckColors(followSyndicate: new.followSyndicateDeckColors, custom: new.customDeckColors)
+            producer.send(.setDeckColors(followSyndicate: new.followSyndicateDeckColors, custom: new.customDeckColors))
         }
-        if new.ringColors != old.ringColors { producer.setRingColors(new.ringColors) }
-        if new.profileChoices != old.profileChoices { producer.setProfileChoices(new.profileChoices) }
-        if new.jogDisplay != old.jogDisplay { producer.setJogDisplay(enabled: new.jogDisplay) }
+        if new.ringColors != old.ringColors { producer.send(.setRingColors(new.ringColors)) }
+        if new.colorMessages != old.colorMessages { producer.send(.setColorMessages(new.colorMessages)) }
+        if new.lightBrightness != old.lightBrightness { producer.send(.setLightBrightness(new.lightBrightness)) }
+        if new.profileChoices != old.profileChoices { producer.send(.setProfileChoices(new.profileChoices)) }
+        if new.jogDisplay != old.jogDisplay { producer.send(.setJogDisplay(enabled: new.jogDisplay)) }
+        if new.displayFirmware != old.displayFirmware { producer.send(.setDisplayFirmware(new.displayFirmware)) }
+        if new.keyDisplay != old.keyDisplay { producer.send(.setKeyDisplay(new.keyDisplay)) }
+        if new.stripFader != old.stripFader { producer.send(.setStripFader(new.stripFader)) }
+        if new.displayFeed != old.displayFeed {
+            // A new host or port opens first; the Coordinator sends the full snapshot again once it's open.
+            if new.displayFeed.enabled, new.displayFeed.host != old.displayFeed.host || new.displayFeed.port != old.displayFeed.port || !old.displayFeed.enabled {
+                connectDisplayFeed(new.displayFeed)
+            }
+            producer.send(.setDisplayFeed(new.displayFeed))
+            if new.displayFeed.cable != old.displayFeed.cable { setCable(new.displayFeed.cable) }
+        }
         if new.feedbackPort != old.feedbackPort || new.feedbackListen != old.feedbackListen { listen(new) }
     }
 
@@ -297,10 +358,39 @@ final class BridgeModel {
             resolver: SystemHostResolver(), open: { ip, port in try UDPSink(ipv4: ip, port: port) }, clock: SystemClock()
         )
         let resyncProducer = pipe.producer
-        osc.onReady = { resyncProducer.resync() }
+        osc.onReady = { resyncProducer.send(.resync) }
         osc.onSendFailure = { [weak osc] in Task { await osc?.reresolve() } }
         self.osc = osc
         connectOSC(host: settings.syndicateHost, port: settings.syndicatePort)
+        // The display feed (#616): its own destination, behind a queue so the engine never waits on it, and dropping
+        // when it's behind. Opened only while the feed is on; the full snapshot goes again each time it opens.
+        let feedDestination = OSCDestination(
+            resolver: SystemHostResolver(), open: { ip, port in try UDPSink(ipv4: ip, port: port) }, clock: SystemClock()
+        )
+        let feedProducer = pipe.producer
+        feedDestination.onReady = { feedProducer.send(.displayFeedReady) }
+        feedDestination.onSendFailure = { [weak feedDestination] in
+            #if DEBUG
+            // Failing sends to the display (#636), at most once a second as the destination reports them.
+            DebugTrace.shared.sink(.displayFeed, "sends failing: \(feedDestination?.lastError ?? "unknown"), looking the host up again")
+            #endif
+            Task { await feedDestination?.reresolve() }
+        }
+        displayFeedDestination = feedDestination
+        let displayFeed = DisplayFeedQueue(feedDestination)
+        #if DEBUG
+        displayFeed.trace = DebugTrace.shared.sink
+        #endif
+        if settings.displayFeed.enabled { connectDisplayFeed(settings.displayFeed) }
+        // The USB cable (#667): its own port and queue, so a slow cable never makes Wi-Fi's feed drop.
+        let cable = PanelCable()
+        cable.onOpen = { feedProducer.send(.cableFeedReady) }
+        let cableFeed = DisplayFeedQueue(CableFeedSender(cable))
+        #if DEBUG
+        cableFeed.trace = DebugTrace.shared.sink
+        #endif
+        panelCable = cable
+        cableFeedQueue = cableFeed
         producer = pipe.producer
         applier = SettingsApplier(
             settings: settings, storage: storage, connect: { [osc] host, port in await osc.connect(host: host, port: port) }
@@ -309,23 +399,63 @@ final class BridgeModel {
 
         ticker = Ticker(producer: pipe.producer)
         observeSleep(pipe.producer)
+        // Every MIDI send leaves the engine's task through one queue (#552): a port that stops taking data (#428) no
+        // longer stalls OSC, the ticks or the trace. A port stuck past the bound is said once, and dropped until it
+        // reconnects.
+        let recoveryProducer = pipe.producer
+        let sendQueue = MIDISendQueue(label: "dev.ericdahl.ControllerBridge.midi-send", onStuck: { name in
+            log.log("MIDI port \(name) stopped taking data: sends to it are dropped until it takes data again")
+        }, onRecovered: { name in
+            // What was dropped meanwhile is lost: every light is painted again, or the jog display starts over (#595).
+            log.log("MIDI port \(name) takes data again")
+            recoveryProducer.send(.afterRecovery(of: name))
+        })
         let midi = midi!
-        let jogDisplay = try? CoreMIDIJogDisplay(client: midi.client, producer: pipe.producer)
+        // The engine's loop reads endpoints from snapshots, refreshed on CoreMIDI's setup queue before the Coordinator
+        // hears of a change (#595): a hung unit can hold the MIDI server for seconds, and the loop no longer waits.
+        let snapshot = SnapshotMIDISystem(inner: midi)
+        let queuedMIDI = QueuedMIDISystem(inner: snapshot, queue: sendQueue)
+        let coreJogDisplay = try? CoreMIDIJogDisplay(client: midi.client, producer: pipe.producer)
+        let snapshotJog = coreJogDisplay.map { SnapshotJogDisplayPort(inner: $0) }
+        // Its ports are remembered until a device comes or goes (#552), then asked again.
+        midi.observeChanges {
+            coreJogDisplay?.forgetEndpoints()
+            snapshotJog?.refresh()
+            snapshot.refresh()
+        }
+        let jogDisplay = snapshotJog.map { sendQueue.jogDisplayPort($0) }
         // The entries the Coordinator starts with: the saved ones, a controller following its layers as one per layer
         // (#79). It starts straight on them (#105), so nothing is sent after start to correct it.
         let running = ControllerSettings.expanded(settings.controllers, layers: layers)
         engine = Task.detached(name: "Bridge engine") {
             await BridgeHost.run(
-                profiles: profiles, midi: midi, osc: osc, log: log, status: status, diagnostics: diagnostics,
-                jogSimulator: jogSimulator, controllers: running, ledsEnabled: settings.ledsEnabled, jogDisplay: jogDisplay, events: pipe.events
+                profiles: profiles, midi: queuedMIDI, osc: osc, log: log, status: status, diagnostics: diagnostics,
+                jogSimulator: jogSimulator, controllers: running, ledsEnabled: settings.ledsEnabled, jogDisplay: jogDisplay,
+                displayFeed: displayFeed, cableFeed: cableFeed, events: pipe.events
             )
         }
         // The saved deck colors (#123), queued behind the Coordinator's start.
-        pipe.producer.setDeckColors(followSyndicate: settings.followSyndicateDeckColors, custom: settings.customDeckColors)
-        pipe.producer.setRingColors(settings.ringColors)
+        pipe.producer.send(.setDeckColors(followSyndicate: settings.followSyndicateDeckColors, custom: settings.customDeckColors))
+        pipe.producer.send(.setRingColors(settings.ringColors))
+        pipe.producer.send(.setColorMessages(settings.colorMessages))
+        // Needle Drop's fader (#609; the plain layer since #729): the DJ's choice, else the profile's.
+        pipe.producer.send(.setStripFader(settings.stripFader))
+        pipe.producer.send(.setLightBrightness(LightBrightness.snapped(settings.lightBrightness)))
         // Profiles chosen by hand (#200): a device only they name connects now.
-        pipe.producer.setProfileChoices(settings.profileChoices)
-        pipe.producer.setJogDisplay(enabled: settings.jogDisplay)
+        pipe.producer.send(.setProfileChoices(settings.profileChoices))
+        // Before the switch, so the first uploads already know how many slots the unit shows (#425).
+        pipe.producer.send(.setDisplayFirmware(settings.displayFirmware))
+        // How the key is written (#590), before the first content is shown.
+        pipe.producer.send(.setKeyDisplay(settings.keyDisplay))
+        // The jog display's beat lead (#720): a hidden default while it's tuned on video, no Settings control.
+        // `defaults write dev.ericdahl.ControllerBridge jogDisplayBeatLeadMs -float 70` sets it; unset, the Kit's 40 ms.
+        if let ms = UserDefaults.standard.object(forKey: "jogDisplayBeatLeadMs") as? Double {
+            pipe.producer.send(.setJogBeatLead(ms / 1000))
+        }
+        pipe.producer.send(.setJogDisplay(enabled: settings.jogDisplay))
+        pipe.producer.send(.setDisplayFeed(settings.displayFeed))
+        // After the setting, so the port's opening finds the cable's feed on.
+        setCable(settings.displayFeed.cable)
 
     }
 
@@ -343,7 +473,7 @@ final class BridgeModel {
         do { try MappingStore.save(data) } catch { return ["Couldn't save the mapping: \(error.localizedDescription)"] }
         library = next
         status.mappingInUse = next.inUse
-        producer?.setProfiles(next.profiles)
+        producer?.send(.setProfiles(next.profiles))
         return []
     }
 
@@ -361,7 +491,7 @@ final class BridgeModel {
         next.reset()
         library = next
         status.mappingInUse = next.inUse
-        producer?.setProfiles(next.profiles)
+        producer?.send(.setProfiles(next.profiles))
         return nil
     }
 }
@@ -374,7 +504,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model = Self.model else { return .terminateNow }
-        model.quit { sender.reply(toApplicationShouldTerminate: true) }
+        model.quit {
+            #if DEBUG
+            DebugTrace.shared.flush()  // the trace's last line is trustworthy (#653)
+            #endif
+            sender.reply(toApplicationShouldTerminate: true)
+        }
         return .terminateLater
     }
+}
+
+/// A device for the capture window to preselect (#200, #316), observed so an open window sees it too.
+@MainActor @Observable
+final class CaptureRequest {
+    var device: String?
 }

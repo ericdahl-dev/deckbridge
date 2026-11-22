@@ -73,8 +73,9 @@ struct MultiControllerTests {
         #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/2/Cue", [.int(0)])])
         #expect(rig.coordinator.status.controllers.map(\.connected) == [true, false])
 
+        // Unit A still holds CUE, so its PLAY latches the preview (#360).
         Self.press(rig, 1, from: Rig.lc6000)
-        #expect(rig.osc.sent.last == OSCMessage("/Syndicate/Deck/1/PlayPause", [.int(1)]))
+        #expect(rig.osc.sent.last == OSCMessage("/Syndicate/Deck/1/Playing", [.int(1)]))
     }
 
     @Test("Two controllers on one device, told apart by channel: each channel drives its own deck and LEDs")

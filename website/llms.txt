@@ -1,16 +1,16 @@
 # DeckBridge
 
-> DeckBridge is a native macOS menu-bar app that lets you play Syndicate, the DJ and performance software by Untitled Audio, from a Denon LC6000 PRIME controller. It converts the controller's USB MIDI to Syndicate's OSC input and lights the controller's LEDs from Syndicate's OSC feedback.
+> DeckBridge is a native macOS menu-bar app that lets you play Syndicate, the DJ and performance software by Untitled Audio Syndicate Ltd., from a Denon LC6000 PRIME controller. It converts the controller's USB MIDI to Syndicate's OSC input and lights the controller's LEDs from Syndicate's OSC feedback.
 
 - Why: Syndicate's own MIDI mapping (0.3.7) can't handle the LC6000's 14-bit jog wheel or 14-bit pitch fader, and gives LED feedback only to the DDJ-FLX4 and FLX10. Source: Syndicate User Guide 0.3.7, section 13.9 (https://untitledaudiosyndicate.com/user-guide/index.html#c13-9).
 - Features: full-resolution jog and pitch with pitch-fader pickup; decks 1 to 4 from one unit via the LC6000's own layers; deck colors that follow Syndicate's palette live, with the jog ring in the deck color; the printed Shift functions; LEDs for Play, Cue, Sync and pads, with hot cues in Syndicate's cue colors; safe recovery on unplug, sleep or quit; diagnostics (MIDI monitor, LED sweep, OSC log); a demo controller; a second LC6000 on another deck; Syndicate on another Mac over the local network.
 - Coming in v1.1: the jog-wheel display showing art in real time.
 - Requirements: macOS 26 or later; Syndicate with OSC input enabled (port 9090, feedback port 9096); a Denon LC6000 PRIME over USB. The LC6000 PRIME is the only supported controller today.
 - Does not need djay Pro or Engine DJ; works with Syndicate only.
-- Status: version 1.0.1 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Pricing has not been announced.
+- Status: version 1.0.1 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Price: free.
 - Privacy: the app collects no data; no account, no analytics.
 - Contact: deckbridge@ericdahl.dev
-- DeckBridge is independent and not affiliated with or endorsed by Untitled Audio or Denon DJ.
+- DeckBridge is independent and not affiliated with or endorsed by Untitled Audio Syndicate Ltd. or Denon DJ.
 
 ## Docs
 

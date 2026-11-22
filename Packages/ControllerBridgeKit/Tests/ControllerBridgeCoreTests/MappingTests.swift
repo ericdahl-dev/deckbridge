@@ -29,20 +29,33 @@ struct MappingTests {
         ))
         // pickup and pickup_tolerance are new in the app (#22): Python had no pickup.
         #expect(mapping.pitch == .init(msbCC: 8, lsbCC: 40, invert: false, deadZone: 0.005, pickup: true, pickupTolerance: 0.02))
-        #expect(mapping.needle == .init(msbCC: 64, lsbCC: 65, touchNote: 70, requireTouch: true))
+        // shift_fader and its mode are new in the app (#609).
+        #expect(mapping.needle == .init(msbCC: 64, lsbCC: 65, touchNote: 70, requireTouch: true, shiftFader: true, shiftFaderMode: .relative))
         #expect(mapping.browse == .init(selectTurnCC: 6, autoLoopSizeCC: 3))
         #expect(mapping.notes.buttons == [
             "play": 1, "cue": 2, "beat_jump_back": 3, "beat_jump_forward": 4, "track_prev": 5, "track_next": 6,
             "censor": 7, "loop_in": 8, "loop_out": 9, "auto_loop": 10, "back": 16, "forward": 17,
-            "select_press": 18, "vinyl": 19, "sync": 20, "master": 21, "key_lock": 22, "slip": 23,
+            "select_press": 18, "vinyl": 19, "sync": 20, "master": 21, "key_lock": 22, "deck_select": 23,
             "pitch_minus": 24, "pitch_plus": 25, "shift": 26, "mode_hotcue": 27, "mode_roll": 28,
             "mode_slicer": 29, "mode_loop": 30, "platter_touch": 40, "param_back": 68, "param_forward": 69,
         ])
         #expect(mapping.notes.pads == [32, 33, 34, 35, 36, 37, 38, 39])
         #expect(mapping.leds == .init(
             pitchCenter: 42, ring: 40, ringColor: [0, 128, 255], rollPadColor: [255, 140, 0],
-            loopPadColor: [0, 255, 0], dimUnlitButtons: true, beatPulse: .off, pulseMs: 100, staleIdle: .dim
+            loopPadColor: [0, 255, 0], dimUnlitButtons: true, beatPulse: .off, pulseMs: 100, staleIdle: .dim,
+            pitchArrowBack: 41, pitchArrowForward: 43, colorMessage: .init(notes: Array(32...40))
         ))
+    }
+
+    @Test("Deck select (#420) is a note 0-127; Slip, which the LC6000 no longer maps, is still a key other profiles may use")
+    func deckSelectKey() {
+        #expect(Mapping.problems(in: Data(#"{"notes": {"deck_select": 200}}"#.utf8)) == [
+            "notes.deck_select: 200 is out of range, expected 0-127",
+        ])
+        #expect(Mapping.problems(in: Data(#"{"notes": {"slip": 99}}"#.utf8)) == [])
+        #expect(Mapping.problems(in: Data(#"{"notes": {"slip": 200}}"#.utf8)) == [
+            "notes.slip: 200 is out of range, expected 0-127",
+        ])
     }
 
     @Test("A user override merges over the default like the Python config merge: tables deep, lists and values whole")
@@ -62,9 +75,9 @@ struct MappingTests {
         #expect(mapping.notes.buttons["play"] == 11)
         #expect(mapping.notes.buttons["cue"] == 2)
         #expect(mapping.notes.pads == [50, 51, 52, 53, 54, 55, 56, 57])
-        #expect(mapping.jog.msbCC == 18)
-        #expect(mapping.jog.lsbCC == 50)
-        #expect(mapping.jog.bendReleaseMs == 80)
+        #expect(mapping.jog?.msbCC == 18)
+        #expect(mapping.jog?.lsbCC == 50)
+        #expect(mapping.jog?.bendReleaseMs == 80)
         #expect(mapping.leds.ringColor == [255, 0, 0])
         #expect(mapping.leds.ring == 40)
         #expect(mapping.osc.port == 9090)

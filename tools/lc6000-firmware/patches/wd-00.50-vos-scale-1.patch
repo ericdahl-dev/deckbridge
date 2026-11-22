@@ -1,0 +1,15 @@
+# LC6000 PRIME wd (jog display) firmware 00.50, trailer CRC 0x3A7CE2CA. Issue #438.
+#
+# Keep the STM32F429's core regulator on Scale 1 (PWR_CR.VOS = 0b11, the chip's reset value)
+# instead of lowering it to Scale 2 (0b10). The clock setup runs the chip at 180 MHz with
+# over-drive on; ST rates Scale 2 with over-drive to 168 MHz and only Scale 1 with over-drive
+# to 180 MHz (DS9405 general operating conditions; RM0090 section 5.5.1).
+#   0x0800A69A  bic r0, r0, #0xc000      unchanged (clears VOS)
+#   0x0800A69E  orr r0, r0, #0x8000  ->  orr r0, r0, #0xc000
+# One byte changes (00 -> 40 at 0x0800A6A0); the line covers the whole instruction so the
+# old-bytes check does too. This is the only write to VOS in the image, and it runs with the
+# PLL off, as RM0090 requires.
+#
+# Unproven on hardware: nobody has flashed it, and nobody has read PWR_CR on a running unit.
+# Apply it only to the stock 00.50 image.
+0x0800A69E 40f40040 40f44040

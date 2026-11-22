@@ -51,9 +51,10 @@ public enum JogDisplay {
     /// The goodbye on the Controller port, at quit or unplug, so the unit returns to standalone.
     public static let goodbye: [UInt8] = [0xF0, 0x00, 0x20, 0x7F, 0x02, 0xF7]
 
-    /// Shows the image in `slot` (0A, image index = slot).
+    /// Shows the image in `slot` (0A, image index = slot) with element mask 0D: the image and the position marker,
+    /// as djay sends. Mask 01 shows the image alone and hides the needle (#165, on hardware).
     public static func show(slot: UInt8) -> [UInt8] {
-        frame(0x0A, [0x01, 0x00, slot, 0x0D])
+        frame(0x0A, [0x0D, 0x00, slot, 0x0D])
     }
 
     /// The most image bytes in one 0D: their 7-bit form (n × 8 / 7 + 1) plus a 3-byte offset fits the 14-bit length.
@@ -70,9 +71,12 @@ public enum JogDisplay {
         /// Each body message but the first (the 0A) is acked.
         public var expectedAcks: Int { body.count - 1 }
 
-        public init(image: [UInt8], slot: UInt8) {
+        /// `showing`: a slot to show while this one goes up (the loading graphic, #165), with the ring and needle; nil
+        /// leads with djay's blank (index 06). Either way the unit accepts the upload (on hardware).
+        public init(image: [UInt8], slot: UInt8, showing: UInt8? = nil) {
             start = [[0x90, 0x01, 0x00]]
-            var body = [JogDisplay.frame(0x0A, [0x01, 0x00, 0x06, 0x0D]), JogDisplay.frame(0x0C, JogDisplay.u21(image.count))]
+            let lead = showing.map { JogDisplay.show(slot: $0) } ?? JogDisplay.frame(0x0A, [0x01, 0x00, 0x06, 0x0D])
+            var body = [lead, JogDisplay.frame(0x0C, JogDisplay.u21(image.count))]
             for offset in stride(from: 0, to: image.count, by: JogDisplay.chunk) {
                 let piece = Array(image[offset..<min(offset + JogDisplay.chunk, image.count)])
                 body.append(JogDisplay.frame(0x0D, JogDisplay.u21(offset) + JogDisplay.bits7(piece)))

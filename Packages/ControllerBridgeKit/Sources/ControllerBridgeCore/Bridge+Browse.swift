@@ -23,10 +23,18 @@ extension Bridge {
         if pressed { send(shift ? "Browser/Enter" : "Browser/L\(mapping.deck.number)", .int(1)) }
     }
 
-    /// One browser step per tick.
+    /// Syndicate's per-deck waveform zoom triggers (#479), read from its app's input names; the argument is the one
+    /// its other triggers take. A live check with Syndicate confirms both.
+    static let zoomIn = "WaveformZoomIn", zoomOut = "WaveformZoomOut", zoomArgument: OSCArgument = .int(1)
+
+    /// One browser step per tick. With Shift (printed ZOOM, #479), one zoom of the deck in front per tick instead:
+    /// in clockwise, out counter-clockwise.
     func selectTurn(_ value: UInt8) {
         let ticks = mapping.midi.encoderFormat.ticks(value)
-        for _ in 0..<abs(ticks) { send(ticks > 0 ? "Browser/Down" : "Browser/Up", .int(1)) }
+        for _ in 0..<abs(ticks) {
+            if shift { sendDeck(ticks > 0 ? Self.zoomIn : Self.zoomOut, Self.zoomArgument) }
+            else { send(ticks > 0 ? "Browser/Down" : "Browser/Up", .int(1)) }
+        }
     }
 
     // MARK: Loops
@@ -44,9 +52,25 @@ extension Bridge {
     }
 
     /// While looping, Syndicate's LoopOut doubles the loop and LoopIn halves it. One step per turn, however fast.
+    /// With Shift held it's the knob's printed Loop Move (#470): each click moves the loop by its own length, forward
+    /// clockwise. With no loop reported, nothing is sent.
     func autoLoopSize(_ value: UInt8) {
         let ticks = mapping.midi.encoderFormat.ticks(value)
-        if ticks != 0 { sendDeck(ticks > 0 ? "LoopOut" : "LoopIn", .int(1)) }
+        guard ticks != 0 else { return }
+        if shift {
+            guard let beats = loopBeats else { return }
+            for _ in 0..<abs(ticks) { sendDeck("LoopMoveBeat", .int(Int32(ticks > 0 ? beats : -beats))) }
+        } else {
+            sendDeck(ticks > 0 ? "LoopOut" : "LoopIn", .int(1))
+        }
+    }
+
+    /// The reported loop's length in whole beats, at the deck's tempo: the nearest of 1, 2, 4 … 64, so a tempo that's
+    /// a little off still lands on the loop's size. A loop under a beat counts as 1. Nil with no loop or no tempo.
+    var loopBeats: Int? {
+        guard let loopSeconds, let bpm else { return nil }
+        let beats = loopSeconds * bpm / 60
+        return [1, 2, 4, 8, 16, 32, 64].min { abs(Double($0) - beats) < abs(Double($1) - beats) }
     }
 
     // MARK: Jumps

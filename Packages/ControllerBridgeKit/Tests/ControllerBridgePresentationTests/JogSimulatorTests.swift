@@ -57,6 +57,47 @@ struct JogSimulatorTests {
     // The simulator's state from the display driver's events (#221), mapped by the App one to one.
 
     static let utc = TimeZone(identifier: "UTC")!
+    @Test("The card's words say what really reached the unit (#318): a preview never reads On the LC6000")
+    func cardWords() {
+        var sim = JogSimulator()
+        // Previewing (no LC6000, or the switch off): the driver still uploads to itself, so deck 1 is in front.
+        sim.apply(.uploadStarted(slot: 1, deck: 1, bytes: 100, at: Self.noon))
+        sim.apply(.shown(slot: 1))
+        #expect(!sim.onUnit(deck: 1))
+        #expect(sim.card(deck: 1, timeZone: Self.utc) == "Preview only: not on an LC6000")
+        #expect(sim.card(deck: 3, timeZone: Self.utc) == "Preview only: not on an LC6000")
+
+        sim.apply(.connected)
+        sim.apply(.uploadStarted(slot: 2, deck: 1, bytes: 14_812, at: Self.noon))
+        #expect(sim.onUnit(deck: 1))
+        #expect(sim.card(deck: 1, timeZone: Self.utc) == "Sending to the LC6000")
+        sim.apply(.shown(slot: 2))
+        #expect(sim.card(deck: 1, timeZone: Self.utc) == "Shown on the LC6000\nSlot 2 · 14,812 bytes · 12:04:31 · Accepted")
+        #expect(!sim.onUnit(deck: 3))
+        #expect(sim.card(deck: 3, timeZone: Self.utc) == "Not on the LC6000 now")
+
+        sim.apply(.uploadStarted(slot: 1, deck: 1, bytes: 980, at: Self.noon))
+        sim.apply(.failed)
+        #expect(sim.card(deck: 1, timeZone: Self.utc) == "Refused by the LC6000\nSlot 1 · 980 bytes · 12:04:31 · Refused")
+    }
+
+    @Test("Closed, the feed keeps the state but asks for no hop; opening asks once; open, one hop at a time (#318)")
+    func visibleFeed() {
+        var feed = VisibleFeed()
+        var hops: [Bool] = []
+        hops.append(feed.changed())            // Diagnostics closed: nothing to hop for
+        hops.append(feed.changed())
+        hops.append(feed.setVisible(true))     // opening publishes the latest once
+        hops.append(feed.changed())            // that publish is still pending
+        feed.published()
+        hops.append(feed.changed())            // the next change hops
+        hops.append(feed.changed())            // and the ones before it lands ride along
+        feed.published()
+        hops.append(feed.setVisible(false))
+        hops.append(feed.changed())
+        #expect(hops == [false, false, true, false, true, false, false, false])
+    }
+
     static let noon = Date(timeIntervalSince1970: 1_763_294_671)  // 12:04:31 UTC
 
     @Test("Before the unit answers, every deck reads Not connected; once connected, Nothing uploaded yet")
@@ -84,17 +125,19 @@ struct JogSimulatorTests {
         #expect(sim.status(deck: 1).readout(timeZone: Self.utc) == "Slot 2 · 14,812 bytes · 12:04:31 · Accepted")
     }
 
-    @Test("Each deck has its own needle (the user's pick, #165); the play light belongs to the deck in front")
+    @Test("Each deck has its own needle (the user's pick, #165) and its own play state, front or not (#317)")
     func needlesPerDeck() {
         var sim = JogSimulator()
         sim.apply(.connected)
         sim.apply(.uploadStarted(slot: 1, deck: 1, bytes: 100, at: Self.noon))
         sim.apply(.marker(deck: 1, pitchBend: 4096))
         sim.apply(.marker(deck: 3, pitchBend: 8192))
-        sim.apply(.playing(true))
+        sim.apply(.playing(deck: 3, true))
         #expect(sim.marker(deck: 1) == 4096)
         #expect(sim.marker(deck: 3) == 8192)
-        #expect(sim.playing(deck: 1))
+        #expect(!sim.playing(deck: 1))
+        #expect(sim.playing(deck: 3))
+        sim.apply(.playing(deck: 3, false))
         #expect(!sim.playing(deck: 3))
     }
 

@@ -1,6 +1,6 @@
 # DeckBridge
 
-A Mac menu-bar app that lets you use a **Denon LC6000 PRIME** with **[Untitled Audio Syndicate](https://untitledaudiosyndicate.com)** through Syndicate's OSC API, with LED feedback.
+A Mac menu-bar app that lets you use a **Denon LC6000 PRIME** with **[Syndicate](https://untitledaudiosyndicate.com)** by Untitled Audio Syndicate Ltd. through Syndicate's OSC API, with LED feedback.
 
 Syndicate's own MIDI mapping (0.3.7) can't handle the LC6000's 14-bit jog wheel or its 14-bit pitch fader, and it gives LED feedback only to the DDJ-FLX4 and FLX10 ([Syndicate User Guide 0.3.7, section 13.9](https://untitledaudiosyndicate.com/user-guide/index.html#c13-9): 14-bit CC pairs and generic MIDI LED feedback are listed as not supported). The app reads the LC6000's MIDI, converts it, and sends it to Syndicate's fixed OSC addresses. It also listens to Syndicate's OSC feedback to light the controller.
 
@@ -14,28 +14,37 @@ LC6000 ◀──MIDI LEDs──  DeckBridge  ◀──OSC feedback :9096── S
 | LC6000 | Syndicate (`/Syndicate/Deck/{n}/…`) |
 |---|---|
 | Pitch fader (14-bit CC 8 + 40) | `TempoSlider` −1…+1 at full resolution, with pickup so the tempo never jumps |
-| Jog while playing | `PhaseBend` ±1, released 80 ms after the wheel stops |
-| Jog while paused | `WaveformSeek`, using the track length from feedback. Falls back to `BeatSkip` |
-| Needle Drop strip, while touched | `WaveformSeek` |
+| Jog while playing | `PhaseBend` ±1, released 80 ms after the wheel stops. With VINYL on, it seeks instead, as the paused jog does |
+| VINYL | Toggles the playing jog between bending (off, the default) and seeking (on), per deck layer. Its light is full while seeking is on |
+| Jog while paused | `WaveformSeek`, using the track length from feedback, with the deck's `Quantize` at None (1) while seeking so Syndicate doesn't snap it to the grid, then Use Global (0) 300 ms after the last move. Falls back to `BeatSkip` |
+| Needle Drop strip, while touched | Moves the deck's channel fader in Syndicate (`Mixer/CHn/Volume`, n the deck), on by default (#609, #729). Relative moves it from where it is by how far the finger travels, and needs Syndicate's `Volume` feedback; Jump sends it straight to the finger. Settings › Controller switches it and picks the mode; switched off, the strip seeks with or without Shift |
+| Shift + Needle Drop strip, while touched | `WaveformSeek` (needle drop). On a paused deck, the deck's `Quantize` is None while touched, then Use Global |
 | Play / Cue / Sync / Master | `PlayPause` / `Cue` (hold) / `TempoSync` / `TempoMaster` |
 | Pads in Hot Cue mode | `HotCue n 1/0` (press and hold) |
+| Shift + pad in Hot Cue mode, deck stopped | Goes to that cue without playing, at once: `Quantize 1` (None), then a silent `WaveformSeek` to the cue, then `Quantize 0` (Use Global). The first press on each cue (per track) taps `Cue n` and pauses it on `Playing 1` instead, with a short blip, to learn where the cue is. Syndicate doesn't report a deck's own quantize, so a deck set to its own quantize is reset to Use Global. On a playing deck it's a hot cue |
 | Pads in Roll mode | `SlipLoop/ThirtySecond … Four` (hold) |
 | Pads in Loop mode | `SetCueLoop n` |
-| Loop In / Loop Out / Auto Loop, and the Auto Loop knob | `LoopIn` / `LoopOut` / `Loop`. Turning the knob halves or doubles the loop |
+| Loop In / Loop Out / Auto Loop, and the Auto Loop knob | `LoopIn` / `LoopOut` / `Loop`. Turning the knob halves or doubles the loop; Shift + turn is Loop Move: each click moves the loop by its own length (`LoopMoveBeat`) |
 | Beat Jump ◀ ▶ (Shift for a bar) | `SkipBeatBack` / `SkipBeatForward` (`SkipBar…` with Shift) |
 | Censor (hold; Shift + Censor latches) | `Reverse` 1/0 while held; with Shift, each press turns `Reverse` on or off |
-| Key Lock / Slip | `PitchPreserve` / `CueSlip` |
+| Key Lock | `PitchPreserve` |
+| Deck select (printed Slip) | Steps the bridge to the next deck layer (#420); nothing goes to Syndicate. Shift + deck select steps the unit's own layer, and the bridge follows. |
+| Shift + Sync (OFF) | Turns sync off: `TempoSync` 1 only while the deck is synced (Syndicate's `Sync` feedback); nothing otherwise, so it never turns sync on |
 | Shift + Key Lock (pitch reset) | `TempoSlider` 0.0, then the fader waits to meet 0.0. Nothing while the tempo slider is disabled (a synced follower) |
 | Pitch Bend − / + (hold) | `PhaseMinus` / `PhasePlus` 1/0, nudging the tempo while held |
-| Shift + Pitch Bend (pitch range) | Nothing: Syndicate has no OSC route for the slider's range. The log says so once |
+| Shift + Pitch Bend − / + | Transposes the deck down or up a semitone (`PitchDown` / `PitchUp`, once per press). It turns the deck's key lock (P) on first, since Syndicate transposes only with it on |
 | Param ◀ ▶ | `BeatSkip ∓1` |
 | Browse knob turn and press (Shift for Enter), Back, Forward, Track ◀ ▶ | `Browser/Up`, `Browser/Down`, `Browser/L{deck}`, `Back`, `Enter` |
+| Shift + browse knob turn (ZOOM) | Zooms the deck in front's waveform, one step per click: `WaveformZoomIn` 1 clockwise, `WaveformZoomOut` 1 counter-clockwise |
 
 **LEDs:**
 - Play, Cue, Sync and Master follow Syndicate's state. Play blinks while a quantized start is pending.
-- Key Lock, Slip, Shift and the pad-mode buttons show the bridge's own state.
-- Pads show your hot cues in Syndicate's cue colors, quantized to the LC6000's 64-color table. A held pad lights brighter.
-- The platter ring lights when a track is loaded, in its deck's color, the same as the deck's badge in the app, so switching layers changes it. Deck colors follow Syndicate's cue palette (slots 1, 3, 5 and 7, under CUE COLORS) as you change it, or set your own under **Settings › Decks**. It can also pulse on each beat or on the downbeat.
+- Key Lock, Shift and the pad-mode buttons show the bridge's own state. Censor is lit while Reverse is on, held or latched with Shift.
+- The pitch arrows by the fader show pickup: while the fader waits to meet Syndicate's tempo, the arrow pointing the way to move it is lit, and both go out when it catches. No arrow is lit while the deck's tempo slider is disabled (a synced follower) or no track is loaded.
+- Buttons with no state of their own are lit dim so the panel reads in the dark, and full while held: Beat Jump, Track ◀ ▶, Pitch Bend − / +, Param ◀ ▶, the browse knob's ring and the deck select button. Vinyl is lit the same way, and also full while its seek mode is on.
+- Pads show your hot cues in Syndicate's cue colors, and each pad mode in its own color. On the LC6000 they're exact, through Denon's own color message (with **Exact colors on the LC6000** off, they're quantized to its 64-color table). A held pad lights brighter.
+- The platter ring lights when a track is loaded, in its deck's color, the same as the deck's badge in the app, so switching layers changes it. On the LC6000 it shows the exact color through Denon's own color message; turn off **Exact colors on the LC6000** in **Settings › Decks** to go back to the 64-color table. Deck colors follow Syndicate's cue palette (slots 1, 3, 5 and 7, under CUE COLORS) as you change it, or set your own under **Settings › Decks**. It can also pulse on Syndicate's master clock, on each beat or on the downbeat: with exact colors, full on the beat and easing down until the next one, never dark.
+- **Light brightness** (**Settings › Decks**, with exact colors on) dims the pads and the platter ring together, from 10% to 100%, for a dark room.
 
 **Recovery:**
 - Unplugging the LC6000, sleeping the Mac, switching layers or quitting releases every held control first, including a held Pitch Bend or a latched Reverse.
@@ -46,7 +55,12 @@ LC6000 ◀──MIDI LEDs──  DeckBridge  ◀──OSC feedback :9096── S
 - Scratching: Syndicate has no scratch or scrub OSC route.
 - Slicer mode: it is unmapped.
 
-**Coming in v1.1:** the platter's center display showing the active deck (#165).
+**Jog display** (the LC6000's round screen in the platter, #165):
+- It shows the deck in front: its number in the deck's color, the title and artist, key and BPM, and the master beat around the edge. Turn it on or off in **Settings › Controller › Show the deck on the jog display**.
+- **Key display** writes the key as Syndicate sends it (**Traditional**, the default, such as `C#m`) or as its Camelot code (**Camelot**, `12A`). Syndicate always sends the traditional name, whatever its own key setting, so pick the one that matches it. The jog display and the Diagnostics preview change at once.
+- On Denon's own firmware (**Firmware: Denon**, the default) DeckBridge uploads a picture of each deck.
+- **Firmware: Custom** is only for a unit flashed with DeckBridge's display firmware, an experiment that isn't part of the release. Such a unit answers DeckBridge and draws the screen itself from small messages: the needle, the beat, the time left with a warning near the end, the level meter, and the deck's phase against the master. It shows our logo with the deck's number when Syndicate stops answering. A unit that doesn't answer gets pictures, as on Denon's firmware.
+- **Diagnostics › Jog display** previews every deck's screen, drawn or pictures, as the unit would show it.
 
 ## Install
 
@@ -56,7 +70,7 @@ DeckBridge is in public beta on TestFlight: join at **[testflight.apple.com/join
 
 1. **Settings → OSC:** turn **OSC INPUT ENABLED** on. The listen port defaults to 9090.
 2. **Settings → OSC FEEDBACK:** set DEST IP to the bridge's computer (`127.0.0.1` if it's the same one) and PORT to `9096`.
-3. **Settings → OSC FEEDBACK → SUBSCRIPTIONS:** Turn on these subscriptions: Playing, PlayPending, Loaded and TrackInfo, Position/Progress, TempoSlider and TempoSliderEnabled, Cues, BPM and Sync and Loop.
+3. **Settings → OSC FEEDBACK → SUBSCRIPTIONS:** Turn on these subscriptions: Playing, PlayPending, Loaded and TrackInfo, Position/Progress, TempoSlider and TempoSliderEnabled, Cues, BPM and Sync, Loop and Volume.
 4. **Settings → MIDI:** turn your controller's MIDI input **off** (for example, Denon LC6000 PRIME). Otherwise Syndicate's own mapping and the bridge would both react to every button.
 
 Quit djay Pro, Engine DJ or any other app using your controller first, and power-cycle your controller if one was open: they can switch its MIDI mode until it restarts.
@@ -65,7 +79,7 @@ The **Setup guide** button in the panel, and **Setup Guide…** in Settings, sho
 
 ## Four decks from one LC6000
 
-The LC6000 has four deck layers: **Shift + deck select** steps through them, and the bridge follows. Layer N drives Syndicate deck N, so one unit plays all four decks. On its own the LC6000 keeps every control on MIDI channel 1 and only signals the layer; the bridge sends those controls to the active layer's deck. (Another DJ app can switch it to one channel per layer until it restarts; the bridge follows that too, but quit those apps first.)
+The LC6000 has four deck layers: **Shift + deck select** steps through them, and the bridge follows. A plain press of the deck select button (printed **Slip**), with no Shift, steps them too (#420); that moves only the bridge, not the unit's own layer. Layer N drives Syndicate deck N, so one unit plays all four decks. On its own the LC6000 keeps every control on MIDI channel 1 and only signals the layer; the bridge sends those controls to the active layer's deck. (Another DJ app can switch it to one channel per layer until it restarts; the bridge follows that too, but quit those apps first.)
 
 - **Switching layers:** anything held on the old layer is released on its deck, and the LEDs repaint from the new deck's state.
 - **Pitch fader:** all layers share the one fader, so on the new layer it waits until it meets that deck's tempo (pickup), and the tempo doesn't jump.

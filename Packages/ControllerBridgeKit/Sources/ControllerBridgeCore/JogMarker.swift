@@ -1,7 +1,8 @@
 // The jog display's marker (#165, #215): one hand on the platter display, moved by pitch bend on the WD port.
 // It shows the deck's own phase in the bar, one turn per bar of four beats, from the deck's BarRamp and BPM (the
 // user's pick: the needle is the deck, the lit ring segment is the master). The master-clock mode stays for #215.
-// While the platter moves it follows the platter instead, and the next ramp takes it back.
+// The platter never moves it (the user's pick for v1.1, reversing #306): a seek on a paused deck moves the deck's
+// BarRamp, which it follows.
 
 public struct JogMarker: Equatable, Sendable {
     private enum Mode: Equatable, Sendable {
@@ -9,7 +10,7 @@ public struct JogMarker: Equatable, Sendable {
         case clock(base: Double, since: Double, bpm: Double)
         /// The deck's phase: `phase` turns at `since`, running on at `bpm`, never more than a quarter turn past it.
         case ramp(phase: Double, since: Double, bpm: Double)
-        /// Where the platter left it.
+        /// Stopped where the deck paused.
         case held(Double)
     }
 
@@ -30,12 +31,6 @@ public struct JogMarker: Equatable, Sendable {
     /// The deck stopped: the hand stays where it is at `time`.
     public mutating func freeze(at time: Double) {
         mode = .held(angle(at: time))
-    }
-
-    /// The platter moved by `counts` of `countsPerRev`: the hand moves with it, from where it is.
-    public mutating func platter(counts: Int, countsPerRev: Int, at time: Double) {
-        guard countsPerRev > 0 else { return }
-        mode = .held(angle(at: time) + Double(counts) / Double(countsPerRev))
     }
 
     /// The hand's angle in turns at `time`, not yet wrapped.

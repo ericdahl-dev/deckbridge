@@ -1,0 +1,6 @@
+#!/bin/sh
+# Drives a Syndicate deck over OSC for on-hardware tests (#680). See docs/agents/syndicate-deck.md.
+#   scripts/syndicate_deck play <deck> [--cue <1-8>] | pause <deck> | toggle <deck> [--host <h>] [--port <p>]
+set -eu
+root="$(cd "$(dirname "$0")/.." && pwd)"
+exec swift run --quiet --package-path "$root/Packages/ControllerBridgeKit" syndicate-deck "$@"

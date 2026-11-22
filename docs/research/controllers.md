@@ -380,6 +380,80 @@ On the plus side, the Pioneer docs make #207's controller side easy to draft. Ev
 - **The archived Pioneer PDFs aren't live.** The originals now redirect to AlphaTheta's support site, which refused scripted fetches. The archived copies are faithful, but Pioneer may have newer versions there.
 - **The capture owner is unknown.** #202 needs an owner's capture, and none has been identified for any candidate.
 
+
+## 8. 14-bit coverage (#414)
+
+The user's priority (2026-11-17): target controllers with 14-bit controls first, since Syndicate's own MIDI mapping can't
+use 14-bit CC pairs (section 2; ADR-0010). For each controller, which of seven controls send an MSB/LSB pair.
+
+**Method.** For controllers with a Mixxx mapping at `dc4bf99`, each control was found in the mapping and checked for
+Mixxx's `fourteen-bit-msb`/`-lsb` options, an MSB/LSB CC pair, or script inputs named MSB and LSB. Each cell links the
+line it rests on, and every cell was checked by reading that line. Rows with "(list)" rest on the manufacturer's MIDI
+list as already cited in section 4. **14** is a 14-bit pair, **7** a single 7-bit CC, **rel** a relative jog (7-bit
+ticks), "—" no such control. "…" means the other EQ bands follow the same pattern. The count is 14-bit controls out of
+the seven; a relative jog doesn't count, the LC6000's absolute 14-bit jog does.
+
+| Controller | Pitch | Jog | Channel fader | Crossfader | EQ | Filter | Trim | 14-bit of 7 |
+|---|---|---|---|---|---|---|---|---|
+| Denon LC6000 PRIME (today's profile) | **14** CC 8/40 (hardware, README) | **14 absolute** CC 17/49 (hardware, README) | — | — | — | — | — | 2 (no mixer) |
+| Pioneer DDJ-400 | **14** [0x00/0x20](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L308) | rel [0x22](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L178) | **14** [0x13/0x33](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L645) | **14** [0x1F/0x3F, ch 7](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L624) | **14** [0x07/0x27 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L749) | **14** [0x17/0x37, ch 7](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L920) | **14** [0x04/0x24](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-400.midi.xml#L707) | 6 |
+| Pioneer DDJ-FLX4 | **14** FLX4 list p.2; [Mixxx](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-FLX4.midi.xml#L318) | rel, FLX4 list p.1 | **14** p.2 | **14** p.2 (ch 7) | **14** p.2 | **14** p.2 (ch 7) | **14** p.2 | 6 |
+| Pioneer DDJ-1000 | **14** (list, section 4.8) | not checked | **14** (list) | **14** (list) | **14** (list) | **14** (list) | **14** (list) | 6 |
+| Pioneer DDJ-SX | **14** [0x00/0x20](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L467) | rel [script](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L577) | **14** [0x13/0x33](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L207) | **14** [0x1F/0x3F, ch 7](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L39) | **14** [0x0F/0x2F …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L247) | **14** [0x17/0x37](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L227) | **14** [0x04/0x24](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer%20DDJ-SX.midi.xml#L307) | 6 |
+| Pioneer DDJ-SB3 | **14** [0x00/0x20](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L578) | rel [script](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L258) | **14** [0x13/0x33](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L1018) | **14** [Mixxx 14-bit](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L2198) | **14** [0x07/0x27 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L1618) | **14** [0x17/0x37](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L1178) | **14** [0x04/0x24](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Pioneer-DDJ-SB3.midi.xml#L1098) | 6 |
+| Roland DJ-505 | **14** [0x09/0x3B](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L78) | rel [script](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L524) | **14** [0x1C/0x3A](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L705) | **14** [0x08/0x58, ch 16](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L3437) | **14** [0x17/0x37 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L575) | 7 [0x1A](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L635) | **14** [0x16 MSB/LSB](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Roland_DJ-505.midi.xml#L555) | 5 |
+| Pioneer DDJ-REV1 | not stated | not checked | **14** (list, section 4.7) | **14** (list, ch 7) | **14** (list) | not stated | **14** (list) | ≥4 |
+| Hercules Inpulse 500 | **14** [0x08/0x28, ch 2](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L3034) | rel [0x09, ch 2](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L3102) | **14** [0x00/0x20](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L2896) | 7 [0x00](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L2861) | **14** [0x02/0x22 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L2939) | 7 [0x01](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L3023) | **14** [0x05/0x25](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Hercules_DJControl_Inpulse_500.midi.xml#L3002) | 4 |
+| Denon MC7000 | **14** [0x09](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L611) + [0x77](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L571) (MSB disputed, section 5.3) | rel [0x06](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1135) | 7 [0x1C](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1377) | 7 [0x08, ch 16](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1420) | 7 [0x17 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1176) | 7 [0x1A](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1296) | 7 [0x16](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Denon-MC7000.midi.xml#L1337) | 1 |
+| Numark Mixtrack Platinum FX | **14** [0x09/0x29](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L1260) | rel [script](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L936) | 7 [0x1C](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L2574) | 7 [0x08, ch 2](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L1206) | 7 [0x17 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L1998) | 7 [0x1A](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L2322) | 7 [0x16](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Platinum%20FX.midi.xml#L1890) | 1 |
+| Numark Mixtrack Pro FX | **14** [0x09/0x29](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L162) | rel [script](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L1581) | 7 [0x1C](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L143) | 7 [0x08, ch 16](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L29) | 7 [0x17 …](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L69) | 7 [0x1A](https://github.com/mixxxdj/mixxx/blob/dc4bf99322bb9a4c59483d24c2c40d1df2d1b726/res/controllers/Numark%20Mixtrack%20Pro%20FX.midi.xml#L124) | not checked | 1 |
+| Denon SC6000 / PRIME 2 / PRIME 4 (MIDI mode) | unknown | unknown | unknown | unknown | unknown | unknown | unknown | ? (no public MIDI list; #272) |
+| Rane (ONE, SEVENTY…) | not found | not found | not found | not found | not found | not found | not found | ? (no public MIDI list found) |
+| NI Traktor S2/S4 MK3 | HID | HID | HID | HID | HID | HID | HID | n/a (HID, not MIDI) |
+
+**What this shows**
+- **Pioneer is 14-bit throughout.** Every fader and knob on the DDJ-400, FLX4, SX, SB3 and 1000 is a pair, MSB n and LSB
+  n + 32. The crossfader and the filter sit on channel 7.
+- **The Roland DJ-505** is 14-bit except its filter, but its pairs don't follow n + 32 (tempo 0x09/0x3B, fader
+  0x1C/0x3A), and its crossfader is on channel 16. Profiles already name `msb_cc` and `lsb_cc` separately, so that
+  needs no new key.
+- **The Hercules Inpulse 500** pairs its pitch, channel faders, EQ and trim; its crossfader and filter are 7-bit.
+- **The Denon MC7000 and the Numark Mixtrack FX pair** pair only the pitch fader. Their mixers are 7-bit.
+- **Every jog except the LC6000's is relative.** DeckBridge handles both (#204).
+- **No public MIDI list** was found for the PRIME units in MIDI mode or for Rane. NI's S2/S4 MK3 are HID devices,
+  out of scope for a MIDI profile.
+
+### Recommended v1.2 profile order
+
+The primary key is 14-bit coverage. Popularity comes second: section 3's ranking where a unit is in it, and otherwise
+unsourced, so it's listed last within a tie.
+
+1. **Pioneer DDJ-400** (6 of 7). It's section 3's #1, and the drafts from #280 already exist.
+2. **Pioneer DDJ-FLX4** (6). The same draft and messages; Syndicate's own FLX4 preset can't read its 14-bit pairs.
+3. **Pioneer DDJ-1000** (6). It has an official list; 4 decks.
+4. **Pioneer DDJ-SB3** and **DDJ-SX** (6). Mixxx mappings exist; they aren't in section 3's top 10.
+5. **Roland DJ-505** (5). A Mixxx mapping exists; not in the top 10.
+6. **Hercules Inpulse 500** (4). Section 3's #6.
+7. **Pioneer DDJ-REV1** (at least 4). Section 3's #7.
+8. **Denon MC7000** (1) and **Numark Mixtrack Platinum FX / Pro FX** (1). Section 3's #3 and #5, but only their
+   pitch fader is 14-bit.
+
+The PRIME units and Rane wait for a public list or an owner's capture (#272).
+
+### The DDJ-400/FLX4 drafts and the new keys
+
+- **The #280 drafts** already set the 14-bit pitch fader and the 14-bit channel fader, trim and EQ high/mid/low in
+  `mixer`, with `bits: 14` (`docs/research/ddj/`). They leave out the 14-bit **filter** and **crossfader**, for the
+  two reasons below.
+- **14-bit mixer controls need no new key in general.** `mixer.<control>` takes `bits` 7 or 14 with `msb_cc` and
+  `lsb_cc`, including pairs that aren't n + 32 (#207).
+- **New keys still needed:**
+  - **#368, a channel per mixer control:** the Pioneer filter and crossfader are on channel 7, and the Roland
+    crossfader on channel 16, as are the MC7000's and the Mixtrack Pro FX's (the Platinum FX's is on channel 2), not
+    the deck's channel.
+  - **#369, a crossfader:** `mixer` has none, and every 14-bit unit above has a 14-bit crossfader.
+- **Already supported:** a relative jog (#204) and the LC6000's absolute 14-bit jog.
+
 ## Sources
 
 - [Syndicate User Guide 0.3.7, section 13.9](https://untitledaudiosyndicate.com/user-guide/index.html#c13-9): what Syndicate's MIDI mapping supports; build 0.3.7, updated Nov 14, 2026.

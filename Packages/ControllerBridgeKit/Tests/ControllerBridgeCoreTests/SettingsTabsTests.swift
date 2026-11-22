@@ -10,7 +10,7 @@ struct SettingsTabsTests {
         #expect(SettingsTab.allCases.map(\.shortcut) == ["1", "2", "3", "4"])
     }
 
-    @Test("Each field shows on its tab: devices, deck and channel on Controller; deck colors on Decks; host and ports on Syndicate")
+    @Test("Each field shows on its tab: devices, deck and channel on Controller; deck colors on Decks; host and ports, the display feed's too, on Syndicate")
     func fieldTabs() {
         #expect(SettingsTab(field: .deck(controller: 1)) == .controller)
         #expect(SettingsTab(field: .channel(controller: 0)) == .controller)
@@ -19,6 +19,8 @@ struct SettingsTabsTests {
         #expect(SettingsTab(field: .host) == .syndicate)
         #expect(SettingsTab(field: .oscPort) == .syndicate)
         #expect(SettingsTab(field: .feedbackPort) == .syndicate)
+        #expect(SettingsTab(field: .displayFeedHost) == .syndicate)
+        #expect(SettingsTab(field: .displayFeedPort) == .syndicate)
     }
 
     @Test("A refused Apply goes to the leftmost tab with a problem, and focuses that tab's first bad field")

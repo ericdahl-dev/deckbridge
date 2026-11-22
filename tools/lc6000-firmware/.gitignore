@@ -1,0 +1,7 @@
+# Vendor firmware and anything built from it (inMusic copyright): keep local, never commit.
+# Only scripts, tests and patch descriptions (addresses plus the few bytes replaced) belong here.
+*.dfu
+*.bin
+*.hex
+*.elf
+*.patched*

@@ -170,49 +170,126 @@ struct JogMarkerCoordinatorTests {
         #expect(Self.bends(port) == [[0xE0, 0x00, 0x00]])
     }
 
-    @Test("At most 30 a second: ticks every 10 ms send at 0, 0.04 and 0.08 s (0, 327, 655)")
+    /// The needle keeps a send schedule (#558) on the shared live cadence, 20 ms since #605 (#592's stall was power, not
+    /// the rate): two 10 ms ticks, so every step is the same. At 120 BPM the needle is t × 8192, whole steps: sends at 0,
+    /// 0.02, 0.04, 0.06 and 0.08 s are 0, 163, 327, 491 and 655.
+    @Test("At most 50 a second, on a schedule: ticks every 10 ms send at 0, 0.02, 0.04, 0.06 and 0.08 s")
     func rateLimit() throws {
+        let (rig, port) = try Self.playingAt120()
+        for step in 0...9 { Self.tick(rig, at: Double(step) * 0.01) }
+        #expect(Self.bends(port) == [[0xE0, 0x00, 0x00], [0xE0, 0x23, 0x01], [0xE0, 0x47, 0x02], [0xE0, 0x6B, 0x03],
+                                     [0xE0, 0x0F, 0x05]])
+    }
+
+    @Test("An even cadence: over a second of 10 ms ticks, every gap between needle sends is exactly 20 ms")
+    func evenGaps() throws {
+        let (rig, port) = try Self.playingAt120()
+        var sentAt: [Int] = []
+        for step in 0..<100 {
+            let before = Self.bends(port).count
+            Self.tickRamped(rig, at: Double(step) * 0.01)
+            if Self.bends(port).count > before { sentAt.append(step) }
+        }
+        #expect(sentAt.count == 50)
+        #expect(zip(sentAt, sentAt.dropFirst()).allSatisfy { $1 - $0 == 2 })
+    }
+
+    /// A tick at `time` with Syndicate's BarRamp at the deck's true phase then (a bar is 2 s at 120 BPM), so the needle
+    /// keeps moving: it runs on at most a beat past the last ramp.
+    static func tickRamped(_ rig: Rig, at time: Double) {
+        rig.clock.now = time
+        Self.feed(rig, "Deck/1/BarRamp", .float(Float((time / 2).truncatingRemainder(dividingBy: 1))))
+        rig.coordinator.tick()
+    }
+
+    static func playingAt120() throws -> (Rig, JogDisplayDriverTests.FakePort) {
         let (rig, port) = try Self.started()
         Self.feed(rig, "Deck/1/Playing", .int(1))
         Self.feed(rig, "Deck/1/BPM", .float(120))
         Self.feed(rig, "Deck/1/BarRamp", .float(0))
-        for step in 0...9 { Self.tick(rig, at: Double(step) * 0.01) }
-        #expect(Self.bends(port) == [[0xE0, 0x00, 0x00], [0xE0, 0x47, 0x02], [0xE0, 0x0F, 0x05]])
+        return (rig, port)
     }
 
-    @Test("Paused, a ramp (0.5) sets it but doesn't run on; a quarter turn of the platter (900 counts) moves it to 0.75: 12288")
+    @Test("A second of 10 ms ticks sends the needle 50 times, the cap")
+    func fullRate() throws {
+        let (rig, port) = try Self.playingAt120()
+        for step in 0..<100 { Self.tickRamped(rig, at: Double(step) * 0.01) }
+        #expect(Self.bends(port).count == 50)
+    }
+
+    @Test("Late ticks (the timer's leeway): ticks 5 ms late every other time still send 50 a second (the on-time ticks are the due ones)")
+    func lateTicks() throws {
+        let (rig, port) = try Self.playingAt120()
+        for step in 0..<100 { Self.tickRamped(rig, at: Double(step) * 0.01 + (step % 2 == 1 ? 0.005 : 0)) }
+        #expect(Self.bends(port).count == 50)
+    }
+
+    @Test("After a stall the schedule restarts: no burst to catch up, the next send is 20 ms on")
+    func noBurstAfterStall() throws {
+        let (rig, port) = try Self.playingAt120()
+        Self.tickRamped(rig, at: 0)
+        Self.tickRamped(rig, at: 1)
+        let before = Self.bends(port).count
+        Self.tickRamped(rig, at: 1.01)
+        #expect(Self.bends(port).count == before)
+        Self.tickRamped(rig, at: 1.02)
+        #expect(Self.bends(port).count == before + 1)
+    }
+
+    @Test("The platter never moves the needle (the user's pick for v1.1): touched and turned, a playing deck's needle stays on its BarRamp")
+    func platterLeavesNeedle() throws {
+        let (rig, port) = try Self.started()
+        Self.feed(rig, "Deck/1/Playing", .int(1))
+        Self.feed(rig, "Deck/1/BPM", .float(120))
+        Self.feed(rig, "Deck/1/BarRamp", .float(0))
+        Self.tick(rig, at: 0)
+        // Touch the top, turn a quarter (platter 1000 then 1900), while Syndicate's ramp keeps coming.
+        rig.coordinator.midi(.noteOn(channel: 0, note: 40, velocity: 127), source: Rig.lc6000.id)
+        for (msb, lsb) in [(UInt8(7), UInt8(104)), (14, 108)] {
+            rig.coordinator.midi(.controlChange(channel: 0, controller: 17, value: msb), source: Rig.lc6000.id)
+            rig.coordinator.midi(.controlChange(channel: 0, controller: 49, value: lsb), source: Rig.lc6000.id)
+        }
+        rig.clock.now = 0.05
+        Self.feed(rig, "Deck/1/BarRamp", .float(0.5))
+        Self.tick(rig, at: 0.1)
+        // The ramp's 0.5, run on 0.05 s at 120 BPM: 0.525 of a turn, 8601 (E0 19 43); the platter's quarter is ignored.
+        #expect(Self.bends(port).last == [0xE0, 0x19, 0x43])
+        #expect(!Self.bends(port).contains([0xE0, 0x00, 0x20]))
+    }
+
+    @Test("Paused, a turn of the platter (900 counts) doesn't move the needle: the seek moves the deck's BarRamp, which does")
     func pausedPlatter() throws {
         let (rig, port) = try Self.started()
         Self.feed(rig, "Deck/1/BPM", .float(120))
         Self.feed(rig, "Deck/1/BarRamp", .float(0.5))
         Self.tick(rig, at: 0.2)
-        #expect(Self.bends(port) == [])
         // Platter at 1000, then 1900: 900 counts forward (CC 17 then CC 49).
         for (msb, lsb) in [(UInt8(7), UInt8(104)), (14, 108)] {
             rig.coordinator.midi(.controlChange(channel: 0, controller: 17, value: msb), source: Rig.lc6000.id)
             rig.coordinator.midi(.controlChange(channel: 0, controller: 49, value: lsb), source: Rig.lc6000.id)
         }
         Self.tick(rig, at: 0.3)
-        #expect(Self.bends(port) == [[0xE0, 0x00, 0x60]])
+        #expect(Self.bends(port) == [])
     }
 
-    @Test("Playing then paused, the needle stops where it was: BarRamp 0, paused a quarter-second on (1/8), then 900 counts: 3/8, 6144")
+    @Test("Playing then paused, the needle stops where it was: BarRamp 0, paused a quarter-second on, it holds 1/8 (2048), platter or not")
     func pauseFreezes() throws {
         let (rig, port) = try Self.started()
         Self.feed(rig, "Deck/1/Playing", .int(1))
         Self.feed(rig, "Deck/1/BPM", .float(120))
         Self.feed(rig, "Deck/1/BarRamp", .float(0))
-        rig.clock.now = 0.25
+        Self.tick(rig, at: 0.25)
+        #expect(Self.bends(port).last == [0xE0, 0x00, 0x10])
         Self.feed(rig, "Deck/1/Playing", .int(0))
         port.wd.removeAll()
-        rig.clock.now = 1
         for (msb, lsb) in [(UInt8(7), UInt8(104)), (14, 108)] {
             rig.coordinator.midi(.controlChange(channel: 0, controller: 17, value: msb), source: Rig.lc6000.id)
             rig.coordinator.midi(.controlChange(channel: 0, controller: 49, value: lsb), source: Rig.lc6000.id)
         }
         Self.tick(rig, at: 1)
-        #expect(Self.bends(port) == [[0xE0, 0x00, 0x30]])
+        #expect(Self.bends(port).allSatisfy { $0 == [0xE0, 0x00, 0x10] })
     }
+
 
     @Test("The play light: 127 while playing; loaded and paused, it blinks every half-second")
     func playLight() throws {
@@ -290,7 +367,7 @@ struct JogDisplayPipeTests {
         rig.coordinator.attachJogDisplay(JogDisplayDriver(port: port, clock: rig.clock, log: rig.log, size: 1) { _ in [0, 0, 0, 255] })
         rig.coordinator.start()
         let pipe = EventPipe()
-        pipe.producer.setJogDisplay(enabled: true)
+        pipe.producer.send(.setJogDisplay(enabled: true))
         pipe.producer.jogDisplayReply(JogDisplayDriverTests.refused)
         pipe.producer.finish()
         await Engine(coordinator: rig.coordinator, log: rig.log).run(pipe.events)
@@ -303,10 +380,10 @@ struct JogDisplayPipeTests {
 /// like the other switches.
 @Suite("Jog display setting")
 struct JogDisplaySettingTests {
-    @Test("Off by default, and off in settings saved before it")
-    func offByDefault() throws {
+    @Test("On by default for new settings (v1.1, after the hardware check); settings saved before it keep it off")
+    func onByDefault() throws {
         let defaults = BridgeSettings.defaults(from: try Mapping.bundledDefault())
-        #expect(defaults.jogDisplay == false)
+        #expect(defaults.jogDisplay == true)
         var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(defaults)) as! [String: Any]
         saved["jogDisplay"] = nil
         let old = try JSONDecoder().decode(BridgeSettings.self, from: JSONSerialization.data(withJSONObject: saved))
@@ -384,11 +461,87 @@ struct JogNeedleEventTests {
         #expect(Self.needles(events) == [:])
     }
 
+    @Test("Every deck's play state, from Syndicate's Playing, once and then per change: not the blinking play light (#317)")
+    func deckPlaying() throws {
+        let (rig, _, events) = try Self.started()
+        events.list.removeAll()
+        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(1))
+        JogMarkerCoordinatorTests.feed(rig, "Deck/1/Track", .string("Daybreak"))
+        for t in stride(from: 0.0, through: 2.0, by: 0.25) { JogMarkerCoordinatorTests.tick(rig, at: t) }
+        JogMarkerCoordinatorTests.feed(rig, "Deck/3/Playing", .int(0))
+        for t in stride(from: 2.25, through: 4.0, by: 0.25) { JogMarkerCoordinatorTests.tick(rig, at: t) }
+        let plays = events.list.compactMap { event -> String? in
+            if case .deckPlaying(let deck, let on) = event { return "\(deck) \(on)" }
+            return nil
+        }
+        // The first tick tells the simulator every deck's state; after that, only deck 3's two changes.
+        #expect(plays == ["1 false", "2 false", "3 true", "4 false", "3 false"])
+    }
+
     @Test("Header/Clock is the master beat for every deck's ring, as an event only: nothing is sent for it")
     func masterBeat() throws {
         let (rig, port, events) = try Self.started()
         JogMarkerCoordinatorTests.feed(rig, "Header/Clock", .int(3))
         #expect(events.list.contains(.masterBeat(3)))
         #expect(port.wd == [])
+    }
+
+    // MARK: Whose display (#305)
+
+    @Test("No WD port: no hello, no upload, nothing waited on; once the port appears, hello")
+    func noWDPort() throws {
+        let rig = try Rig()
+        let (port, _) = JogDisplayCoordinatorTests.attach(rig)
+        port.isAttached = false
+        rig.coordinator.start()
+        for step in 1...40 { rig.clock.now = Double(step) * 0.5; rig.coordinator.tick() }
+        #expect(port.controller == [])
+        #expect(port.wd == [])
+        #expect(!rig.log.lines.contains { $0.contains("didn't answer") })
+        port.isAttached = true
+        rig.coordinator.devicesChanged()
+        #expect(port.controller == JogDisplay.hello)
+    }
+
+    @Test("Two controllers, the LC6000 unplugged and plugged back: goodbye, then hello again, though the other stayed")
+    func replugWithAnotherController() throws {
+        let rig = try Rig()
+        let (port, _) = JogDisplayCoordinatorTests.attach(rig)
+        let iac = MIDIEndpoint(id: 1000, name: "IAC Bus 1")
+        rig.coordinator.start()
+        rig.coordinator.setControllers([
+            ControllerSettings(deck: 1, input: Rig.lc6000, output: Rig.lc6000Out, followLayers: false),
+            ControllerSettings(deck: 2, input: iac, output: nil, followLayers: false),
+        ])
+        port.controller.removeAll()
+        rig.midi.sources.removeAll { $0.id == Rig.lc6000.id }
+        port.isAttached = false
+        rig.coordinator.devicesChanged()
+        #expect(port.controller == [JogDisplay.goodbye])
+        rig.midi.sources.append(Rig.lc6000)
+        port.isAttached = true
+        rig.coordinator.devicesChanged()
+        #expect(port.controller == [JogDisplay.goodbye] + JogDisplay.hello)
+    }
+
+    @Test("With another controller first, the display shows the deck of the controller whose profile owns the WD port")
+    func showsTheOwnersDeck() throws {
+        let testPad = try ControllerProfile(decoding: ProfileTests.testPadFile())
+        let pad = MIDIEndpoint(id: 1004, name: "TP-1 Pad")
+        let lc6000 = MIDIEndpoint(id: 1001, name: "DENON LC6000 PRIME")
+        let wd = MIDIEndpoint(id: 1005, name: "DENON LC6000 PRIME WD")
+        let rig = ProfileMatchingTests.ProfileRig(profiles: try ControllerProfile.bundled() + [testPad], sources: [pad, lc6000, wd])
+        let port = JogDisplayCoordinatorTests.Port(), shown = JogDisplayCoordinatorTests.Shown()
+        rig.coordinator.attachJogDisplay(JogDisplayDriver(port: port, clock: Rig.FakeClock(), log: rig.log, size: 1) { content in
+            shown.contents.append(content)
+            return [UInt8(content.deck), 0, 0, 255]
+        })
+        rig.coordinator.start()
+        rig.coordinator.setControllers([
+            ControllerSettings(deck: 1, input: pad, output: nil, followLayers: false),
+            ControllerSettings(deck: 2, input: lc6000, output: nil, followLayers: false),
+        ])
+        rig.coordinator.setJogDisplay(enabled: true)
+        #expect(shown.contents.last?.deck == 2)
     }
 }

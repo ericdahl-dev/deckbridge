@@ -29,6 +29,10 @@ on:
         description: Also send it to the external group and Beta App Review (off means Internal only)
         type: boolean
         default: false
+      replace_what_to_test:
+        description: Replace the build's What to Test with this branch's docs/TESTFLIGHT.md (off keeps a build's own)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -250,6 +254,8 @@ jobs:
       DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
       # Internal only unless asked (#244): [external] in the tag message, or external on when run by hand.
       EXTERNAL: ${{ (inputs.external || needs.testflight.outputs.external == 'true') && '1' || '' }}
+      # Sent again by hand, a build keeps the What to Test it shipped with, unless asked to replace it (#312).
+      KEEP_WHAT_TO_TEST: ${{ github.event_name == 'workflow_dispatch' && !inputs.replace_what_to_test && '1' || '' }}
     steps:
       - name: Check the version and build number
         run: |

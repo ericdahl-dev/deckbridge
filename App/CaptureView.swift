@@ -22,10 +22,16 @@ struct CaptureWindowRoot: View {
             // A fresh capture each time the window opens, and any earlier one gives its controller back.
             controller?.end()
             let made = CaptureController(setCapture: model.setCapture(source:))
-            made.refresh(sources: model.sources, destinations: model.destinations, preselect: model.captureDevice)
-            model.captureDevice = nil
+            made.refresh(sources: model.sources, destinations: model.destinations, preselect: model.captureRequest.device)
+            model.captureRequest.device = nil
             controller = made
             model.endCapture = { [weak made] in made?.end() }
+        }
+        // Asked again while open (#316): preselect it if the capture hasn't started; either way it's used up.
+        .onChange(of: model.captureRequest.device) { _, device in
+            guard let device else { return }
+            controller?.refresh(sources: model.sources, destinations: model.destinations, preselect: device)
+            model.captureRequest.device = nil
         }
         .onDisappear {
             controller?.end()

@@ -1,0 +1,88 @@
+{
+  "about": "The display feed's shared examples (#490, #616, #617): for each deck state, the OSC messages DeckBridge sends when the feed turns on with that deck in front, in order (a full snapshot), sent as one OSC bundle in one datagram (#636): a display reads each message in the bundle as if it came alone. A case's bundle_hex, when present, is that bundle's exact bytes (time tag 1, no nesting), for a parser's own test. A state key left out is that field's empty value (phase's is -1). One value per message; type is the OSC type tag (i, f or s). Walked by DisplayFeedExamplesTests (Swift) and the panel core's test (#619). A display ignores addresses it doesn't know (ADR 0011).",
+  "prefix": "/DeckBridge/Display/",
+  "cases": [
+    {
+      "name": "deck 1 loaded, in red",
+      "state": { "deck": 1, "color": [255, 0, 0], "loaded": true, "title": "Night Drive", "artist": "Example Artist", "key": "Am", "bpm": 126, "tempo": 0.8, "playing": true, "sync": true, "master": true, "loop": true, "loopLength": 0.5, "beat": 3, "clockBpm": 126, "elapsed": 95, "remaining": 212, "progress": 0.3125, "phase": 0.5, "level": 0.75 },
+      "messages": [
+        { "address": "/DeckBridge/Display/deck", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/color", "type": "i", "value": 16711680 },
+        { "address": "/DeckBridge/Display/loaded", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/title", "type": "s", "value": "Night Drive" },
+        { "address": "/DeckBridge/Display/artist", "type": "s", "value": "Example Artist" },
+        { "address": "/DeckBridge/Display/key", "type": "s", "value": "Am" },
+        { "address": "/DeckBridge/Display/bpm", "type": "f", "value": 126 },
+        { "address": "/DeckBridge/Display/tempo", "type": "f", "value": 0.8 },
+        { "address": "/DeckBridge/Display/playing", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/cue", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/sync", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/master", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/loop", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/loopLength", "type": "f", "value": 0.5 },
+        { "address": "/DeckBridge/Display/beat", "type": "i", "value": 3 },
+        { "address": "/DeckBridge/Display/clockBpm", "type": "f", "value": 126 },
+        { "address": "/DeckBridge/Display/elapsed", "type": "i", "value": 95 },
+        { "address": "/DeckBridge/Display/remaining", "type": "i", "value": 212 },
+        { "address": "/DeckBridge/Display/progress", "type": "f", "value": 0.3125 },
+        { "address": "/DeckBridge/Display/phase", "type": "f", "value": 0.5 },
+        { "address": "/DeckBridge/Display/level", "type": "f", "value": 0.75 }
+      ],
+      "bundle_hex": "2362756e646c65000000000000000001000000242f4465636b4272696467652f446973706c61792f6465636b000000002c69000000000001000000242f4465636b4272696467652f446973706c61792f636f6c6f720000002c69000000ff0000000000242f4465636b4272696467652f446973706c61792f6c6f6164656400002c690000000000010000002c2f4465636b4272696467652f446973706c61792f7469746c650000002c7300004e6967687420447269766500000000302f4465636b4272696467652f446973706c61792f61727469737400002c7300004578616d706c65204172746973740000000000202f4465636b4272696467652f446973706c61792f6b6579002c730000416d0000000000202f4465636b4272696467652f446973706c61792f62706d002c66000042fc0000000000242f4465636b4272696467652f446973706c61792f74656d706f0000002c6600003f4ccccd000000242f4465636b4272696467652f446973706c61792f706c6179696e67002c69000000000001000000202f4465636b4272696467652f446973706c61792f637565002c69000000000000000000242f4465636b4272696467652f446973706c61792f73796e63000000002c69000000000001000000242f4465636b4272696467652f446973706c61792f6d617374657200002c69000000000001000000242f4465636b4272696467652f446973706c61792f6c6f6f70000000002c69000000000001000000282f4465636b4272696467652f446973706c61792f6c6f6f704c656e67746800002c6600003f000000000000242f4465636b4272696467652f446973706c61792f62656174000000002c69000000000003000000282f4465636b4272696467652f446973706c61792f636c6f636b42706d000000002c66000042fc0000000000242f4465636b4272696467652f446973706c61792f656c6170736564002c6900000000005f000000282f4465636b4272696467652f446973706c61792f72656d61696e696e670000002c690000000000d4000000282f4465636b4272696467652f446973706c61792f70726f6772657373000000002c6600003ea00000000000242f4465636b4272696467652f446973706c61792f70686173650000002c6600003f000000000000242f4465636b4272696467652f446973706c61792f6c6576656c0000002c6600003f400000"
+    },
+    {
+      "name": "deck 2 empty, in yellow",
+      "state": { "deck": 2, "color": [255, 255, 0], "loaded": false, "title": "", "artist": "", "key": "", "bpm": 0, "tempo": 0 },
+      "messages": [
+        { "address": "/DeckBridge/Display/deck", "type": "i", "value": 2 },
+        { "address": "/DeckBridge/Display/color", "type": "i", "value": 16776960 },
+        { "address": "/DeckBridge/Display/loaded", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/title", "type": "s", "value": "" },
+        { "address": "/DeckBridge/Display/artist", "type": "s", "value": "" },
+        { "address": "/DeckBridge/Display/key", "type": "s", "value": "" },
+        { "address": "/DeckBridge/Display/bpm", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/tempo", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/playing", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/cue", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/sync", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/master", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/loop", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/loopLength", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/beat", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/clockBpm", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/elapsed", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/remaining", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/progress", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/phase", "type": "f", "value": -1 },
+        { "address": "/DeckBridge/Display/level", "type": "f", "value": 0 }
+      ]
+    },
+    {
+      "name": "deck 4 in a custom color, with non-ASCII text",
+      "state": { "deck": 4, "color": [18, 52, 86], "loaded": true, "title": "Café Ångström", "artist": "Señor Ünïcode", "key": "11B", "bpm": 174, "tempo": -2.5, "cue": true, "sync": true, "remaining": 351 },
+      "messages": [
+        { "address": "/DeckBridge/Display/deck", "type": "i", "value": 4 },
+        { "address": "/DeckBridge/Display/color", "type": "i", "value": 1193046 },
+        { "address": "/DeckBridge/Display/loaded", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/title", "type": "s", "value": "Café Ångström" },
+        { "address": "/DeckBridge/Display/artist", "type": "s", "value": "Señor Ünïcode" },
+        { "address": "/DeckBridge/Display/key", "type": "s", "value": "11B" },
+        { "address": "/DeckBridge/Display/bpm", "type": "f", "value": 174 },
+        { "address": "/DeckBridge/Display/tempo", "type": "f", "value": -2.5 },
+        { "address": "/DeckBridge/Display/playing", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/cue", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/sync", "type": "i", "value": 1 },
+        { "address": "/DeckBridge/Display/master", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/loop", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/loopLength", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/beat", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/clockBpm", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/elapsed", "type": "i", "value": 0 },
+        { "address": "/DeckBridge/Display/remaining", "type": "i", "value": 351 },
+        { "address": "/DeckBridge/Display/progress", "type": "f", "value": 0 },
+        { "address": "/DeckBridge/Display/phase", "type": "f", "value": -1 },
+        { "address": "/DeckBridge/Display/level", "type": "f", "value": 0 }
+      ]
+    }
+  ]
+}

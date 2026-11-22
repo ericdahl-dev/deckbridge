@@ -42,7 +42,7 @@ check: do the action, then confirm the expected result. If any line fails, file 
 | 3.3 | Shift + Censor, twice | First press latches reverse on, the second turns it off |
 | 3.4 | Move the pitch fader off center, then Shift + Key Lock | Tempo resets to 0; the fader does nothing until it reaches the center |
 | 3.5 | Shift + Browse press | Enter in Syndicate's browser |
-| 3.6 | Shift + Pitch Bend | Nothing happens (Syndicate has no OSC route for the pitch range) |
+| 3.6 | Shift + Pitch Bend − / + | Key lock turns on (its LED lights), and the deck's key goes down or up a semitone per press; the tempo doesn't change |
 
 ## 4. Pads
 
@@ -61,7 +61,8 @@ check: do the action, then confirm the expected result. If any line fails, file 
 | 5.1 | Turn the jog while deck 1 plays | Phase bends while turning, and stops about 80 ms after the wheel stops |
 | 5.2 | Turn the jog while deck 1 is paused | Seeks through the track |
 | 5.3 | Move the pitch fader slowly over its full range | Tempo follows smoothly, in fine steps; the top is slower |
-| 5.4 | Touch and slide on the Needle Drop strip | Seeks to that point while touched |
+| 5.4 | Touch and slide on the Needle Drop strip | Deck 1's channel fader in Syndicate follows the slide; the track doesn't move |
+| 5.5 | Hold Shift, touch and slide on the Needle Drop strip | Seeks to that point while touched |
 
 ## 6. Layers 1-4
 
@@ -115,5 +116,5 @@ check: do the action, then confirm the expected result. If any line fails, file 
 | 10.4 | Settings: Start at login on, log out and in | The app starts; turn it off after |
 | 10.5 | Diagnostics › MIDI Monitor, move every control | Each message shows a mapping name, not UNMAPPED |
 | 10.6 | Diagnostics › OSC Log | What goes to Syndicate and what comes back both show |
-| 10.7 | Panel: Demo controller on | A scripted controller drives a simulated Syndicate; nothing goes to the network; relaunch turns it off |
+| 10.7 | Panel: Demo controller on | A scripted controller drives a simulated Syndicate; nothing goes to the network but the display feed, if it's on (the deck panel follows the demo); relaunch turns it off |
 | 10.8 | Panel: Setup guide | The steps show the live status lights; the button reads "Done: feedback live" |

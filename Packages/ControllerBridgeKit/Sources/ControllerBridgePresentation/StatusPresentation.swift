@@ -122,6 +122,8 @@ public struct BridgeState: Equatable, Sendable {
     public var missingSubscriptions: [MissingSubscription] = []
     /// The subscriptions the profile needs, by Syndicate's names, for the "turn them on" help (#211).
     public var requiredSubscriptions: [String] = []
+    /// Another DJ app holds the LC6000 as its host (#333).
+    public var otherHost = false
 
     public init(controller: Controller, feedback: Feedback, deck: Int, stopped: Bool = false, lastDropout: String? = nil,
                 master: Bool = false, demo: Bool = false, lastEvent: String? = nil, others: [ControllerEntry] = [],

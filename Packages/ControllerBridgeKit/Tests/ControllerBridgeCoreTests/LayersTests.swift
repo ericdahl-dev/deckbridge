@@ -78,6 +78,19 @@ struct LayersTests {
         rig.coordinator.midi(.noteOn(channel: channel - 1, note: note, velocity: velocity), source: Rig.lc6000.id)
     }
 
+    @Test("Deck select back onto the same layer (#426): the unit's deck-select mode cleared its LEDs, so they all go out again")
+    func sameLayerRepaints() throws {
+        let rig = try Self.layered()
+        let output = try #require(rig.midi.outputs[Rig.lc6000Out.id])
+        let painted = Set(output.sent.compactMap { if case .noteOn(_, let note, _) = $0 { note } else { nil } })
+        output.sent.removeAll()
+        Self.note(rig, channel: 16, 55, 127)   // the unit's deck-select mode: pads 1-4 blink
+        Self.note(rig, channel: 1, 51, 127)    // pad 1 picked: layer 1, already the active one
+        Self.off(rig, channel: 16, 55)
+        let again = Set(output.sent.compactMap { if case .noteOn(_, let note, _) = $0 { note } else { nil } })
+        #expect(again.isSuperset(of: painted))
+    }
+
     @Test("Shift + deck select from layer 1 to 2, then a control on ch2: layer 2 is the active one")
     func activeLayer() throws {
         let rig = try Self.layered()
@@ -87,6 +100,50 @@ struct LayersTests {
         Self.note(rig, channel: 2, 51, 127)
         Self.touch(rig, channel: 2)              // the first control from layer 2 confirms it
         #expect(rig.coordinator.status.controllers.map(\.activeLayer) == [false, true, false, false])
+    }
+
+    /// A plain deck select (#420): the LC6000's Slip button, note 23 on ch1, with no Shift.
+    static func deckSelect(_ rig: Rig) {
+        note(rig, channel: 1, 23, 127)
+        rig.coordinator.midi(.noteOff(channel: 0, note: 23, velocity: 0), source: Rig.lc6000.id)
+    }
+
+    @Test("A plain deck select steps the layer 1 → 2 → 3 → 4 → 1, and sends no OSC (no CueSlip)")
+    func deckSelectSteps() throws {
+        let rig = try Self.layered()
+        var active: [Int] = []
+        for _ in 0..<4 {
+            Self.deckSelect(rig)
+            active.append(rig.coordinator.status.controllers.firstIndex(where: \.activeLayer).map { $0 + 1 } ?? 0)
+        }
+        #expect(active == [2, 3, 4, 1])
+        #expect(rig.osc.sent == [])
+    }
+
+    @Test("A plain deck select releases what the old deck held, then Play on ch1 goes to the new deck")
+    func deckSelectHandsOver() throws {
+        let rig = try Self.layered()
+        Self.note(rig, channel: 1, 2, 127)       // Cue held on deck 1
+        rig.osc.sent.removeAll()
+        Self.deckSelect(rig)
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/1/Cue", [.int(0)])])
+        rig.osc.sent.removeAll()
+        Self.note(rig, channel: 1, 1, 127)       // Play, on ch1 as the unit sends it
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/2/PlayPause", [.int(1)])])
+    }
+
+    @Test("With Follow controller layers off, a plain deck select does nothing: no OSC, and Play stays on the entry's deck")
+    func deckSelectNotFollowing() throws {
+        let rig = try Rig()
+        rig.coordinator.start()
+        rig.coordinator.setControllers([ControllerSettings(deck: 3, input: Rig.lc6000, output: Rig.lc6000Out, followLayers: false)])
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/3/Playing", [.int(0)]))
+        rig.osc.sent.removeAll()
+        Self.deckSelect(rig)
+        #expect(rig.osc.sent == [])
+        Self.note(rig, channel: 1, 1, 127)
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/3/PlayPause", [.int(1)])])
+        #expect(rig.coordinator.status.controllers.map(\.deck) == [3])
     }
 
     @Test("Leaving a layer releases what was held on its deck, once, at the note 51 handover; Play on ch2 then goes to deck 2")

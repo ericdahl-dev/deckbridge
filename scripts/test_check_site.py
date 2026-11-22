@@ -8,9 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_site
 
 
-def page(title="DeckBridge", description="A bridge.", body="", head=""):
+FOOTER = '<footer><span>Not affiliated with Untitled Audio Syndicate Ltd. or Denon DJ.</span></footer>'
+
+
+def page(title="DeckBridge", description="A bridge.", body="", head="", footer=FOOTER):
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{title}</title>'
-            f'<meta name="description" content="{description}">{head}</head><body>{body}</body></html>')
+            f'<meta name="description" content="{description}">{head}</head><body>{body}{footer}</body></html>')
 
 
 def sitemap(*locs):
@@ -29,9 +32,14 @@ CAPTURE_LD = ('<script type="application/ld+json">{"@type": "FAQPage", "mainEnti
 
 CONTROLLERS = '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}]\n'
 
+PRICE_LD = ('<script type="application/ld+json">{"@graph": [{"@type": "SoftwareApplication", '
+            '"offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}, {"@type": "FAQPage", "mainEntity": '
+            '[{"@type": "Question", "name": "How much does DeckBridge cost?", "acceptedAnswer": {"@type": "Answer", '
+            '"text": "DeckBridge is free."}}]}]}</script>')
+
 GOOD = {
     "controllers.json": CONTROLLERS,
-    "index.html": page(head='<link rel="stylesheet" href="style.css"><link rel="icon" href="img/icon.png">' + CAPTURE_LD,
+    "index.html": page(head='<link rel="stylesheet" href="style.css"><link rel="icon" href="img/icon.png">' + CAPTURE_LD + PRICE_LD,
                        body='<a href="support/">Support</a> <a href="privacy/">Privacy</a> <img src="img/icon.png" alt="">'
                             ' <a href="capture/">record it in your browser</a>'
                             ' <ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" data-status="supported">'
@@ -103,7 +111,7 @@ class CheckSiteTests(unittest.TestCase):
 
     def test_external_resources_fail_but_external_links_dont(self):
         root = self.site({
-            "index.html": page(head='<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">' + CAPTURE_LD,
+            "index.html": page(head='<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter">' + CAPTURE_LD + PRICE_LD,
                                body='<img src="//cdn.example.com/a.png" alt=""> <script src="http://x.example/t.js"></script>'
                                     ' <a href="https://testflight.apple.com/join/XXXX">ok</a>'
                                     ' <a href="support/">s</a> <a href="privacy/">p</a> <a href="capture/">c</a>'
@@ -353,6 +361,65 @@ class CheckSiteTests(unittest.TestCase):
         root = self.site({"index.html": home, "controllers.json":
             '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}, {"name": "DDJ-400", "maker": "Pioneer DJ", "status": "in progress"}]'})
         self.assertEqual(check_site.problems(root), [])
+
+    def test_the_price_and_the_faq_answer_agree(self):
+        paid = GOOD["index.html"].replace('"price": "0"', '"price": "9.99"')
+        self.assertEqual(check_site.problems(self.site({"index.html": paid})), [
+            'index.html: the JSON-LD offers 9.99 USD, but its answer to "How much does DeckBridge cost?" doesn\'t say 9.99'])
+        not_free = GOOD["index.html"].replace("DeckBridge is free.", "Pricing hasn't been announced.")
+        self.assertEqual(check_site.problems(self.site({"index.html": not_free})), [
+            'index.html: the JSON-LD offers it free, but its answer to "How much does DeckBridge cost?" doesn\'t say free'])
+        no_offer = GOOD["index.html"].replace(', "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}', "")
+        self.assertEqual(check_site.problems(self.site({"index.html": no_offer})), [
+            "index.html: the SoftwareApplication JSON-LD has no offers (price and priceCurrency)"])
+
+    def test_the_company_is_always_untitled_audio_syndicate_ltd(self):
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a> <p>Syndicate, by Untitled Audio.</p>'),
+                          "llms.txt": GOOD["llms.txt"] + "- Made by Untitled Audio Syndicate, not us.\n"})
+        self.assertEqual(check_site.problems(root), [
+            'llms.txt: names "Untitled Audio" without "Syndicate Ltd."',
+            'support/index.html: names "Untitled Audio" without "Syndicate Ltd."',
+        ])
+
+    def test_every_page_footer_carries_the_disclaimer(self):
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a>', footer="<footer></footer>")})
+        self.assertEqual(check_site.problems(root), ['support/index.html: the footer doesn\'t name "Untitled Audio Syndicate Ltd."'])
+
+    def test_the_readme_names_the_company_in_full(self):
+        readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
+        with open(readme, encoding="utf-8") as f:
+            self.assertEqual(check_site.company_problems("README.md", f.read()), [])
+
+    def test_the_readme_documents_the_needle_drop_fader(self):
+        # Needle Drop on the channel fader (#609), the plain touch since #729: the README's LC6000 controls table has a
+        # row for it, with the address it sends, both modes, the Volume feedback Relative needs, and the Settings switch.
+        readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
+        with open(readme, encoding="utf-8") as f:
+            rows = [line for line in f if line.startswith("| Needle Drop strip")]
+        self.assertEqual(len(rows), 1, "one Needle Drop row")
+        for words in ("Mixer/CH", "Volume", "Relative", "Jump", "Settings"):
+            self.assertIn(words, rows[0])
+
+    def test_the_readme_documents_shift_hot_cue(self):
+        # Shift + hot cue pad on a stopped deck (#358, #363): the README's LC6000 controls table has a row for it, naming
+        # the stopped deck, and the quantize reset to Use Global.
+        readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
+        with open(readme, encoding="utf-8") as f:
+            rows = [line for line in f if line.startswith("| Shift + pad")]
+        self.assertEqual(len(rows), 1, "one Shift + pad row")
+        for words in ("Hot Cue", "stopped", "Use Global"):
+            self.assertIn(words, rows[0])
+
+    def test_the_readme_says_paused_seeks_reset_quantize(self):
+        # Paused jog and needle seeks hold quantize at None, then Use Global (#366): their README rows say so. The
+        # needle's seek is Shift + the strip since #729.
+        readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
+        with open(readme, encoding="utf-8") as f:
+            lines = f.readlines()
+        for row in ("| Jog while paused", "| Shift + Needle Drop strip"):
+            found = [line for line in lines if line.startswith(row)]
+            self.assertEqual(len(found), 1, row)
+            self.assertIn("Use Global", found[0], row)
 
     def test_a_third_party_logo_file_fails(self):
         root = self.site({"img/denon-logo.svg": "<svg/>", "img/Syndicate_logo.png": "png"})

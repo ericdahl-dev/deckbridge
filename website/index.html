@@ -81,6 +81,11 @@
    "applicationSubCategory": "DJ controller bridge",
    "operatingSystem": "macOS 26 or later",
    "softwareVersion": "1.0.1",
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+   },
    "softwareRequirements": "Syndicate with OSC input enabled; a Denon LC6000 PRIME connected over USB",
    "inLanguage": "en",
    "image": "https://getdeckbridge.app/img/icon-512.png",
@@ -170,7 +175,7 @@
      "name": "How much does DeckBridge cost?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Pricing for DeckBridge hasn’t been announced yet. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon."
+      "text": "DeckBridge is free. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon."
      }
     },
     {
@@ -191,10 +196,10 @@
     },
     {
      "@type": "Question",
-     "name": "Is DeckBridge made by or affiliated with Untitled Audio or Denon DJ?",
+     "name": "Is DeckBridge made by or affiliated with Untitled Audio Syndicate Ltd. or Denon DJ?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "No, DeckBridge is an independent app, not made by, affiliated with or endorsed by Untitled Audio (the makers of Syndicate) or Denon DJ. It works with Syndicate through Syndicate’s OSC API."
+      "text": "No, DeckBridge is an independent app, not made by, affiliated with or endorsed by Untitled Audio Syndicate Ltd. (the makers of Syndicate) or Denon DJ. It works with Syndicate through Syndicate’s OSC API."
      }
     },
     {
@@ -430,11 +435,10 @@
           <details><summary>What is DeckBridge?</summary><p>DeckBridge is a native Mac menu-bar app that lets you play Syndicate from a Denon LC6000 PRIME by bridging the controller’s MIDI to Syndicate OSC. It sends the 14-bit jog wheel and pitch fader to Syndicate at full resolution and lights the controller’s LEDs from Syndicate’s OSC feedback.</p></details>
           <details><summary>Which controllers does DeckBridge support?</summary><p>DeckBridge supports one controller today, the <a class="link" href="for/lc6000/">Denon LC6000 PRIME</a>, connected over USB. A single LC6000 drives all four Syndicate decks through its own deck layers. To help add yours, DeckBridge 1.2’s <strong>Help add it…</strong> (in the panel) or <strong>Controller not found?</strong> (in Settings) records what your controller sends, and you choose whether to email the file. Without the app, <a class="link" href="capture/">record it in your browser</a> (Chrome, Edge or Firefox).</p></details>
           <details><summary>What are the requirements for DeckBridge?</summary><p>DeckBridge needs macOS 26 or later, Syndicate with OSC input enabled, and a Denon LC6000 PRIME connected over USB. It runs in the menu bar with no Dock icon.</p></details>
-          <!-- TODO(user): replace this answer with the real price once it is decided -->
-          <details><summary>How much does DeckBridge cost?</summary><p>Pricing for DeckBridge hasn’t been announced yet. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon.</p></details>
+          <details><summary>How much does DeckBridge cost?</summary><p>DeckBridge is free. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon.</p></details>
           <details><summary>How does DeckBridge setup work?</summary><p>To set up DeckBridge, you change four settings in Syndicate once: turn on OSC input (port 9090), point OSC feedback at 127.0.0.1 port 9096, turn on the listed feedback subscriptions, and turn the LC6000’s MIDI input off in Syndicate. DeckBridge opens a setup guide with these steps on first launch, and it shows “Done: feedback live” once Syndicate answers.</p></details>
           <details><summary>Does DeckBridge need djay Pro or Engine DJ?</summary><p>No, DeckBridge works with Syndicate only and doesn’t need djay Pro or Engine DJ to run the LC6000. Quit those apps or any other app using the LC6000 first, and power-cycle the controller if one was open, because they can switch its MIDI mode until it restarts.</p></details>
-          <details><summary>Is DeckBridge made by or affiliated with Untitled Audio or Denon DJ?</summary><p>No, DeckBridge is an independent app, not made by, affiliated with or endorsed by Untitled Audio (the makers of Syndicate) or Denon DJ. It works with Syndicate through Syndicate’s OSC API.</p></details>
+          <details><summary>Is DeckBridge made by or affiliated with Untitled Audio Syndicate Ltd. or Denon DJ?</summary><p>No, DeckBridge is an independent app, not made by, affiliated with or endorsed by Untitled Audio Syndicate Ltd. (the makers of Syndicate) or Denon DJ. It works with Syndicate through Syndicate’s OSC API.</p></details>
           <details><summary>Does DeckBridge collect any data?</summary><p>No, the DeckBridge app collects no data: no account, no tracking, no analytics. It only sends OSC messages to Syndicate and listens for its feedback, on this Mac by default or on your local network if you choose that. This website counts visits with PostHog, without cookies; the privacy page has the details.</p></details>
           <details><summary>Can I try DeckBridge without an LC6000?</summary><p>Yes, DeckBridge’s demo controller runs a scripted controller against a simulated Syndicate, so you can see it work without an LC6000. Nothing goes to the network, and demo mode is off again at the next launch.</p></details>
           <details><summary>Can I use two LC6000s, or run Syndicate on another Mac?</summary><p>Yes, DeckBridge can drive a second LC6000 on another Syndicate deck, and it can reach Syndicate running on another Mac over your local network. Add the second unit under Settings › Add controller; both share Syndicate’s one feedback stream. For another Mac, set Syndicate’s host to that Mac’s IP address and set feedback to listen on All networks. macOS asks once for local-network permission.</p></details>
@@ -465,7 +469,7 @@
         <div class="span-2 footer__col"><h3>Contact</h3><ul><li><a href="mailto:deckbridge@ericdahl.dev" data-track="contact_email_clicked">deckbridge@ericdahl.dev</a></li><li><a href="privacy/">Privacy</a></li></ul></div>
       </div>
       <div class="footer__legal">
-        <span>DeckBridge is an independent app and is not affiliated with, endorsed by, or sponsored by Untitled Audio or Denon DJ. Syndicate, Denon DJ and LC6000 PRIME are trademarks of their respective owners.</span>
+        <span>DeckBridge is an independent app and is not affiliated with, endorsed by, or sponsored by Untitled Audio Syndicate Ltd. or Denon DJ. Syndicate, Denon DJ and LC6000 PRIME are trademarks of their respective owners.</span>
       </div>
     </div>
   </div>

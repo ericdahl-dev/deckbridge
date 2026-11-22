@@ -35,8 +35,19 @@ final class CaptureMIDIInput {
         }
     }
 
-    /// Whether a source is plugged in now.
-    static func isPresent(_ source: MIDIEndpoint) -> Bool { find(source) != nil }
+    /// The unique ids of the sources CoreMIDI lists now, leaving out any marked offline (#315): an unplugged USB
+    /// device's endpoint can still be found by its id.
+    static func onlineSourceIDs() -> [Int32] {
+        (0..<MIDIGetNumberOfSources()).compactMap { index in
+            let ref = MIDIGetSource(index)
+            var offline: Int32 = 0
+            MIDIObjectGetIntegerProperty(ref, kMIDIPropertyOffline, &offline)
+            guard offline == 0 else { return nil }
+            var id: MIDIUniqueID = 0
+            MIDIObjectGetIntegerProperty(ref, kMIDIPropertyUniqueID, &id)
+            return id
+        }
+    }
 
     private nonisolated static func notifyBlock(_ changed: @escaping @Sendable () -> Void) -> MIDINotifyBlock {
         { notification in

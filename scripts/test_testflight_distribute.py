@@ -170,6 +170,24 @@ class WhatToTestTests(unittest.TestCase):
         self.assertEqual(api.localizations, {"en-US": ("loc1", "New look.")})
         self.assertFalse([c for c in api.calls if c[0] == "POST"])
 
+    def test_keeps_an_existing_text_when_asked_to_keep(self):
+        # #312: re-sending an older build by hand keeps its own notes, not today's doc.
+        api = FakeASC()
+        api.localizations = {"en-US": ("loc1", "1.0.1's notes.")}
+        td.set_what_to_test(api.http, "build1", "1.1.0's notes.", keep=True)
+        self.assertEqual(api.localizations, {"en-US": ("loc1", "1.0.1's notes.")})
+        self.assertFalse([c for c in api.calls if c[0] in ("POST", "PATCH")])
+
+    def test_keep_still_writes_a_build_that_has_no_text(self):
+        api = FakeASC()
+        td.set_what_to_test(api.http, "build1", "New look.", keep=True)
+        self.assertEqual(api.localizations, {"en-US": ("loc-new", "New look.")})
+
+    def test_the_environment_switch_for_keeping(self):
+        self.assertTrue(td.external_from("1"))
+        self.assertTrue(td.keep_from("1"))
+        self.assertFalse(td.keep_from(""))
+
 
 class GroupTests(unittest.TestCase):
     def test_adds_the_build_to_each_group_found_by_its_exact_name(self):
@@ -242,6 +260,16 @@ class ReviewTests(unittest.TestCase):
                                               "detail": "Beta App Review Information is missing a contact email."}]})
         with self.assertRaisesRegex(td.TestInformationMissing, "Test Information"):
             td.submit_for_review(api.http, "app1", "build1")
+
+
+class ReviewErrorTests(unittest.TestCase):
+    def test_an_unrelated_error_mentioning_contact_is_not_missing_test_information(self):
+        # #312: "contact" alone matched too much.
+        api = FakeASC()
+        api.submit_reply = (500, {"errors": [{"code": "UNEXPECTED_ERROR", "detail": "Please contact Apple Developer Support."}]})
+        with self.assertRaises(td.DistributeError) as caught:
+            td.submit_for_review(api.http, "app1", "build1")
+        self.assertNotIsInstance(caught.exception, td.TestInformationMissing)
 
 
 class RunTests(unittest.TestCase):

@@ -15,8 +15,12 @@ public struct CoordinatorStatus: Equatable, Sendable {
     public var requiredSubscriptions: [Subscription] = Subscription.always
     /// An LED sweep (#26) is running.
     public var sweeping = false
+    /// Another DJ app holds the LC6000 as its host (#333).
+    public var otherHost = false
     /// The built-in demo controller (#64) is running instead of the real one.
     public var demo = false
+    /// The jog display firmware found on the unit (#456), for Settings; nil with no unit said hello to, or while asking.
+    public var displayFound: DisplayFound?
     /// The deck colors in use, for the app's badges (#123): Syndicate's palette, or the defaults until it arrives.
     public var deckColors = DeckColors.defaults
 

@@ -87,17 +87,28 @@ enum Inference {
     /// A one-byte system real-time message (clock, start, stop, active sensing, reset): never a control.
     static func isRealtime(_ bytes: [UInt8]) -> Bool { bytes.count == 1 && bytes[0] >= 0xF8 }
 
-    /// The Shift button in a step repeated with Shift held: the step's first message is a note-on, and that note is
-    /// still down when another control's first message arrives. When it's let go doesn't matter. Nil otherwise.
-    static func heldAround(_ messages: [(port: Int, bytes: [UInt8])]) -> ControlKey? {
+    /// The Shift button: the take's first note, still down when another control starts. When Shift is let go doesn't
+    /// matter. With `releasedOnly` (a layer step, #325), only a control that's let go in the take counts: a layer
+    /// indicator turns on unasked and stays on, so a layer button held while it arrives isn't taken for Shift.
+    static func heldAround(_ messages: [(port: Int, bytes: [UInt8])], releasedOnly: Bool = false) -> ControlKey? {
         let voices = messages.compactMap { Voice($0.bytes, port: $0.port) }
-        guard let first = voices.first, first.kind == .noteOn, first.value > 0,
-            let other = voices.firstIndex(where: { $0.control != first.control })
-        else { return nil }
-        let released = voices[..<other].contains {
-            $0.control == first.control && ($0.kind == .noteOff || ($0.kind == .noteOn && $0.value == 0))
+        guard let first = voices.first, first.kind == .noteOn, first.value > 0 else { return nil }
+        func isRelease(_ voice: Voice) -> Bool { voice.kind == .noteOff || (voice.kind == .noteOn && voice.value == 0) }
+        let worked = voices.indices.first { index in
+            let voice = voices[index]
+            guard voice.control != first.control else { return false }
+            if !releasedOnly || voice.kind == .cc || voice.kind == .pitchBend { return true }
+            return voice.kind == .noteOn && voice.value > 0
+                && voices[(index + 1)...].contains { $0.control == voice.control && isRelease($0) }
         }
+        guard let other = worked else { return nil }
+        let released = voices[..<other].contains { $0.control == first.control && isRelease($0) }
         return released ? nil : first.control
+    }
+
+    /// The controls without the held Shift note (#325: one rule for shifted and layer steps).
+    static func removing(_ held: ControlKey, from controls: [ControlFacts]) -> [ControlFacts] {
+        controls.filter { !($0.kind == .note && $0.port == held.port && $0.channel == held.channel + 1 && $0.number == held.number) }
     }
 
     /// 14-bit pairs, MSB to LSB, on one channel. CC n and n+32 pair first (the MIDI convention), when both came about

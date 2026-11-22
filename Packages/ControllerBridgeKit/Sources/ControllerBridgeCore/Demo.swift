@@ -1,6 +1,7 @@
 // The built-in demo controller (#64), for App Review: no DJ controller, no Syndicate. A real Coordinator runs the
 // active profile against an in-process demo controller and an in-memory Syndicate, so the panel shows CONNECTED and
-// LIVE and the Diagnostics window fills with traffic. Nothing is sent to the network.
+// LIVE and the Diagnostics window fills with traffic. Nothing is sent to Syndicate or the controller; the one thing
+// that leaves the Mac is the display feed, if the DJ turned it on: the deck panel follows the demo (#625).
 
 /// A demo run: its own Coordinator, a scripted controller and a Syndicate that answers in memory.
 public final class DemoSession {
@@ -71,6 +72,8 @@ public final class DemoSession {
         if syndicate.playing, now + 1e-9 >= nextBeat {
             beat = beat % 4 + 1
             syndicate.queue(OSCMessage(syndicate.root + "Header/Clock", [.int(beat)]))
+            // The deck's own phase in the bar, for the jog display's needle (#165): it plays in time with the master.
+            syndicate.queue(OSCMessage(syndicate.deckRoot + "BarRamp", [.float(Float(beat - 1) / 4)]))
             nextBeat = now + 0.5
         }
         coordinator.tick()
@@ -102,18 +105,19 @@ enum DemoScript {
     static func steps(for mapping: Mapping) -> [Step] {
         let channel = UInt8(clamping: mapping.midi.channel - 1)
         let play = UInt8(clamping: mapping.notes.buttons["play"] ?? 0)
-        let pitch = UInt8(clamping: mapping.pitch.msbCC)
         var steps = [
             Step(at: 0.5, event: .noteOn(channel: channel, note: play, velocity: 127)),
             Step(at: 0.6, event: .noteOff(channel: channel, note: play, velocity: 0)),
         ]
-        // The pitch fader from center (0x40) up a quarter (0x50), in five moves.
-        for (index, msb) in [UInt8(0x40), 0x44, 0x48, 0x4C, 0x50].enumerated() {
+        // The pitch fader from center (0x40) up a quarter (0x50), in five moves; none on a controller without one.
+        let pitch = UInt8(clamping: mapping.pitch?.msbCC ?? 0)
+        let pitchMoves: [UInt8] = mapping.pitch == nil ? [] : [0x40, 0x44, 0x48, 0x4C, 0x50]
+        for (index, msb) in pitchMoves.enumerated() {
             steps.append(Step(at: 1.0 + Double(index) * 0.25, event: .controlChange(channel: channel, controller: pitch, value: msb)))
         }
         // The jog, the platter position counting up 8 at a time as a slow forward turn does (#103): a nudge while
         // playing. The first position is only the starting point.
-        switch mapping.jog.mode {
+        switch mapping.jog?.mode {
         case .absolute(let msb, let lsb):
             let (jogMSB, jogLSB) = (UInt8(clamping: msb), UInt8(clamping: lsb))
             for (index, position) in stride(from: 100, through: 140, by: 8).enumerated() {
@@ -128,6 +132,9 @@ enum DemoScript {
                 steps.append(Step(at: 3.0 + Double(index) * 0.05,
                                   event: .controlChange(channel: channel, controller: UInt8(clamping: cc), value: forward)))
             }
+        case nil:
+            // No jog wheel (#341): no nudge.
+            break
         }
         steps += [
             Step(at: 6.0, event: .noteOn(channel: channel, note: play, velocity: 127)),
@@ -141,6 +148,7 @@ enum DemoScript {
 final class DemoSyndicate: OSCSender, @unchecked Sendable {
     let root: String
     private let deck: String
+    var deckRoot: String { deck }
     private(set) var received: [OSCMessage] = []
     private var replies: [OSCMessage] = []
     private(set) var playing = false
@@ -157,6 +165,10 @@ final class DemoSyndicate: OSCSender, @unchecked Sendable {
         case (root + "Feedback/Resend").lowercased():
             replies += [
                 OSCMessage(deck + "Loaded", [.int(1)]),
+                // A made-up track for the jog display preview (#29): never a real song's title.
+                OSCMessage(deck + "TrackInfo", [.string("Demo Track"), .string("DeckBridge"), .string("Am"), .float(120), .float(180),
+                                                .int(90), .int(360), .string("track")]),
+                OSCMessage(deck + "BPM", [.float(120)]),
                 OSCMessage(deck + "Playing", [.int(playing ? 1 : 0)]),
                 OSCMessage(deck + "TempoSliderEnabled", [.int(1)]),
                 OSCMessage(deck + "TempoSlider", [.float(tempo)]),

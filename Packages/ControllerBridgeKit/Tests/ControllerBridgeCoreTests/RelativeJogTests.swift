@@ -19,7 +19,7 @@ struct RelativeJogMappingTests {
 
     @Test("The LC6000's jog is the absolute 14-bit pair on CC 17 and 49, as before #204")
     func lc6000Absolute() throws {
-        #expect(try Mapping.bundledDefault().jog.mode == .absolute(msbCC: 17, lsbCC: 49))
+        #expect(try Mapping.bundledDefault().jog?.mode == .absolute(msbCC: 17, lsbCC: 49))
     }
 }
 
@@ -214,7 +214,7 @@ struct RelativeJogDemoTests {
     func demoNudges() throws {
         var profile = try ControllerProfile.bundled()[0]
         profile.mapping.midi.encoderFormat = .offset64
-        profile.mapping.jog.relativeCC = 33
+        profile.mapping.jog?.relativeCC = 33
         let clock = Rig.FakeClock()
         let session = DemoSession(profile: profile, clock: clock, log: Rig.FakeLog(), ledOutput: Rig.FakeOutput())
         session.start()

@@ -19,7 +19,7 @@ public enum SettingsTab: Int, CaseIterable, Hashable, Sendable {
         switch field {
         case .deck, .channel, .device: self = .controller
         case .deckColor: self = .decks
-        case .host, .oscPort, .feedbackPort: self = .syndicate
+        case .host, .oscPort, .feedbackPort, .displayFeedHost, .displayFeedPort: self = .syndicate
         }
     }
 }

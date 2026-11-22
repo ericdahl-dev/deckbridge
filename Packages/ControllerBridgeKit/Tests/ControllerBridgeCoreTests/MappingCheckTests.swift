@@ -149,6 +149,17 @@ struct MappingCheckTests {
         ])
     }
 
+    @Test("Seconds per turn may be fractional (#399): 2.5 passes the check and decodes as 2.5")
+    func fractionalSeekSeconds() throws {
+        #expect(Self.problems(#"{"jog": {"seek_seconds_per_rev": 2.5}}"#) == [])
+        var body = try JSONSerialization.jsonObject(with: Mapping.defaultMappingJSON()) as! [String: Any]
+        var jog = body["jog"] as! [String: Any]
+        jog["seek_seconds_per_rev"] = 2.5
+        body["jog"] = jog
+        let mapping = try JSONDecoder().decode(Mapping.self, from: JSONSerialization.data(withJSONObject: body))
+        #expect(mapping.jog?.seekSecondsPerRev == 2.5)
+    }
+
     @Test("Every other number has a range too: a port past 65535, a negative time and a huge time are named")
     func numberRanges() {
         #expect(Self.problems(#"{"osc": {"port": 70000, "feedback_port": 0, "feedback_quiet_ms": -5, "feedback_answer_ms": 1e300}}"#) == [
@@ -168,5 +179,21 @@ struct MappingCheckTests {
     @Test("A number too big to be a real number (1e999 is infinity) is refused where the user wrote it")
     func infiniteNumber() {
         #expect(Self.problems(#"{"pitch": {"dead_zone": 1e999}}"#) == ["The file has a number too large to use (near byte 24)."])
+    }
+
+    @Test("The mixer section (#207) is checked like the rest: kinds, ranges, bits, unknown keys and CC or note clashes")
+    func mixer() {
+        #expect(Self.problems(MixerTests.section) == [])
+        #expect(Self.problems(#"{"mixer": {"volume": {"msb_cc": 200, "bits": 8}, "fader": 1}}"#) == [
+            "mixer.volume.msb_cc: 200 is out of range, expected 0-127",
+            "mixer.volume.bits: 8 isn't one of 7, 14",
+            "mixer.fader: unknown key",
+        ])
+        #expect(Self.problems(#"{"mixer": {"meter": {"cc": 2, "steps": []}}}"#) == ["mixer.meter.steps: expected at least one value"])
+        #expect(Self.problems(#"{"mixer": {"meter": {"cc": 2, "steps": [0, 300]}}}"#) == [
+            "mixer.meter.steps[1]: 300 is out of range, expected 0-127",
+        ])
+        #expect(Self.problems(#"{"mixer": {"volume": {"msb_cc": 17, "bits": 7}}}"#) == ["mixer.volume.msb_cc: CC 17 is also jog.msb_cc"])
+        #expect(Self.problems(#"{"mixer": {"cue_note": 2}}"#) == ["mixer.cue_note: note 2 is also notes.cue"])
     }
 }

@@ -4,11 +4,12 @@ import Testing
 /// The one list of Syndicate OSC FEEDBACK subscriptions (#211): the setup guide shows it and the check judges it.
 @Suite("Subscription list")
 struct SubscriptionListTests {
-    @Test("The eight, then BarRamp (#165), in the setup guide's order, by the names Syndicate's OSC FEEDBACK screen uses")
+    @Test("The eight, then BarRamp (#165) and PhaseOffset (#462), then the mixer's (#207), in the setup guide's order, by Syndicate's names")
     func names() {
         #expect(Subscription.allCases.map(\.syndicateName) == [
             "Playing", "PlayPending", "Loaded and TrackInfo", "Position/Progress", "TempoSlider and TempoSliderEnabled", "Cues",
-            "BPM and Sync", "Loop", "BarRamp",
+            "BPM and Sync", "Loop", "BarRamp", "PhaseOffset",
+            "Volume", "Trim", "Low and Mid and High", "cut and res and width", "Mute and Solo and Cue", "Meter",
         ])
         #expect(Subscription.always == [.playing, .playPending, .loaded, .progress, .tempoSlider, .cues, .sync, .loop])
     }
@@ -102,7 +103,8 @@ struct RequiredSubscriptionsTests {
     func reported() throws {
         let rig = try Rig()
         rig.coordinator.start()
-        #expect(rig.coordinator.status.requiredSubscriptions == Subscription.always)
+        // The LC6000's Shift + Needle Drop fader reads Volume (#609).
+        #expect(rig.coordinator.status.requiredSubscriptions == Subscription.always + [.mixerVolume])
     }
 }
 

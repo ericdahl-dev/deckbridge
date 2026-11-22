@@ -18,17 +18,31 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
     public var customDeckColors = DeckColors.defaults
     /// The ring's color mapping (#151). Vivid by default.
     public var ringColors = RingColors.vivid
+    /// Pads and ring in exact RGB through Denon's color message (#530), where the controller's profile lists them. On by
+    /// default, also for settings saved before it; off is the way back to the 64-color table.
+    public var colorMessages = true
+    /// The brightness of the color-message LEDs (pads and ring, #532), in percent: 100 is the colors as they are.
+    public var lightBrightness = 100
     /// Light or dark (#127). Syndicate's own LIGHT MODE can't be read over OSC, so the DJ picks it to match.
     public var appearance = Appearance.matchMacOS
-    /// "Show the deck on the jog display" (#165). Off until a hardware check passes.
-    public var jogDisplay = false
+    /// "Show the deck on the jog display" (#165). On for new settings since the v1.1 hardware check.
+    public var jogDisplay = true
+    /// The LC6000's jog display firmware (#425): Denon's (15 image slots) or custom (16, after the slot 16 patch).
+    public var displayFirmware = DisplayFirmware.denon
+    /// How the jog display and its preview write the key (#590): as Syndicate sends it, or as Camelot codes.
+    public var keyDisplay = KeyNotation.traditional
     /// A controller profile chosen by hand for a MIDI device (#200): device name → profile id. A device not listed is
     /// Automatic, matched by its name; so is one whose chosen profile no longer exists.
     public var profileChoices: [String: String] = [:]
+    /// Shift + Needle Drop's fader (#609): on or off, relative or jump; unset keeps the profile's.
+    public var stripFader = StripFaderSetting()
+    /// The display feed (#490, #616): the deck in front, over OSC, to a display such as the panel. Off by default.
+    public var displayFeed = DisplayFeedSettings()
 
     enum CodingKeys: String, CodingKey {
         case controllers, syndicateHost, syndicatePort, feedbackPort, feedbackListen, ledsEnabled
         case followSyndicateDeckColors, customDeckColors, appearance, ringColors, jogDisplay, profileChoices
+        case displayFirmware, colorMessages, lightBrightness, keyDisplay, stripFader, displayFeed
     }
 
     /// Settings saved before #123 have no deck colors: they load with the defaults.
@@ -44,8 +58,15 @@ public struct BridgeSettings: Codable, Equatable, Sendable {
         customDeckColors = try c.decodeIfPresent(DeckColors.self, forKey: .customDeckColors) ?? .defaults
         appearance = try c.decodeIfPresent(Appearance.self, forKey: .appearance) ?? .matchMacOS
         ringColors = try c.decodeIfPresent(RingColors.self, forKey: .ringColors) ?? .vivid
+        colorMessages = try c.decodeIfPresent(Bool.self, forKey: .colorMessages) ?? true
+        lightBrightness = try c.decodeIfPresent(Int.self, forKey: .lightBrightness) ?? 100
+        // Settings saved before the switch existed keep it off; new settings have it on (v1.1, RELEASE step 3).
         jogDisplay = try c.decodeIfPresent(Bool.self, forKey: .jogDisplay) ?? false
         profileChoices = try c.decodeIfPresent([String: String].self, forKey: .profileChoices) ?? [:]
+        displayFirmware = try c.decodeIfPresent(DisplayFirmware.self, forKey: .displayFirmware) ?? .denon
+        keyDisplay = try c.decodeIfPresent(KeyNotation.self, forKey: .keyDisplay) ?? .traditional
+        stripFader = try c.decodeIfPresent(StripFaderSetting.self, forKey: .stripFader) ?? StripFaderSetting()
+        displayFeed = try c.decodeIfPresent(DisplayFeedSettings.self, forKey: .displayFeed) ?? DisplayFeedSettings()
     }
 
     public init(
@@ -91,8 +112,14 @@ extension BridgeSettings {
         out.customDeckColors = pick(\.customDeckColors)
         out.appearance = pick(\.appearance)
         out.ringColors = pick(\.ringColors)
+        out.colorMessages = pick(\.colorMessages)
+        out.lightBrightness = pick(\.lightBrightness)
         out.jogDisplay = pick(\.jogDisplay)
+        out.displayFirmware = pick(\.displayFirmware)
+        out.keyDisplay = pick(\.keyDisplay)
+        out.stripFader = pick(\.stripFader)
         out.profileChoices = pick(\.profileChoices)
+        out.displayFeed = pick(\.displayFeed)
         // Controllers: the draft's list (an add or remove is the DJ's edit), each field rebased where both had it.
         out.controllers = draft.controllers.indices.map { index in
             let edited = draft.controllers[index]
@@ -197,6 +224,7 @@ extension BridgeSettings {
         if syndicatePort == feedbackPort {
             out.append(SettingsProblem(field: .feedbackPort, message: "The OSC port and the Feedback port can't both be \(syndicatePort)"))
         }
+        out += displayFeed.problems
         return out
     }
 
@@ -302,6 +330,63 @@ public enum SettingsField: Hashable, Sendable {
     case oscPort
     case feedbackPort
     case deckColor(deck: Int)
+    case displayFeedHost
+    case displayFeedPort
+}
+
+/// The display feed's setting (#616): on/off, and the display's host and port. A bad host or port is a problem only
+/// while it's on. The USB cable (#667) has its own switch, apart from Wi-Fi's.
+public struct DisplayFeedSettings: Codable, Equatable, Sendable {
+    /// Over Wi-Fi, to `host` and `port`.
+    public var enabled: Bool
+    /// The display's IPv4 address or name.
+    public var host: String
+    public var port: Int
+    /// Over the USB cable, to the deck panel plugged into this Mac (#667). Off by default.
+    public var cable: Bool
+
+    /// The panel listens on 9100 unless told otherwise.
+    public static let defaultPort = 9100
+
+    public init(enabled: Bool = false, host: String = "", port: Int = DisplayFeedSettings.defaultPort, cable: Bool = false) {
+        self.enabled = enabled
+        self.host = host
+        self.port = port
+        self.cable = cable
+    }
+
+    private enum CodingKeys: String, CodingKey { case enabled, host, port, cable }
+
+    /// The cable's own feed (#667) as a setting of its own: on with the cable's switch. It has no host or port; the
+    /// cable's feed reads only `enabled`.
+    var overTheCable: DisplayFeedSettings { DisplayFeedSettings(enabled: cable, host: "", port: 0) }
+
+    /// A feed saved before the cable's switch (#667) loads with it off.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        host = try c.decode(String.self, forKey: .host)
+        port = try c.decode(Int.self, forKey: .port)
+        cable = try c.decodeIfPresent(Bool.self, forKey: .cable) ?? false
+    }
+
+    var problems: [SettingsProblem] {
+        guard enabled else { return [] }
+        var out: [SettingsProblem] = []
+        let host = host.trimmingCharacters(in: .whitespaces)
+        if host.isEmpty {
+            out.append(SettingsProblem(field: .displayFeedHost, message: "The display feed's host can't be empty while it's on"))
+        } else if !BridgeSettings.isIPv4(host) && !BridgeSettings.isHostName(host) {
+            out.append(SettingsProblem(
+                field: .displayFeedHost,
+                message: "\(host) isn't a host name or IP address. Use the display's name, like deck-panel.local, or its IP address, like 192.168.1.40."
+            ))
+        }
+        if !(1...65_535).contains(port) {
+            out.append(SettingsProblem(field: .displayFeedPort, message: "Display feed port \(port) is out of range, expected 1-65535"))
+        }
+        return out
+    }
 }
 
 /// The app's light or dark look (#127).

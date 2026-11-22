@@ -13,17 +13,41 @@ enum BridgeHost {
     static func run(
         profiles: [ControllerProfile], midi: any MIDISystem, osc: any OSCSender, log: any LogSink, status: BridgeStatus,
         diagnostics: DiagnosticsLog, jogSimulator: JogSimulatorLog, controllers: [ControllerSettings], ledsEnabled: Bool, jogDisplay: (any JogDisplayPort)?,
-        events: AsyncStream<PipeEvent>
+        displayFeed: (any OSCSender)? = nil, cableFeed: (any OSCSender)? = nil, events: AsyncStream<PipeEvent>
     ) async {
         let coordinator = Coordinator(profiles: profiles, midi: midi, osc: osc, clock: SystemClock(), log: log)
+        #if DEBUG
+        // Everything an agent needs, to os_log and Library/Logs/DeckBridge (#395). Set before start, so ports trace too.
+        coordinator.trace = DebugTrace.shared.sink
+        // The meter capture (#582): its CSV goes next to the trace, in Library/Logs/DeckBridge.
+        coordinator.meterCaptureSink = { csv in DebugTrace.shared.writeCapture(csv, named: "meter-capture") }
+        #endif
         // The LC6000's jog display (#165). Off until Settings turns it on, which comes through the pipe. Always attached:
         // with no WD port, or with the switch off, it only previews, for the Diagnostics simulator (#221).
         let jogEvents = jogSink(jogSimulator)
-        let driver = JogDisplayDriver(port: jogDisplay, clock: SystemClock(), log: log) { content in
+        // Beat mode (#215): each deck's content goes up once per lit master beat, into that deck's own slots, and each
+        // beat shows the front deck's slot. Every deck stays on the unit, so a deck switch uploads nothing (#424).
+        let driver = JogDisplayDriver(port: jogDisplay, clock: SystemClock(), log: log, renderBeat: { content, beat in
+            JogDisplayRenderer.uploadImage(content, litBeat: beat)
+        }) { content in
             JogDisplayRenderer.uploadImage(content)
         }
+        #if DEBUG
+        driver.trace = DebugTrace.shared.sink
+        let trace = DebugTrace.shared.sink
+        driver.onEvent = { event in
+            // Not the preview's per-tick events (#605): they filled the trace file in about a minute.
+            if let line = event.traceLine { trace(.jogDisplay, line) }
+            jogEvents(event)
+        }
+        #else
         driver.onEvent = jogEvents
+        #endif
         coordinator.attachJogDisplay(driver)
+        // The display feed (#616): off until Settings turns it on, which comes through the pipe.
+        if let displayFeed { coordinator.attachDisplayFeed(displayFeed) }
+        // The same feed over the USB cable (#667): off until its own switch turns it on.
+        if let cableFeed { coordinator.attachCableFeed(cableFeed) }
         // Straight onto the saved devices, decks, layers and LEDs switch: nothing unchosen, even for a moment (#105).
         coordinator.start(controllers: controllers, ledsEnabled: ledsEnabled)
         // The demo controller (#64) runs the profile running now (an imported mapping too, #98) against an in-process
@@ -47,18 +71,20 @@ enum BridgeHost {
         { event in Task { @MainActor in log.append(event) } }
     }
 
-    /// Hands each jog display event to the simulator, one main-actor hop each (#221).
+    /// Hands each jog display event to the simulator's feed (#221), which hops to the window only while Diagnostics is
+    /// open (#318).
     private nonisolated static func jogSink(_ simulator: JogSimulatorLog) -> @Sendable (JogDisplayEvent) -> Void {
-        { event in
-            let now = Date.now
-            Task { @MainActor in simulator.apply(event, at: now) }
-        }
+        let feed = simulator.feed
+        return { event in feed.receive(event, at: .now) }
     }
 
     /// Copies each Coordinator status change into the menu's status, with one main-actor hop per change. Made here,
     /// outside any actor: a closure written in main-actor code and called on the engine's task traps (#14 spike).
     private nonisolated static func statusSink(_ status: BridgeStatus) -> @Sendable (CoordinatorStatus) -> Void {
         { coordinatorStatus in
+            #if DEBUG
+            DebugTrace.shared.status(coordinatorStatus)
+            #endif
             Task { @MainActor in
                 status.bridges = coordinatorStatus.controllers
                 status.devices = coordinatorStatus.devices
@@ -69,6 +95,8 @@ enum BridgeHost {
                 status.syndicateFeedback = coordinatorStatus.feedback
                 status.noDeckData = coordinatorStatus.noDeckData
                 status.missingSubscriptions = coordinatorStatus.missingSubscriptions
+                status.otherHost = coordinatorStatus.otherHost
+                status.displayFound = coordinatorStatus.displayFound
                 status.requiredSubscriptions = coordinatorStatus.requiredSubscriptions
                 status.lastDropout = coordinatorStatus.lastDropout
                 status.sweeping = coordinatorStatus.sweeping
@@ -90,8 +118,9 @@ final class Ticker: Sendable {
 
     private nonisolated static func makeTimer(_ producer: EventPipe.Producer) -> any DispatchSourceTimer {
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "dev.ericdahl.ControllerBridge.tick"))
-        // Leeway lets the system batch wakeups.
-        timer.schedule(deadline: .now(), repeating: .milliseconds(10), leeway: .milliseconds(5))
+        // A tight leeway (#582): up to 5 ms of it made the needle's steps uneven (they go every other tick, 20 ms). 1 ms
+        // still lets the system batch wakeups a little.
+        timer.schedule(deadline: .now(), repeating: .milliseconds(10), leeway: .milliseconds(1))
         timer.setEventHandler { producer.tick() }
         return timer
     }
@@ -115,5 +144,6 @@ struct UnifiedLogSink: LogSink {
 /// The demo controller has no LEDs to light (#64): its LED writes go nowhere.
 struct DroppedMIDIOutput: MIDIOutput {
     func send(_ event: MIDIEvent) throws {}
+    func send(color: LEDColorMessage) throws {}
     func close() {}
 }

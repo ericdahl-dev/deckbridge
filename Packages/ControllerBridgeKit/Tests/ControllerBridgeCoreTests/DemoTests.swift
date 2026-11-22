@@ -117,3 +117,45 @@ struct DemoTests {
         #expect(rig.session.status.controllers.first?.device == "Demo controller")
     }
 }
+
+/// The demo feeds the jog display simulator too (#29: the App Store shot and App Review see it): a made-up track's
+/// TrackInfo, the deck's BPM, and a BarRamp each beat, so the preview shows a title and its needle turns with the bar.
+@Suite("Demo and the jog display simulator")
+struct DemoJogDisplayTests {
+    final class Events: @unchecked Sendable { var list: [JogDisplayEvent] = [] }
+
+    static func run(to time: Double, firmware: DisplayFirmware = .denon) throws -> [JogDisplayEvent] {
+        let rig = try DemoTests.DemoRig()
+        let events = Events()
+        let preview = JogDisplayDriver(port: nil, clock: rig.clock, log: Rig.FakeLog(), size: 1) { _ in [0, 0, 0, 255] }
+        preview.onEvent = { events.list.append($0) }
+        rig.session.coordinator.attachJogDisplay(preview)
+        rig.session.coordinator.setDisplayFirmware(firmware)
+        rig.run(to: time)
+        return events.list
+    }
+
+    @Test("The demo deck shows a made-up track: Demo Track by DeckBridge, Am, 120 BPM, a plain track")
+    func track() throws {
+        let previews = try Self.run(to: 1).compactMap { if case .preview(let content) = $0 { content } else { nil } }
+        let shown = try #require(previews.last)
+        #expect([shown.title, shown.artist, shown.key, shown.playerType] == ["Demo Track", "DeckBridge", "Am", "track"])
+        #expect(shown.bpm == 120)
+    }
+
+    @Test("While it plays, the needle turns (several positions in a second) and the master beat runs")
+    func needleAndBeat() throws {
+        let events = try Self.run(to: 3)
+        let needles = Set(events.compactMap { if case .deckMarker(1, let pitchBend) = $0 { pitchBend } else { nil } })
+        #expect(needles.count >= 8)
+        #expect(events.contains { if case .masterBeat = $0 { true } else { false } })
+    }
+
+    @Test("Firmware set to Custom: the demo deck's drawn preview, with its title, its needle moving while it plays (#465)")
+    func drawn() throws {
+        let states = try Self.run(to: 3, firmware: .custom).compactMap { if case .drawnPreview(let state) = $0 { state } else { nil } }
+        let deck1 = states.filter { $0.deck?.number == 1 }
+        #expect(deck1.last?.texts[.title] == Array("Demo Track".utf8))
+        #expect(Set(deck1.compactMap(\.needle)).count >= 8)
+    }
+}

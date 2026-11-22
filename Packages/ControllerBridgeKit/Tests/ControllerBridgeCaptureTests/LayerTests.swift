@@ -146,4 +146,37 @@ struct LayerTests {
         #expect(flow.layerReadout == "Layer 2: channel +1")
         #expect(flow.takeAnnouncement() == "Detected: Note 1 on channel 2. Layer 2: channel +1.")
     }
+
+    // MARK: #325
+
+    @Test("A plain layer button still down when the indicator arrives is the select button, not Shift")
+    func indicatorWhileHeld() {
+        let layers = CaptureLayers.infer(
+            prompts: Self.prompts,
+            steps: Self.file(select: [[0x90, 70, 0x7F], [0x91, 51, 0x7F], [0x80, 70, 0x00]], deck2Play: [[0x91, 1, 0x7F]]).steps
+        )
+        #expect(layers.first?.select == Self.note(1, 70, .noteOff))
+        #expect(layers.first?.withShift == false)
+        #expect(layers.first?.indicator == Self.note(2, 51, nil))
+    }
+
+    @Test("LC6000 with Shift still held from the step before: its release in this step says Shift was held")
+    func shiftHeldFromBefore() {
+        let prompts = [
+            CapturePrompt(id: "deck1.play", text: "Play.", gesture: .press),
+            CapturePrompt(id: "deck1.shift", text: "Shift.", gesture: .press),
+            CapturePrompt(id: "layer2.select", text: "Deck 2.", gesture: .press, layer: 2),
+        ]
+        var session = CaptureSession(appVersion: "1.2.0", device: "Test", ports: CapturePorts(input: [], output: []), prompts: prompts)
+        session.receive([0x90, 1, 0x7F], at: 0); session.receive([0x80, 1, 0x00], at: 0.1); session.confirm(at: 1)
+        session.receive([0x90, 26, 0x7F], at: 2); session.confirm(at: 3)   // Shift pressed, still held
+        for (i, bytes) in [[0x9F, 55, 0x7F], [0x8F, 55, 0x00], [0x90, 51, 0x00], [0x91, 51, 0x7F], [0x80, 26, 0x00]].enumerated() {
+            session.receive(bytes.map(UInt8.init), at: 4 + Double(i) * 0.1)
+        }
+        session.confirm(at: 5)
+        let layer = CaptureLayers.infer(prompts: prompts, steps: session.file.steps).first
+        #expect(layer?.withShift == true)
+        #expect(layer?.select == Self.note(16, 55, .noteOff))
+        #expect(layer?.indicator == Self.note(2, 51, nil))
+    }
 }

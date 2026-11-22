@@ -1,0 +1,1216 @@
+{
+  "version": 1,
+  "about": "The drawn jog display's messages (#455): each state and the exact bytes on the WD port. The Swift encoder (Kit tests) and the C decoder (firmware tests) both walk this file. Host to unit: F0 00 02 0B 7F 10 <cmd> <len hi> <len lo> <op> <args> F7, len counting op and args (14 bits). Unit to host: the reply header F0 00 02 0B 01 10 instead. cmd 0x20: Denon's display firmware (wd 00.50) drops it silently, with no reply (#466). Ops: 00 capability, 01 begin, 02 end, 03 deck, 04 text, 05 tempo, 06 time, 07 state, 08 beat, 09 needle, 0A meter, 0B phase; no op is reserved now. Meter is the deck in front's mixer channel: its level, then the peak being held, each 0-127 (#461); 0 and 0 with no mixer feedback. Text (#458) is 04 <field> <chars>, framed by len (no length of its own): field 0 title, 1 artist, 2 key, 3 untitled words (with an empty title, the big words the deck shows instead: \"No track\", \"OSC clip\", or the player type's own name, as JogDisplayWords; empty while there is a title). The chip draws them with its own caption, \"Load a track\" for an empty deck or a track and \"no title\" for the rest. Empty text (len 2) clears its field. Chars are Windows-1252 codes: below 0x80 as themselves, 0x80-0xFF as 7F then the code minus 0x80. Every defined Windows-1252 code is text; 0x81 is the box, which the host sends for a character it can't map; the other undefined codes (8D, 8F, 90, 9D), codes below 0x20, a 7F as the last byte and a field over 3 make the message malformed. The cap: at most 96 bytes of chars after escapes (len at most 98, the whole message at most 108 bytes). The host cuts plain text to the cap at a character boundary, never inside an escape, and adds no ellipsis; the chip adds the ellipsis where a line doesn't fit. Text entries carry the host's input (text) and the codes the chip decodes (codes). Tempo (#458) is 05 hi lo, tenths of a BPM as 14 bits, high then low 7 bits; 0 is none (drawn as a dash). The host rounds once to tenths, sends at most 16383 and sends 0 for no tempo. Time (#460) is 06 eh el lh ll: the deck's elapsed time, then its track's length, in whole seconds, each 14 bits, high then low 7 bits; the host clamps each to 16383. Length 0 is unknown: the chip draws no time and no progress ring. The chip works out what's left. The host sends it only when the shown second or the length changes (at most 4 a second). Phase (#462) is 0B hi lo, how far the deck in front is from the master clock's beat (beat phase, not bar phase: a deck whole beats off still reads in phase), as a 14-bit two's complement count of 1/16384 beats, high then low 7 bits: -8191 to 8191, negative behind. -8192 (40 00) is unknown: the deck isn't playing, there's no master clock, or no offset has come since the deck loaded; the chip draws the plain rule. 0 is in phase: the rule with a center tick. Anything else draws a bar from the center, left for behind and right for ahead. The host sends round(offset x 16384) clamped to 8191, with its own hysteresis (0 while in phase) and wrap guard. The chip starts each deck at unknown. Beat is one byte, the master clock's beat 1-4, or 0 with no master clock (no section lit). Needle is the deck's place in its bar as a 14-bit angle, high then low 7 bits, 0-16383 for one turn clockwise from 12 o'clock (the scale of the unit's own pitch-bend needle). State is one flags byte: bit 0 loaded, 1 playing, 2 play pending, 3 cue held, 4 loop on, 5 feedback stale; bit 6 is reserved and makes the message malformed. Colors go as two 7-bit bytes per channel, high then low. Player: 0 empty, 1 track, 2 OSC clip, 3 MIDI clip, 4 sequencer, 5 other. Each op but text has one exact length (capability 2, begin 2, end 2, deck 9, tempo 3, time 5, state 2, beat 2, needle 3, meter 3, phase 3, counting the op); any other is ignored, as is version 0. Entries with \"direction\": \"unit\" go from the unit to the host; the rest from the host. Sequence rules (#464): after begin the host sends the full state, the deck then the state; every deck message is followed by its state, and a deck message clears flags 0-4 until it arrives. After the state the host sends the four texts, the tempo and the phase, then the beat, the needle, the time and the meter; a deck message that changes the deck clears the texts, the tempo, the phase (to unknown) and the time on the chip, and the host sends the new deck's time right after. The phase also goes on change, at most 30 a second. While drawing, the host sends begin, the deck, the state, the texts, the tempo, the phase and the time again once a second (the heartbeat); an unchanged one changes nothing on the chip; image mode sends none. On the chip: begin while drawing is a no-op; begin with no frame (after a chip reset) allocates it once, as the capability question does, and if that fails the chip stays in stock mode and draws nothing; no drawn-display message for 3 s draws the stale look, and any message clears it; only end or a reboot leaves drawn mode. The host sets loaded, playing, play pending (#459) and stale; cue held (the deck's CUE button down) and loop on (Syndicate's Loop) are the host's too (#463), sent on change; the chip draws neither (the user's choice), but loop on holds the time's warning (#524). The chip shows play state through the needle, as the unit does today: it moves while playing and holds while paused (#459). The one other thing playing changes is the time's last-minute warning (#460, #524): while playing and not looping, with a known length, the time and the ring's fill are steady red (0xFF3B30) from 60 s left, and from 30 s left blink at 1 Hz, red for the first 500 ms after each change of the time, then white (0xEDEDEA), for every deck color; paused or looping, the normal colors, and a state that clears the loop brings the warning back at once. In drawn mode the host sends no pitch-bend needle (E0) and no play light (note 1); on end or a fallback to images it sends both again, current, just before.",
+  "protocol": {
+    "about": "The protocol, defined once (#569): src/protocol.h and DrawnDisplayProtocol.swift are generated from this by vectors/gen_protocol.py, and the tests fail if they're out of date. An op's length counts the op and its args; \"framed\" (text) has no one length: len frames it.",
+    "header": "F0 00 02 0B 7F 10",
+    "reply_header": "F0 00 02 0B 01 10",
+    "command": 32,
+    "version": 1,
+    "ops": [
+      {
+        "name": "capability",
+        "op": 0,
+        "length": 2
+      },
+      {
+        "name": "begin",
+        "op": 1,
+        "length": 2
+      },
+      {
+        "name": "end",
+        "op": 2,
+        "length": 2
+      },
+      {
+        "name": "deck",
+        "op": 3,
+        "length": 9
+      },
+      {
+        "name": "text",
+        "op": 4,
+        "length": "framed"
+      },
+      {
+        "name": "tempo",
+        "op": 5,
+        "length": 3
+      },
+      {
+        "name": "time",
+        "op": 6,
+        "length": 5
+      },
+      {
+        "name": "state",
+        "op": 7,
+        "length": 2
+      },
+      {
+        "name": "beat",
+        "op": 8,
+        "length": 2
+      },
+      {
+        "name": "needle",
+        "op": 9,
+        "length": 3
+      },
+      {
+        "name": "meter",
+        "op": 10,
+        "length": 3
+      },
+      {
+        "name": "phase",
+        "op": 11,
+        "length": 3
+      }
+    ],
+    "caps": {
+      "text_max": 96,
+      "text_fields": 4,
+      "message_max": 112,
+      "deck_max": 4,
+      "player_max": 5,
+      "beat_max": 4
+    },
+    "flags": {
+      "loaded": 0,
+      "playing": 1,
+      "play_pending": 2,
+      "cue_held": 3,
+      "loop_on": 4,
+      "stale": 5,
+      "reserved": 6
+    },
+    "phase_unknown": -8192,
+    "timing": {
+      "silence_ms": 3000,
+      "warning_seconds": 60,
+      "blink_seconds": 30,
+      "blink_half_ms": 500
+    }
+  },
+  "sequences": {
+    "about": "The sequence rules as cases (#569): each step at its time in ms sends a message (\"send\") or only ticks the clock; after the last step, the expected state. A step's time ticks the chip after its message. Both the chip code (make test) and the Swift decoder walk every case.",
+    "cases": [
+      {
+        "name": "a deck change clears the deck's own values (flags 0-4, texts, tempo, phase, time) and keeps stale, the beat and the needle",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 23 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 04 04 00 41 62 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 05 0A 00 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 0B 01 24 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 00 41 02 25 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 08 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 09 20 00 F7"
+          },
+          {
+            "at_ms": 10,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 03 00 00 01 7F 00 00 01 F7"
+          }
+        ],
+        "expect": {
+          "drawn": true,
+          "deck": 3,
+          "flags": 32,
+          "stale": true,
+          "beat": 3,
+          "needle": 4096,
+          "tempo": 0,
+          "phase": -8192,
+          "time": null,
+          "text_heard": false,
+          "look": "normal"
+        }
+      },
+      {
+        "name": "the heartbeat's same deck changes nothing",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 05 0A 00 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 0B 01 24 F7"
+          },
+          {
+            "at_ms": 10,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          }
+        ],
+        "expect": {
+          "drawn": true,
+          "deck": 2,
+          "flags": 3,
+          "stale": false,
+          "beat": 0,
+          "needle": null,
+          "tempo": 1280,
+          "phase": 164,
+          "time": null,
+          "text_heard": false,
+          "look": "normal"
+        }
+      },
+      {
+        "name": "end forgets the deck and everything live; a new begin starts from nothing",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 08 02 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 09 20 00 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 0B 01 24 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 00 41 02 25 F7"
+          },
+          {
+            "at_ms": 10,
+            "send": "F0 00 02 0B 7F 10 20 00 02 02 01 F7"
+          },
+          {
+            "at_ms": 20,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          }
+        ],
+        "expect": {
+          "drawn": true,
+          "deck": 0,
+          "flags": 0,
+          "stale": false,
+          "beat": 0,
+          "needle": null,
+          "phase": -8192,
+          "time": null,
+          "look": "normal"
+        }
+      },
+      {
+        "name": "nothing counts before begin",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 03 05 0A 00 F7"
+          }
+        ],
+        "expect": {
+          "drawn": false,
+          "deck": 0,
+          "flags": 0,
+          "stale": false,
+          "tempo": 0
+        }
+      },
+      {
+        "name": "3 s with no message is the stale look",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 3000
+          }
+        ],
+        "expect": {
+          "drawn": true,
+          "deck": 2,
+          "flags": 3,
+          "stale": true
+        }
+      },
+      {
+        "name": "just under 3 s is not stale",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 2999
+          }
+        ],
+        "expect": {
+          "stale": false
+        }
+      },
+      {
+        "name": "any message ends the silence",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 3000
+          },
+          {
+            "at_ms": 3500,
+            "send": "F0 00 02 0B 7F 10 20 00 02 08 01 F7"
+          }
+        ],
+        "expect": {
+          "stale": false,
+          "beat": 1
+        }
+      },
+      {
+        "name": "60 s to 31 s left while playing: the time is steady red",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 01 7A 02 25 F7"
+          },
+          {
+            "at_ms": 700
+          }
+        ],
+        "expect": {
+          "time": [
+            250,
+            293
+          ],
+          "look": "red"
+        }
+      },
+      {
+        "name": "30 s or less while playing: red the first half second after the time changes",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 1000,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 1200
+          }
+        ],
+        "expect": {
+          "look": "red"
+        }
+      },
+      {
+        "name": "30 s or less while playing: white the second half second",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 1000,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 1700
+          }
+        ],
+        "expect": {
+          "look": "white"
+        }
+      },
+      {
+        "name": "30 s or less while playing: red again a second after the time changed",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 1000,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 2100
+          }
+        ],
+        "expect": {
+          "look": "red"
+        }
+      },
+      {
+        "name": "a loop on holds the warning off",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 13 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 200
+          }
+        ],
+        "expect": {
+          "look": "normal"
+        }
+      },
+      {
+        "name": "paused, no warning",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 200
+          }
+        ],
+        "expect": {
+          "look": "normal"
+        }
+      },
+      {
+        "name": "stale, no warning",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 23 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 0E 02 25 F7"
+          },
+          {
+            "at_ms": 200
+          }
+        ],
+        "expect": {
+          "look": "normal",
+          "stale": true
+        }
+      },
+      {
+        "name": "an unknown length, no warning",
+        "steps": [
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+          },
+          {
+            "at_ms": 0,
+            "send": "F0 00 02 0B 7F 10 20 00 05 06 02 22 00 00 F7"
+          },
+          {
+            "at_ms": 200
+          }
+        ],
+        "expect": {
+          "look": "normal",
+          "time": [
+            290,
+            0
+          ]
+        }
+      }
+    ]
+  },
+  "messages": [
+    {
+      "name": "capability ask, host speaks v1",
+      "kind": "capability",
+      "fields": {
+        "version": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 00 01 F7"
+    },
+    {
+      "name": "capability answer, unit speaks v1",
+      "kind": "capability_answer",
+      "direction": "unit",
+      "fields": {
+        "version": 1
+      },
+      "bytes": "F0 00 02 0B 01 10 20 00 02 00 01 F7"
+    },
+    {
+      "name": "begin v1",
+      "kind": "begin",
+      "fields": {
+        "version": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 01 01 F7"
+    },
+    {
+      "name": "end v1",
+      "kind": "end",
+      "fields": {
+        "version": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 02 01 F7"
+    },
+    {
+      "name": "deck 2, red, track",
+      "kind": "deck",
+      "fields": {
+        "number": 2,
+        "color": [
+          255,
+          0,
+          0
+        ],
+        "player": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 01 F7"
+    },
+    {
+      "name": "deck 4, 0/128/255, empty",
+      "kind": "deck",
+      "fields": {
+        "number": 4,
+        "color": [
+          0,
+          128,
+          255
+        ],
+        "player": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 04 00 00 01 00 01 7F 00 F7"
+    },
+    {
+      "name": "deck 1, white, MIDI clip",
+      "kind": "deck",
+      "fields": {
+        "number": 1,
+        "color": [
+          255,
+          255,
+          255
+        ],
+        "player": 3
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 01 01 7F 01 7F 01 7F 03 F7"
+    },
+    {
+      "name": "deck 3, 7/64/127, other",
+      "kind": "deck",
+      "fields": {
+        "number": 3,
+        "color": [
+          7,
+          64,
+          127
+        ],
+        "player": 5
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 03 00 07 00 40 00 7F 05 F7"
+    },
+    {
+      "name": "state, all clear",
+      "kind": "state",
+      "fields": {
+        "flags": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 00 F7"
+    },
+    {
+      "name": "state, loaded",
+      "kind": "state",
+      "fields": {
+        "flags": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 01 F7"
+    },
+    {
+      "name": "state, loaded and playing",
+      "kind": "state",
+      "fields": {
+        "flags": 3
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 03 F7"
+    },
+    {
+      "name": "state, loaded and stale",
+      "kind": "state",
+      "fields": {
+        "flags": 33
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 21 F7"
+    },
+    {
+      "name": "state, loaded, playing and loop on (#463)",
+      "kind": "state",
+      "fields": {
+        "flags": 19
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 13 F7"
+    },
+    {
+      "name": "state, loaded and cue held (#463)",
+      "kind": "state",
+      "fields": {
+        "flags": 9
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 09 F7"
+    },
+    {
+      "name": "state, loaded, loop on and cue held (#463)",
+      "kind": "state",
+      "fields": {
+        "flags": 25
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 19 F7"
+    },
+    {
+      "name": "state, every flag",
+      "kind": "state",
+      "fields": {
+        "flags": 63
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 3F F7"
+    },
+    {
+      "name": "beat, no master clock",
+      "kind": "beat",
+      "fields": {
+        "beat": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 08 00 F7"
+    },
+    {
+      "name": "beat 1",
+      "kind": "beat",
+      "fields": {
+        "beat": 1
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 08 01 F7"
+    },
+    {
+      "name": "beat 4",
+      "kind": "beat",
+      "fields": {
+        "beat": 4
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 08 04 F7"
+    },
+    {
+      "name": "needle at 12 o'clock",
+      "kind": "needle",
+      "fields": {
+        "angle": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 09 00 00 F7"
+    },
+    {
+      "name": "needle a quarter turn on",
+      "kind": "needle",
+      "fields": {
+        "angle": 4096
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 09 20 00 F7"
+    },
+    {
+      "name": "needle half a turn on",
+      "kind": "needle",
+      "fields": {
+        "angle": 8192
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 09 40 00 F7"
+    },
+    {
+      "name": "needle at the last step",
+      "kind": "needle",
+      "fields": {
+        "angle": 16383
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 09 7F 7F F7"
+    },
+    {
+      "name": "meter, silence",
+      "kind": "meter",
+      "fields": {
+        "level": 0,
+        "peak": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0A 00 00 F7"
+    },
+    {
+      "name": "meter, mid level holding a higher peak",
+      "kind": "meter",
+      "fields": {
+        "level": 64,
+        "peak": 100
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0A 40 64 F7"
+    },
+    {
+      "name": "meter at clip",
+      "kind": "meter",
+      "fields": {
+        "level": 127,
+        "peak": 127
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0A 7F 7F F7"
+    },
+    {
+      "name": "title, ASCII",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "Strobe",
+        "codes": "53 74 72 6F 62 65"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 08 04 00 53 74 72 6F 62 65 F7"
+    },
+    {
+      "name": "artist, Latin-1 accents",
+      "kind": "text",
+      "fields": {
+        "field": 1,
+        "text": "Léa Café",
+        "codes": "4C E9 61 20 43 61 66 E9"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 0C 04 01 4C 7F 69 61 20 43 61 66 7F 69 F7"
+    },
+    {
+      "name": "key",
+      "kind": "text",
+      "fields": {
+        "field": 2,
+        "text": "F#m",
+        "codes": "46 23 6D"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 04 02 46 23 6D F7"
+    },
+    {
+      "name": "untitled words, player 5",
+      "kind": "text",
+      "fields": {
+        "field": 3,
+        "text": "Automation",
+        "codes": "41 75 74 6F 6D 61 74 69 6F 6E"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 0C 04 03 41 75 74 6F 6D 61 74 69 6F 6E F7"
+    },
+    {
+      "name": "title, empty (clears it)",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "",
+        "codes": ""
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 04 00 F7"
+    },
+    {
+      "name": "title, Windows-1252 quotes, dash and ellipsis",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "“Don’t” — Live…",
+        "codes": "93 44 6F 6E 92 74 94 20 97 20 4C 69 76 65 85"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 16 04 00 7F 13 44 6F 6E 7F 12 74 7F 14 20 7F 17 20 4C 69 76 65 7F 05 F7"
+    },
+    {
+      "name": "title, letters outside Windows-1252 go as the box",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "東京",
+        "codes": "81 81"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 06 04 00 7F 01 7F 01 F7"
+    },
+    {
+      "name": "title, the longest: 96 bytes after escapes",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "codes": "78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 62 04 00 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 F7"
+    },
+    {
+      "name": "title, 48 accented letters fill the 96 bytes",
+      "kind": "text",
+      "fields": {
+        "field": 0,
+        "text": "éééééééééééééééééééééééééééééééééééééééééééééééé",
+        "codes": "E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9 E9"
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 62 04 00 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 F7"
+    },
+    {
+      "name": "tempo, none",
+      "kind": "tempo",
+      "fields": {
+        "tenths": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 05 00 00 F7"
+    },
+    {
+      "name": "tempo 128.0",
+      "kind": "tempo",
+      "fields": {
+        "tenths": 1280
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 05 0A 00 F7"
+    },
+    {
+      "name": "tempo 174.5",
+      "kind": "tempo",
+      "fields": {
+        "tenths": 1745
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 05 0D 51 F7"
+    },
+    {
+      "name": "tempo, the most (1638.3)",
+      "kind": "tempo",
+      "fields": {
+        "tenths": 16383
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 05 7F 7F F7"
+    },
+    {
+      "name": "time, 1:05 into a 4:53 track",
+      "kind": "time",
+      "fields": {
+        "elapsed": 65,
+        "length": 293
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 06 00 41 02 25 F7"
+    },
+    {
+      "name": "time, unknown length (0: no time drawn)",
+      "kind": "time",
+      "fields": {
+        "elapsed": 42,
+        "length": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 06 00 2A 00 00 F7"
+    },
+    {
+      "name": "time at the clamp (16383 s each)",
+      "kind": "time",
+      "fields": {
+        "elapsed": 16383,
+        "length": 16383
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 06 7F 7F 7F 7F F7"
+    },
+    {
+      "name": "time, elapsed past the length",
+      "kind": "time",
+      "fields": {
+        "elapsed": 200,
+        "length": 180
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 06 01 48 01 34 F7"
+    },
+    {
+      "name": "phase, in phase",
+      "kind": "phase",
+      "fields": {
+        "offset": 0
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 00 00 F7"
+    },
+    {
+      "name": "phase, behind by a hundredth of a beat",
+      "kind": "phase",
+      "fields": {
+        "offset": -164
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 7E 5C F7"
+    },
+    {
+      "name": "phase, ahead by a hundredth of a beat",
+      "kind": "phase",
+      "fields": {
+        "offset": 164
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 01 24 F7"
+    },
+    {
+      "name": "phase, the most ahead (8191, just under half a beat)",
+      "kind": "phase",
+      "fields": {
+        "offset": 8191
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 3F 7F F7"
+    },
+    {
+      "name": "phase, unknown (-8192: not playing, no master clock, or none measured yet)",
+      "kind": "phase",
+      "fields": {
+        "offset": -8192
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 40 00 F7"
+    },
+    {
+      "name": "phase, the most behind (-8191, just under half a beat)",
+      "kind": "phase",
+      "fields": {
+        "offset": -8191
+      },
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0B 40 01 F7"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "deck cut short (len says 9, 4 bytes follow)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F F7"
+    },
+    {
+      "name": "deck with a byte too many (len says 9, 10 follow)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 0A 03 02 01 7F 00 00 00 00 01 00 F7"
+    },
+    {
+      "name": "deck 0",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 00 01 7F 00 00 00 00 01 F7"
+    },
+    {
+      "name": "deck 5",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 05 01 7F 00 00 00 00 01 F7"
+    },
+    {
+      "name": "player 6",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 02 01 7F 00 00 00 00 06 F7"
+    },
+    {
+      "name": "color channel 256 (high byte 02)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 02 02 00 00 00 00 00 01 F7"
+    },
+    {
+      "name": "a data byte with its top bit set",
+      "bytes": "F0 00 02 0B 7F 10 20 00 09 03 02 81 7F 00 00 00 00 01 F7"
+    },
+    {
+      "name": "unknown op 7F",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 7F 01 F7"
+    },
+    {
+      "name": "no op at all (len 0)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 00 F7"
+    },
+    {
+      "name": "begin with no version",
+      "bytes": "F0 00 02 0B 7F 10 20 00 01 01 F7"
+    },
+    {
+      "name": "no F7",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 01 01"
+    },
+    {
+      "name": "another maker's header",
+      "bytes": "F0 00 20 7F 10 20 00 02 01 01 F7"
+    },
+    {
+      "name": "begin version 0",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 01 00 F7"
+    },
+    {
+      "name": "len one too low (says 8, 9 follow)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 08 03 02 01 7F 00 00 00 00 01 F7"
+    },
+    {
+      "name": "deck with only 8 arg bytes, len agrees",
+      "bytes": "F0 00 02 0B 7F 10 20 00 08 03 02 01 7F 00 00 00 00 F7"
+    },
+    {
+      "name": "len 7F 7F with a short body",
+      "bytes": "F0 00 02 0B 7F 10 20 7F 7F 01 01 F7"
+    },
+    {
+      "name": "time at a wrong length (len 3: one number, not two)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 06 00 41 F7"
+    },
+    {
+      "name": "time with a byte too many (len 6)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 06 06 00 41 01 25 00 F7"
+    },
+    {
+      "name": "time with a top-bit byte",
+      "bytes": "F0 00 02 0B 7F 10 20 00 05 06 00 C1 01 25 F7"
+    },
+    {
+      "name": "our own answer looped back (target 01)",
+      "bytes": "F0 00 02 0B 01 10 20 00 02 00 01 F7"
+    },
+    {
+      "name": "wrong device byte",
+      "bytes": "F0 00 02 0B 7F 11 20 00 02 01 01 F7"
+    },
+    {
+      "name": "capability answer with a byte too many",
+      "direction": "unit",
+      "bytes": "F0 00 02 0B 01 10 20 00 03 00 01 00 F7"
+    },
+    {
+      "name": "capability answer version 0",
+      "direction": "unit",
+      "bytes": "F0 00 02 0B 01 10 20 00 02 00 00 F7"
+    },
+    {
+      "name": "state with reserved bit 6 set (40)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 40 F7"
+    },
+    {
+      "name": "state with every bit set, 6 too (7F)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 07 7F F7"
+    },
+    {
+      "name": "state with a byte too many (len 3)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 07 01 00 F7"
+    },
+    {
+      "name": "state with no flags (len 1)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 01 07 F7"
+    },
+    {
+      "name": "beat 5",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 08 05 F7"
+    },
+    {
+      "name": "beat with a byte too many (len 3)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 08 01 00 F7"
+    },
+    {
+      "name": "needle with one byte (len 2)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 09 40 F7"
+    },
+    {
+      "name": "needle with a byte too many (len 4)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 09 40 00 00 F7"
+    },
+    {
+      "name": "needle with a top-bit byte",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 09 80 00 F7"
+    },
+    {
+      "name": "meter with one byte (len 2)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 0A 40 F7"
+    },
+    {
+      "name": "meter with a byte too many (len 4)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 0A 40 40 00 F7"
+    },
+    {
+      "name": "meter with a top-bit level",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 0A 80 00 F7"
+    },
+    {
+      "name": "text 97 bytes after escapes (one over the cap)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 63 04 00 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 78 F7"
+    },
+    {
+      "name": "text 47 accents and an ASCII letter then one more accent (98 bytes)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 63 04 00 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 7F 69 41 7F 69 F7"
+    },
+    {
+      "name": "text ending in a lone escape (7F last)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 04 00 41 7F F7"
+    },
+    {
+      "name": "text with a control code (0A)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 04 00 41 0A F7"
+    },
+    {
+      "name": "text with an undefined Windows-1252 code (8D)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 04 00 7F 0D F7"
+    },
+    {
+      "name": "text field 4",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 04 04 41 F7"
+    },
+    {
+      "name": "text with no field (len 1)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 01 04 F7"
+    },
+    {
+      "name": "text with a top-bit byte",
+      "bytes": "F0 00 02 0B 7F 10 20 00 03 04 00 C1 F7"
+    },
+    {
+      "name": "tempo with one byte (len 2)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 05 0A F7"
+    },
+    {
+      "name": "tempo with a byte too many (len 4)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 05 0A 00 00 F7"
+    },
+    {
+      "name": "phase with one byte (len 2)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 02 0B 7E F7"
+    },
+    {
+      "name": "phase with a byte too many (len 4)",
+      "bytes": "F0 00 02 0B 7F 10 20 00 04 0B 7E 5C 00 F7"
+    }
+  ]
+}

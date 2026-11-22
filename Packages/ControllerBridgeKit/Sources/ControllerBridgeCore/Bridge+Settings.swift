@@ -10,6 +10,7 @@ extension Bridge {
         // Feedback is still arriving; only the deck changed.
         feedbackStale = false
         reportedTempo = nil
+        forgetMixerChannel()
         start()
         // The new deck's tempo comes with the answer to the resync's Resend; until then the fader waits.
         tempoWaitUntil = clock.now + Double(mapping.osc.feedbackAnswerMs) / 1000
@@ -26,12 +27,12 @@ extension Bridge {
         lastPulseTime = old.lastPulseTime
         lastClockTime = old.lastClockTime
         loaded = old.loaded
+        loadedHeard = old.loadedHeard
         synced = old.synced
         sliderEnabled = old.sliderEnabled
         looping = old.looping
-        cues = old.cues
-        palette = old.palette
-        progress = old.progress
+        padModule.carryFeedback(from: old.padModule)
+        jogModule.progressReported(old.jogModule.progress)
         duration = old.duration
         reportedTempo = old.reportedTempo
     }
@@ -41,6 +42,6 @@ extension Bridge {
     func carryOwnState(from old: Bridge) {
         keyLockOn = old.keyLockOn
         slipOn = old.slipOn
-        padMode = old.padMode
+        padModule.carry(from: old.padModule)
     }
 }

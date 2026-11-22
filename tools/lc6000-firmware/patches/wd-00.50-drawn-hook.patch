@@ -1,0 +1,16 @@
+# LC6000 PRIME wd (jog display) firmware 00.50, trailer CRC 0x3A7CE2CA. Issues #466, #467.
+#
+# Hand the drawn display's messages and draw tick to our block in the image's own padding (0x0807DC00, placed by
+# `dfupatch.py place`). Two instructions become calls into our block's fixed entries:
+#   0x0800F464  mov.w r8, #1     ->  bl 0x0807DC00   unknown SysEx commands (and 7F) land here; the entry sets
+#                                                    r8 = 1 itself, keeps r5, and acts only on our command 0x20
+#   0x08012456  bl 0x0800BEA0    ->  bl 0x0807DC40   the main loop's render step; the entry calls stock's render,
+#                                                    then our tick, and returns 0
+# Each entry checks our marker word at 0x0807FFDC before it calls our code; without it, it does only what the
+# replaced instruction did. The update-mode command (72) branches away at 0x0800F29E and never reaches either site.
+#
+# NEVER apply this without placing our block: the entries live in the block, and a hook into 0xFF padding faults on
+# the first unknown command and on the first main-loop pass. build-owner-image does both. Apply it only to the
+# stock 00.50 image. Unproven on hardware.
+0x0800F464 4ff00108 6ef0ccfb
+0x08012456 f9f723fd 6bf0f3fb

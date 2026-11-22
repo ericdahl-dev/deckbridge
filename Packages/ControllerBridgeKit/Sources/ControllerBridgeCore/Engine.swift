@@ -29,29 +29,12 @@ public struct Engine {
         var demo: DemoSession?
         var diagnosticsOpen = false
         // Settings changes made during the demo wait for the real controller.
-        var waiting: [PipeEvent] = []
+        var waitingCommands: [Coordinator.Command] = []
         var active: Coordinator { demo?.coordinator ?? coordinator }
         var status: CoordinatorStatus { demo?.status ?? coordinator.status }
 
         func setDiagnostics(_ target: Coordinator, open: Bool) {
             if open, let sink = onDiagnostic { target.diagnostics = { sink($0) } } else { target.diagnostics = nil }
-        }
-
-        func apply(_ event: PipeEvent) {
-            switch event {
-            case .setDeck(let deck, let controller): coordinator.setDeck(deck, controller: controller)
-            case .setDevices(let input, let output, let controller):
-                coordinator.setDevices(input: input, output: output, controller: controller)
-            case .setLEDs(let enabled): coordinator.setLEDs(enabled: enabled)
-            case .setDeckColors(let follow, let custom): coordinator.setDeckColors(followSyndicate: follow, custom: custom)
-            case .setRingColors(let mode): coordinator.setRingColors(mode)
-            case .resync: coordinator.resync()
-            case .setControllers(let entries): coordinator.setControllers(entries)
-            case .setProfiles(let profiles): coordinator.setProfiles(profiles)
-            case .setProfileChoices(let choices): coordinator.setProfileChoices(choices)
-            case .setJogDisplay(let enabled): coordinator.setJogDisplay(enabled: enabled)
-            default: break
-            }
         }
 
         var reported = status
@@ -76,49 +59,56 @@ public struct Engine {
                 }
             case .tick:
                 if let demo { demo.tick() } else { coordinator.tick() }
-            case .devicesChanged:
+            case .devicesChanged(let removed):
                 // The real controller re-reads the devices when the demo ends.
-                if demo == nil { coordinator.devicesChanged() }
+                if demo == nil { coordinator.devicesChanged(removed: removed) }
             case .sleep: active.willSleep()
             case .wake: if demo == nil { coordinator.didWake() }
             // Only while the window is open does the Coordinator build anything for it.
             case .diagnostics(let open):
                 diagnosticsOpen = open
                 setDiagnostics(active, open: open)
-            // A real device is captured, so the real Coordinator pauses it, demo or not.
-            case .setCapture(let source): coordinator.setCapture(source: source)
-            case .ledSweep(let delay): active.startLEDSweep(delay: delay)
-            case .stopLEDSweep: active.stopLEDSweep()
             // The real unit's display answers the real Coordinator, demo or not.
             case .jogDisplayReply(let bytes): coordinator.jogDisplayReply(bytes)
-            // The preview's deck (#221) holds for the real controller and the demo alike.
-            case .setJogPreviewDeck(let deck):
-                coordinator.setJogPreviewDeck(deck)
-                demo?.coordinator.setJogPreviewDeck(deck)
-            case .setDeck, .setDevices, .setLEDs, .setDeckColors, .setRingColors, .setControllers, .setProfiles, .resync,
-                 .setJogDisplay, .setProfileChoices:
-                if demo == nil { apply(event) } else { waiting.append(event) }
+            // Every command goes where its routing says (#386); the Engine never names one.
+            case .command(let command):
+                switch command.routing {
+                case .waitsForDemo: if demo == nil { coordinator.apply(command) } else { waitingCommands.append(command) }
+                case .real: coordinator.apply(command)
+                case .active: active.apply(command)
+                case .realAndDemo:
+                    coordinator.apply(command)
+                    demo?.coordinator.apply(command)
+                }
             case .demo(let on):
                 if on, demo == nil, let makeDemo {
-                    coordinator.stop()
-                    setDiagnostics(coordinator, open: false)
                     // The profile running now, so an imported mapping shows in the demo too (#98).
                     let session = makeDemo(coordinator.runningProfile)
+                    // The deck panel follows the demo, as the preview does (#625): handed over before the real
+                    // controller stops, so its stopping puts nothing on the panel.
+                    session.coordinator.takeDisplayFeed(from: coordinator)
+                    coordinator.stop()
+                    setDiagnostics(coordinator, open: false)
                     setDiagnostics(session.coordinator, open: diagnosticsOpen)
                     session.start()
                     demo = session
                 } else if !on, let session = demo {
                     session.stop()
                     demo = nil
-                    for change in waiting { apply(change) }
-                    waiting.removeAll()
+                    for command in waitingCommands { coordinator.apply(command) }
+                    waitingCommands.removeAll()
                     setDiagnostics(coordinator, open: diagnosticsOpen)
                     coordinator.start()
+                    // Back to the real deck in front, with a full snapshot, under the setting as it is now (#625).
+                    coordinator.takeBackDisplayFeed(from: session.coordinator)
                 }
             case .stop:
-                // Releases are sent synchronously, so they have all gone out once run() returns.
+                // Releases are sent synchronously, so they have all gone out once run() returns. Quit, not stop: a
+                // drawing jog display keeps our logo (#600).
+                // The demo's Coordinator holds the display feed while it runs: it says the goodbye (#651).
+                demo?.coordinator.displayFeedGoodbye()
                 demo?.stop()
-                coordinator.stop()
+                coordinator.quit()
                 return
             }
         }

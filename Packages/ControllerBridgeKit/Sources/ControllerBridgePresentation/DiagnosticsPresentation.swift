@@ -125,18 +125,29 @@ public struct DiagnosticsLines: Equatable, Sendable {
     /// While streaming values are shown, each stretch of them shows each address once, at its latest value, with how
     /// many arrived ("…/Position 48.91 ×3"), so a playing deck reads as a few updating lines (#218). Display only.
     public var collapseStreaming = true
-    /// While paused, the lists show only what had arrived when Pause was pressed; capture carries on behind (#218).
-    private var pausedAt: Int?
-    public var isPaused: Bool { pausedAt != nil }
+    /// While paused, the lists show what they held when Pause was pressed, kept as it was (#319): capture carries on
+    /// behind and keeps evicting, but not from the frozen copy (#218). The rings are values, so the copy costs one
+    /// copy-on-write of each list that keeps growing.
+    private var frozen: Frozen?
+    private struct Frozen: Equatable, Sendable {
+        var lists: [DiagnosticsTab: Ring]
+        var streaming: Ring
+    }
+    public var isPaused: Bool { frozen != nil }
 
-    public mutating func pause() { pausedAt = nextID }
-    public mutating func resume() { pausedAt = nil }
+    public mutating func pause() { if frozen == nil { frozen = Frozen(lists: lists, streaming: streaming) } }
+    public mutating func resume() { frozen = nil }
     private var lists: [DiagnosticsTab: Ring] = [:]
     /// The OSC tab's streaming lines, kept apart so their flood can't push the other lines out (#97).
-    private var streaming = Ring()
+    private var streaming: Ring
     private var nextID = 0
+    /// Lines kept per list: `limit`, smaller in tests.
+    private let capacity: Int
 
-    public init() {}
+    public init(limit: Int = Self.limit) {
+        capacity = limit
+        streaming = Ring(capacity: limit)
+    }
 
     public mutating func append(to tab: DiagnosticsTab, message: String, label: String = "", isUnmapped: Bool = false) {
         nextID += 1
@@ -145,19 +156,20 @@ public struct DiagnosticsLines: Equatable, Sendable {
             streaming.append(line)
             return
         }
-        lists[tab, default: Ring()].append(line)
+        lists[tab, default: Ring(capacity: capacity)].append(line)
     }
 
     /// Empties one tab's list; the others stay.
     public mutating func clear(_ tab: DiagnosticsTab) {
-        lists[tab] = Ring()
-        if tab == .osc { streaming = Ring() }
+        lists[tab] = Ring(capacity: capacity)
+        if tab == .osc { streaming = Ring(capacity: capacity) }
+        frozen?.lists[tab] = Ring(capacity: capacity)
+        if tab == .osc { frozen?.streaming = Ring(capacity: capacity) }
     }
 
     /// What a tab shows, oldest first: its kept lines, through the streaming toggle and the filter.
     public func shown(_ tab: DiagnosticsTab) -> [Line] {
-        var kept = kept(tab)
-        if let pausedAt, let firstNewer = kept.firstIndex(where: { $0.id > pausedAt }) { kept.removeSubrange(firstNewer...) }
+        let kept = kept(tab)
         let filtered = filter.isEmpty ? kept : kept.filter(filter.matches)
         guard tab == .osc, !hideStreaming, collapseStreaming else { return filtered }
         return Self.collapsed(filtered)
@@ -198,10 +210,11 @@ public struct DiagnosticsLines: Equatable, Sendable {
 
     /// A tab's kept lines, with or without the streaming ones, oldest first.
     private func kept(_ tab: DiagnosticsTab) -> [Line] {
-        let list = lists[tab, default: Ring()].lines
+        let lists = frozen?.lists ?? lists, streaming = frozen?.streaming ?? streaming
+        let list = lists[tab]?.lines ?? []
         guard tab == .osc, !hideStreaming else { return list }
         // Both kept lists, back in arrival order, and still no more than the limit.
-        return Array(Self.merged(list, streaming.lines).suffix(Self.limit))
+        return Array(Self.merged(list, streaming.lines).suffix(capacity))
     }
 
     /// Two lists already in arrival order, merged into one in arrival order, in one pass.
@@ -219,11 +232,14 @@ public struct DiagnosticsLines: Equatable, Sendable {
 
     /// The newest `limit` lines in a fixed array, overwriting the oldest: appending costs the same at 20,000 as at 1.
     struct Ring: Equatable, Sendable {
+        let capacity: Int
         private var storage: [Line] = []
         private var start = 0
 
+        init(capacity: Int) { self.capacity = capacity }
+
         mutating func append(_ line: Line) {
-            if storage.count < DiagnosticsLines.limit {
+            if storage.count < capacity {
                 storage.append(line)
             } else {
                 storage[start] = line
@@ -246,7 +262,7 @@ public struct DiagnosticsLines: Equatable, Sendable {
     /// Everything a tab has kept, as plain text for Save… (#218): streaming lines too, in arrival order, ignoring the
     /// filter, Pause and collapsing.
     public func historyText(_ tab: DiagnosticsTab) -> String {
-        let list = lists[tab, default: Ring()].lines
+        let list = lists[tab]?.lines ?? []
         let all = tab == .osc ? Self.merged(list, streaming.lines) : list
         return all.map { $0.text + "\n" }.joined()
     }

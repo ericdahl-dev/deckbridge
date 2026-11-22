@@ -11,13 +11,21 @@ extension Bridge {
         sendPitch()
     }
 
-    private func sendPitch() {
-        let pitch = mapping.pitch
+    /// The tempo the fader's position stands for, rounded as it's sent.
+    func faderTempo(_ pitch: Mapping.Pitch) -> Double {
         // A 7-bit fader is one CC (#195); the LC6000's is an MSB/LSB pair.
         let t = pitch.bits == 7
             ? tempoSlider(from7Bit: pitchMSBValue, invert: pitch.invert, deadZone: pitch.deadZone)
             : tempoSlider(from: join14Bit(msb: pitchMSBValue, lsb: pitchLSBValue), invert: pitch.invert, deadZone: pitch.deadZone)
-        let rounded = (t * 100_000).rounded() / 100_000
+        return (t * 100_000).rounded() / 100_000
+    }
+
+    private func sendPitch() {
+        guard let pitch = mapping.pitch else { return }
+        faderKnown = true
+        // The arrows follow every move, whether or not it drives the tempo (#475).
+        defer { pitchArrowLEDs() }
+        let rounded = faderTempo(pitch)
         // Moving the fader while Syndicate has the slider disabled would queue up a jump.
         guard sliderEnabled, pickedUp(at: rounded) else { return }
         guard rounded != lastTempo else { return }
@@ -53,7 +61,7 @@ extension Bridge {
     func tempoReported(_ value: Double) {
         reportedTempo = value
         tempoWaitUntil = nil
-        let tolerance = mapping.pitch.pickupTolerance
+        let tolerance = mapping.pitch?.pickupTolerance ?? 0
         let isEcho = lastTempo.map { abs($0 - value) <= tolerance } == true
             || recentTempoSends.contains { clock.now - $0.time <= Self.echoWindow && abs($0.value - value) <= tolerance }
         if !isEcho { rearmPickup() }
@@ -61,8 +69,32 @@ extension Bridge {
 
     /// Dim while the fader waits to be picked up, so it can be caught by feel; otherwise full at the center.
     var pitchCenterVelocity: UInt8 {
-        if mapping.pitch.pickup, pickupArmed, reportedTempo != nil { return dimLevel }
+        if mapping.pitch?.pickup == true, pickupArmed, reportedTempo != nil { return dimLevel }
         return lastTempo == 0 ? fullLevel : offLevel
+    }
+
+    /// The shared fader's raw position from the layer that had it (#475), if that one knew it.
+    func takeFader(from other: Bridge) {
+        guard other.faderKnown else { return }
+        pitchMSBValue = other.pitchMSBValue
+        pitchLSBValue = other.pitchLSBValue
+        faderKnown = true
+    }
+
+    /// The pitch arrows (#475): during pickup, the one pointing the way to move the fader is full, the other off.
+    /// Back is toward a lower raw value, forward toward a higher one, whatever `invert` says. Both are off when the
+    /// fader's within the catch tolerance, its position isn't known yet, or there's nothing to catch.
+    func pitchArrowLEDs() {
+        var back = offLevel, forward = offLevel
+        if let pitch = mapping.pitch, pitch.pickup, pickupArmed, sliderEnabled, loaded, faderKnown, let reported = reportedTempo {
+            let gap = faderTempo(pitch) - reported
+            if abs(gap) > pitch.pickupTolerance {
+                // Below the value in tempo is below it in raw terms, unless the fader's inverted.
+                if (gap < 0) != pitch.invert { forward = fullLevel } else { back = fullLevel }
+            }
+        }
+        if let note = mapping.leds.pitchArrowBack { led(note, back) }
+        if let note = mapping.leds.pitchArrowForward { led(note, forward) }
     }
 
     func rearmPickup() {
@@ -76,107 +108,111 @@ extension Bridge {
     /// the reported value or moves across it. With no report yet there is nothing to meet, so the fader passes
     /// through, except just after a deck switch, when it waits for the new deck's report (`tempoWaitUntil`).
     private func pickedUp(at position: Double) -> Bool {
-        guard mapping.pitch.pickup, pickupArmed else { return true }
+        guard let pitch = mapping.pitch, pitch.pickup, pickupArmed else { return true }
         guard let reported = reportedTempo else {
             if let until = tempoWaitUntil, clock.now < until { return false }
             return true
         }
         let previous = faderPosition
         faderPosition = position
-        let near = abs(position - reported) <= mapping.pitch.pickupTolerance
+        let near = abs(position - reported) <= pitch.pickupTolerance
         let crossed = previous.map { ($0 - reported) * (position - reported) < 0 } ?? false
         guard near || crossed else { return false }
         pickupArmed = false
         return true
     }
 
-    // MARK: Needle Drop
+    // MARK: Jog and Needle Drop (#383: JogModule)
 
-    func needleMSB(_ value: UInt8) {
-        needleMSBValue = value
-    }
+    func needleMSB(_ value: UInt8) { jogModule.needleMSB(value) }
 
-    /// The strip's 14-bit position (#103), as a seek across the whole track. Sent when the LSB arrives, so an MSB on
-    /// its own never seeks to a half-updated place.
     func needleLSB(_ value: UInt8) {
-        guard needleTouched || !mapping.needle.requireTouch else { return }
-        let position = join14Bit(msb: needleMSBValue, lsb: value)
-        sendDeck("WaveformSeek", .float(Float(Double(position) / 16383)))
+        guard let needle = mapping.needle else { return }
+        if stripFader.touching {
+            if let move = stripFader.position(jogModule.needlePosition(lsb: value)) {
+                send(address: MixerOSC.address(.volume, channel: move.channel, root: root), [.float(Float(move.level))])
+            }
+            return
+        }
+        applyJog(jogModule.needleLSB(value, needle: needle, playing: playing, now: clock.now))
     }
 
-    // MARK: Jog
-
-    func jogMSB(_ value: UInt8) {
-        jogMSBValue = value
+    /// How a plain touch on the strip moves the channel fader (#609, the plain layer since #729), or nil when it seeks:
+    /// Settings' choice, else the profile's. Read at touch-down, so a change applies from the next touch.
+    var stripFaderMode: Mapping.Needle.ShiftFaderMode? {
+        guard let shown = stripFaderSetting.shown(for: mapping.needle), shown.enabled else { return nil }
+        return shown.mode
     }
 
-    /// The platter's 14-bit position (#103). Movement is the change since the last position, taking the shorter way
-    /// around the wrap at 16384, so 16376 → 3 is 11 forward. Read when the LSB arrives, so an MSB carry never jumps.
+    /// Without Shift at touch-down, the touch moves the deck's channel fader until it lifts (#609, #729); with Shift it
+    /// seeks (needle drop), and with the fader off every touch seeks. Every touch-down picks afresh, so a lost touch-up
+    /// can't leave the strip a fader.
+    func needleTouch(_ pressed: Bool) {
+        if pressed { stripFader.touchUp() }
+        if pressed, !shift, let mode = stripFaderMode {
+            stripFader.touchDown(channel: mapping.deck.number, mode: mode)
+            return
+        }
+        if !pressed, stripFader.touching {
+            stripFader.touchUp()
+            return
+        }
+        applyJog(jogModule.needleTouch(pressed))
+    }
+
+    func jogMSB(_ value: UInt8) { jogModule.jogMSB(value) }
+
     func jogLSB(_ value: UInt8) {
-        let position = join14Bit(msb: jogMSBValue, lsb: value)
-        defer { jogPosition = position }
-        guard let previous = jogPosition else { return }
-        var counts = (position - previous) % 16384
-        if counts > 8192 { counts -= 16384 } else if counts < -8192 { counts += 16384 }
-        jog(counts: counts)
+        guard let wheel = mapping.jog else { return }
+        applyJog(jogModule.jogLSB(value, wheel: wheel, playing: jogBends, musicMoving: playing, duration: duration,
+                                  now: clock.now))
     }
 
     /// A relative jog's tick on the platter's top (#204), in the profile's encoder format.
-    func jogRelative(_ value: UInt8) {
-        jog(counts: mapping.midi.encoderFormat.ticks(value))
-    }
+    func jogRelative(_ value: UInt8) { jogTicks(mapping.midi.encoderFormat.ticks(value), needsTouch: true) }
 
     /// A relative jog's tick on the platter's edge (#204): it moves without a touch.
-    func jogRelativeEdge(_ value: UInt8) {
-        jog(counts: mapping.midi.encoderFormat.ticks(value), needsTouch: false)
+    func jogRelativeEdge(_ value: UInt8) { jogTicks(mapping.midi.encoderFormat.ticks(value), needsTouch: false) }
+
+    private func jogTicks(_ counts: Int, needsTouch: Bool) {
+        guard let wheel = mapping.jog else { return }
+        applyJog(jogModule.jog(counts: counts, needsTouch: needsTouch, wheel: wheel, playing: jogBends, musicMoving: playing,
+                               duration: duration, now: clock.now))
     }
 
-    private func jog(counts: Int, needsTouch: Bool = true) {
-        guard counts != 0, platterTouched || !mapping.jog.requireTouch || !needsTouch else { return }
-        jogCountsPending += counts
-        lastJogTime = clock.now
-        if playing {
-            let direction = counts > 0 ? 1 : -1
-            guard direction != bendDirection else { return }
-            bendDirection = direction
-            hold(.bend, "PhaseBend", press: [.int(Int32(direction))], release: [.int(0)])
-            return
-        }
-        // The check keeps these positive; a hand-built mapping with 0 mustn't trap (#92).
-        let countsPerRev = Double(mapping.jog.countsPerRev)
-        guard countsPerRev > 0 else { return }
-        let revolutions = Double(counts) / countsPerRev
-        // Paused: move the playhead.
-        if let duration, let position = progress {
-            let moved = min(1, max(0, position + revolutions * mapping.jog.seekSecondsPerRev / duration))
-            progress = moved
-            sendDeck("WaveformSeek", .float(Float(moved)))
-        } else {
-            // No track length: skip whole beats, keeping the remainder for the next turn.
-            let countsPerBeat = Int((countsPerRev / mapping.jog.beatsPerRev).rounded())
-            guard countsPerBeat > 0 else { return }
-            seekCountRemainder += counts
-            let beats = seekCountRemainder / countsPerBeat
-            guard beats != 0 else { return }
-            seekCountRemainder -= beats * countsPerBeat
-            sendDeck("BeatSkip", .int(Int32(beats)))
-        }
+    /// Whether the jog bends: a playing deck, unless VINYL's seek mode is on (#540); otherwise it seeks.
+    private var jogBends: Bool { playing && !vinylSeek }
+
+    /// VINYL (#540) toggles the playing jog between bending and seeking. A bend under way ends.
+    func vinyl(_ pressed: Bool) {
+        guard pressed else { return }
+        vinylSeek.toggle()
+        if vinylSeek { applyJog(jogModule.playingChanged(false)) }
     }
 
-    func platterTouch(_ pressed: Bool) {
-        platterTouched = pressed
-        if !pressed, bendDirection != 0 { endBend() }
+    func platterTouch(_ pressed: Bool) { applyJog(jogModule.platterTouch(pressed)) }
+
+    /// Sends what the jog module asks: OSC to this deck, the bend as a held PhaseBend, and quantize holds through the
+    /// Bridge's one QuantizeOverride.
+    func applyJog(_ sends: [JogModule.Send]) {
+        for send in sends {
+            switch send {
+            case .osc(let path, let argument): sendDeck(path, argument)
+            case .hold(let reason): overrideQuantize(reason)
+            case .release(let reason): restoreQuantize(reason)
+            case .bend(let direction): hold(.bend, "PhaseBend", press: [.int(Int32(direction))], release: [.int(0)])
+            case .endBend: releaseHold(.bend)
+            }
+        }
     }
 
     func tick() {
-        if bendDirection != 0, clock.now - lastJogTime >= Double(mapping.jog.bendReleaseMs) / 1000 {
-            endBend()
-        }
+        // The bend ends first and the seek's quantize goes back last, as before the module (#383).
+        let jogSends = jogModule.tick(now: clock.now, wheel: mapping.jog)
+        applyJog(jogSends.filter { $0 == .endBend })
         timingTick()
-    }
-
-    func endBend() {
-        bendDirection = 0
-        releaseHold(.bend)
+        meterTick()
+        applyCues(cueMemory.tick(now: clock.now))
+        applyJog(jogSends.filter { $0 != .endBend })
     }
 }

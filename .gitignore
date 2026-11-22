@@ -3,6 +3,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 build/
+build-rel/
 dist/
 .build/
 .swiftpm/
@@ -13,3 +14,17 @@ dist/
 # taste-skill working files: only the waivers are kept
 website/.taste-skill/*
 !website/.taste-skill/waivers.json
+build-rel/
+
+# Vendor firmware updaters and images (copyrighted): keep local, never commit
+docs/research/*.dmg
+*.dfu
+docs/research/*.pdf
+
+# The deck panel's Wi-Fi credentials, generated at build time (#620): never commit
+tools/deck-panel/src/wifi_secrets.h
+
+# Deck panel images the updater carries (#686): added at release by add_panel_image.py, never committed
+Packages/FirmwareUpdaterKit/Sources/FirmwareCatalog/Catalog/panel/
+# The drawn display's own blocks A and B (#696): staged at release by stage_lc6000_blocks.py, never committed
+Packages/FirmwareUpdaterKit/Sources/FirmwareCatalog/Catalog/blocks/

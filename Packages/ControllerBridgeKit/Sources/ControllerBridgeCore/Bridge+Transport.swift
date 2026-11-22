@@ -3,33 +3,48 @@
 
 extension Bridge {
     func play(_ pressed: Bool) {
-        if pressed { sendDeck("PlayPause", .int(1)) }
+        // Play wins over a Shift + pad tap still waiting to be paused (#358).
+        guard pressed else { return }
+        end(.play)
+        // PLAY while CUE is held keeps the preview playing once CUE is let go, as on a CDJ (#360): set, not toggled,
+        // and Syndicate never gets the Cue release, which would take it back to the cue point (the user's test).
+        if cueDown {
+            _ = held.take(.cue)
+            return sendDeck("Playing", .int(1))
+        }
+        sendDeck("PlayPause", .int(1))
     }
 
+    /// Sync toggles the deck's sync. With Shift (#478, printed OFF) it only turns sync off: from a synced deck the
+    /// toggle goes, otherwise nothing, so it never turns sync on.
     func sync(_ pressed: Bool) {
-        if pressed { sendDeck("TempoSync", .int(1)) }
+        guard pressed, !shift || synced else { return }
+        sendDeck("TempoSync", .int(1))
     }
 
     func master(_ pressed: Bool) {
         if pressed { sendDeck("TempoMaster", .int(1)) }
     }
 
-    /// Pitch Bend − (#114): nudges the tempo down while held.
+    /// Pitch Bend − (#114): nudges the tempo down while held. With Shift, it transposes down a semitone (#377).
     func pitchMinus(_ pressed: Bool) {
-        if shift { pitchRange(pressed) } else { holdButton(.phaseMinus, "PhaseMinus", pressed: pressed) }
+        if shift { transpose("PitchDown", pressed) } else { holdButton(.phaseMinus, "PhaseMinus", pressed: pressed) }
     }
 
-    /// Pitch Bend + (#114): nudges the tempo up while held.
+    /// Pitch Bend + (#114): nudges the tempo up while held. With Shift, it transposes up a semitone (#377).
     func pitchPlus(_ pressed: Bool) {
-        if shift { pitchRange(pressed) } else { holdButton(.phasePlus, "PhasePlus", pressed: pressed) }
+        if shift { transpose("PitchUp", pressed) } else { holdButton(.phasePlus, "PhasePlus", pressed: pressed) }
     }
 
-    /// Shift + Pitch Bend is the LC6000's pitch range. Syndicate has no OSC route for the slider's range, so it sends
-    /// nothing and says so once in the log (#114).
-    private func pitchRange(_ pressed: Bool) {
-        guard pressed, !pitchRangeNoted else { return }
-        pitchRangeNoted = true
-        notices.append("Pitch range (Shift + Pitch Bend) isn't available in Syndicate")
+    /// Shift + Pitch Bend: Syndicate's PitchDown / PitchUp triggers, one semitone per press (User Guide 14.6). Syndicate
+    /// applies them only with the deck's P (key lock) on, so key lock goes on first, every press: it may have been
+    /// turned off in Syndicate itself, which DeckBridge doesn't hear (the user's pick, #377).
+    private func transpose(_ address: String, _ pressed: Bool) {
+        guard pressed else { return }
+        keyLockOn = true
+        sendDeck("PitchPreserve", .int(1))
+        sendDeck(address, .int(1))
+        refreshLEDs()
     }
 
     func shiftButton(_ pressed: Bool) {
@@ -53,13 +68,31 @@ extension Bridge {
         refreshLEDs()
     }
 
+    /// CUE is Syndicate's own: back to the cue point and stop while playing, preview while held on it, and a new cue
+    /// point when paused elsewhere. Shift + CUE goes back to the cue point and stops (#360), and never sets one.
     func cue(_ pressed: Bool) {
+        if pressed, shift {
+            shiftCueDown = true
+            if playing { return holdButton(.cue, "Cue", pressed: true) }
+            return applyCues(cueMemory.shiftCue(duration: duration))
+        }
+        if !pressed, shiftCueDown {
+            shiftCueDown = false
+            return holdButton(.cue, "Cue", pressed: false)
+        }
+        cueDown = pressed
+        if pressed {
+            // Syndicate's cue point is where it's paused, or, while playing, where it stops.
+            cueMemory.cuePressed(playing: playing, now: clock.now)
+        }
         holdButton(.cue, "Cue", pressed: pressed)
     }
 
     /// Censor reverses while held. Shift + Censor latches Reverse instead: each press toggles it (#114). A latched
     /// Reverse isn't a hold, but release-all still turns it off.
     func censor(_ pressed: Bool) {
+        // Its light shows reverse on, held or latched (#477).
+        defer { refreshLEDs() }
         if pressed, shift {
             if let address = latchedReverse {
                 send(address: address, [.int(0)])
@@ -98,14 +131,19 @@ extension Bridge {
     /// Sends every recorded release once, then forgets them. Quit, unplug, sleep, a deck or device change and a
     /// mapping import all come through here.
     func releaseAll() {
+        // Censor's light (#477) goes back to idle with the reverse it showed, held or latched.
+        let reversed = reverseOn
+        defer { if reversed { refreshLEDs() } }
+        end(.releaseAll)
         for control in held.takeAll() { send(address: control.address, control.release) }
         if let address = latchedReverse {
             send(address: address, [.int(0)])
             latchedReverse = nil
         }
-        bendDirection = 0
-        platterTouched = false
-        needleTouched = false
+        jogModule.releaseAll()
+        stripFader.touchUp()
+        cueDown = false
+        shiftCueDown = false
         if shift {
             shift = false
             refreshLEDs()
@@ -132,5 +170,9 @@ extension Bridge {
         buttonLED("key_lock", on: keyLockOn)
         buttonLED("slip", on: slipOn)
         buttonLED("shift", on: shift)
+        buttonLED("censor", on: reverseOn)
     }
+
+    /// Reverse is on: Censor held, or latched with Shift + Censor (#477).
+    var reverseOn: Bool { held.contains(.censor) || latchedReverse != nil }
 }

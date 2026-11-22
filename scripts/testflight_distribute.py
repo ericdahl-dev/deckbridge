@@ -98,10 +98,14 @@ def what_to_test(doc):
     return "\n".join(lines)
 
 
-def set_what_to_test(http, build, text, locale="en-US"):
-    """Sets the build's What to Test, creating its localization or updating it, so a rerun writes the same text."""
+def set_what_to_test(http, build, text, locale="en-US", keep=False):
+    """Sets the build's What to Test, creating its localization or updating it, so a rerun writes the same text. With
+    `keep` (#312: an older build sent again by hand), a build that already has a text keeps it."""
     existing = get(http, f"/builds/{build}/betaBuildLocalizations")["data"]
     localization = next((l for l in existing if l["attributes"]["locale"] == locale), None)
+    if keep and localization and localization["attributes"].get("whatsNew"):
+        print(f"What to Test kept ({locale}): the build already has its own.")
+        return
     if localization:
         send(http, "PATCH", f"/betaBuildLocalizations/{localization['id']}", {"data": {
             "type": "betaBuildLocalizations", "id": localization["id"], "attributes": {"whatsNew": text}}})
@@ -167,7 +171,10 @@ def submit_for_review(http, app, build):
         print("Submitted for Beta App Review.")
         return
     text = detail(response)
-    if "review information" in text.lower() or "contact" in text.lower() or "test information" in text.lower():
+    # Missing Test Information, by the API's words for it (#312: "contact" alone matched unrelated errors).
+    lowered = text.lower()
+    if any(words in lowered for words in ("review information", "test information", "contact email", "contact phone",
+                                          "contact first name", "contact last name", "contact information")):
         raise TestInformationMissing(text)
     if status == 409 and "already" in text.lower():
         print("Already submitted for Beta App Review.")
@@ -185,12 +192,17 @@ def dry_run(http):
     return wrapped
 
 
+def keep_from(value):
+    """KEEP_WHAT_TO_TEST from the environment (#312): on only for "1" or "true"."""
+    return value in ("1", "true")
+
+
 def external_from(value):
     """EXTERNAL from the environment: on only for "1" or "true" (#244). Anything else, or unset, is internal only."""
     return value in ("1", "true")
 
 
-def run(http, bundle_id, version, build_number, doc_path, sleep, external=False):
+def run(http, bundle_id, version, build_number, doc_path, sleep, external=False, keep_what_to_test=False):
     """The whole distribution. Internal only unless `external` (#244): then the build also goes to the external group
     and Beta App Review. Internal testers get the build even when the external half can't go on (missing Test
     Information): that half is reported as failed and the run exits non-zero. Returns the exit code."""
@@ -198,7 +210,7 @@ def run(http, bundle_id, version, build_number, doc_path, sleep, external=False)
         app = find_app(http, bundle_id)
         build = find_build(http, bundle_id, version, build_number, sleep)
         with open(doc_path, encoding="utf-8") as doc:
-            set_what_to_test(http, build, what_to_test(doc.read()))
+            set_what_to_test(http, build, what_to_test(doc.read()), keep=keep_what_to_test)
         add_to_group(http, app, build, INTERNAL_GROUP)
     except DistributeError as error:
         print(f"::error::{error}", file=sys.stderr)
@@ -241,12 +253,14 @@ def api_http(method, path, body=None, query=None):
 def main():
     """Environment: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH, BUNDLE_ID, VERSION, BUILD_NUMBER, WHAT_TO_TEST
     (default docs/TESTFLIGHT.md), EXTERNAL=1 to also send it to the external group and Beta App Review (#244; internal
-    only otherwise), and DRY_RUN=1 to read everything and change nothing."""
+    only otherwise), KEEP_WHAT_TO_TEST=1 to leave a build's existing What to Test alone (#312), and DRY_RUN=1 to read
+    everything and change nothing."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     doc = os.environ.get("WHAT_TO_TEST", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "TESTFLIGHT.md"))
     http = dry_run(api_http) if os.environ.get("DRY_RUN") in ("1", "true") else api_http
     return run(http, os.environ["BUNDLE_ID"], os.environ["VERSION"], os.environ["BUILD_NUMBER"], doc, time.sleep,
-               external=external_from(os.environ.get("EXTERNAL", "")))
+               external=external_from(os.environ.get("EXTERNAL", "")),
+               keep_what_to_test=keep_from(os.environ.get("KEEP_WHAT_TO_TEST", "")))
 
 
 if __name__ == "__main__":

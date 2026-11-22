@@ -1,0 +1,257 @@
+{
+  "about": "The drawn jog display's picture, the numbers its two languages share (#571): the Swift renderer (JogDisplayRenderer, JogTrackTime, DeckNumberInk) and the chip's C. layout/gen_layout.py writes src/layout_generated.h and Packages/ControllerBridgeKit/Sources/ControllerBridgeCore/JogLayout.generated.swift from it; `make layout` regenerates them and `make test` fails if either differs. Kinds: color is 0xRRGGBB (C: 0x...u, Swift: Int); float is a length or position in frame pixels (C: float with an f, Swift: Double); int is a whole number (C: int, Swift: Int); ratio is a fraction (C: float, Swift: Double); double is a number C works in double (C: double, Swift: Double). The warning's 60 and 30 s are the protocol's (vectors/messages.json, #569), not here. Values are written as their literals are, so each language reads exactly the value it read before.",
+  "constants": [
+    {
+      "name": "ground",
+      "kind": "color",
+      "value": "0B0B0B",
+      "about": "The frame's ground."
+    },
+    {
+      "name": "text",
+      "kind": "color",
+      "value": "EDEDEA",
+      "about": "The text's white: the title, the BPM, the time."
+    },
+    {
+      "name": "caption",
+      "kind": "color",
+      "value": "BDBDBD",
+      "about": "The artist and the untitled caption."
+    },
+    {
+      "name": "keyInk",
+      "kind": "color",
+      "value": "9DC3EE",
+      "about": "The key's blue."
+    },
+    {
+      "name": "live",
+      "kind": "color",
+      "value": "00FF48",
+      "about": "The live green: the lit beat, the meter's fill."
+    },
+    {
+      "name": "beatOff",
+      "kind": "color",
+      "value": "2C2C2C",
+      "about": "An unlit beat section, and the meter's track."
+    },
+    {
+      "name": "downbeatOff",
+      "kind": "color",
+      "value": "5A5A5A",
+      "about": "Beat 1's unlit section, a step brighter."
+    },
+    {
+      "name": "warningRed",
+      "kind": "color",
+      "value": "FF3B30",
+      "about": "The last minute's warning, and the meter at clip."
+    },
+    {
+      "name": "warningWhite",
+      "kind": "color",
+      "value": "EDEDEA",
+      "about": "The warning blink's other half, for every deck."
+    },
+    {
+      "name": "bandTrack",
+      "kind": "color",
+      "value": "4A4A4A",
+      "about": "The progress ring's track in the band (#524)."
+    },
+    {
+      "name": "meterYellow",
+      "kind": "color",
+      "value": "FFD400",
+      "about": "The meter above three quarters."
+    },
+    {
+      "name": "meterPeak",
+      "kind": "color",
+      "value": "FFFFFF",
+      "about": "The meter's held peak tick."
+    },
+    {
+      "name": "center",
+      "kind": "float",
+      "value": "99",
+      "about": "The frame's center, x and y."
+    },
+    {
+      "name": "ringInner",
+      "kind": "float",
+      "value": "85",
+      "about": "The beat ring's inner radius."
+    },
+    {
+      "name": "ringOuter",
+      "kind": "float",
+      "value": "95",
+      "about": "The beat ring's outer radius."
+    },
+    {
+      "name": "ringGap",
+      "kind": "float",
+      "value": "7",
+      "about": "The gap between beat sections, at mid-band."
+    },
+    {
+      "name": "meterInner",
+      "kind": "float",
+      "value": "80",
+      "about": "The level meter's inner radius."
+    },
+    {
+      "name": "meterOuter",
+      "kind": "float",
+      "value": "83",
+      "about": "The level meter's outer radius."
+    },
+    {
+      "name": "bandInner",
+      "kind": "float",
+      "value": "103",
+      "about": "The progress ring's inner radius, in the band (#524)."
+    },
+    {
+      "name": "bandOuter",
+      "kind": "float",
+      "value": "107",
+      "about": "The progress ring's outer radius."
+    },
+    {
+      "name": "keySize",
+      "kind": "float",
+      "value": "18",
+      "about": "Drawn mode's key/BPM size (#524)."
+    },
+    {
+      "name": "keyCenterY",
+      "kind": "float",
+      "value": "140.5",
+      "about": "Drawn mode's key/BPM line box middle."
+    },
+    {
+      "name": "timeSize",
+      "kind": "float",
+      "value": "21",
+      "about": "Drawn mode's time-left size."
+    },
+    {
+      "name": "timeCenterY",
+      "kind": "float",
+      "value": "160",
+      "about": "Drawn mode's time-left line box middle."
+    },
+    {
+      "name": "untitledTop",
+      "kind": "int",
+      "value": "66",
+      "about": "An untitled deck's words: their line box top."
+    },
+    {
+      "name": "untitledCaptionTop",
+      "kind": "int",
+      "value": "100",
+      "about": "An untitled deck's caption: its line box top."
+    },
+    {
+      "name": "numberWhiteBelow",
+      "kind": "ratio",
+      "value": "0.1791",
+      "about": "The deck number is white under this WCAG relative luminance."
+    },
+    {
+      "name": "ruleX",
+      "kind": "int",
+      "value": "50",
+      "about": "The rule under the artist (#458, #462): its left edge."
+    },
+    {
+      "name": "ruleY",
+      "kind": "int",
+      "value": "127",
+      "about": "The rule's top."
+    },
+    {
+      "name": "ruleWidth",
+      "kind": "int",
+      "value": "98",
+      "about": "The rule's width."
+    },
+    {
+      "name": "ruleHeight",
+      "kind": "int",
+      "value": "2",
+      "about": "The rule's height."
+    },
+    {
+      "name": "tickX",
+      "kind": "int",
+      "value": "98",
+      "about": "In phase: the tick at the rule's center, its left edge."
+    },
+    {
+      "name": "tickY",
+      "kind": "int",
+      "value": "125",
+      "about": "The tick's top."
+    },
+    {
+      "name": "tickWidth",
+      "kind": "int",
+      "value": "2",
+      "about": "The tick's width."
+    },
+    {
+      "name": "tickHeight",
+      "kind": "int",
+      "value": "6",
+      "about": "The tick's height."
+    },
+    {
+      "name": "barY",
+      "kind": "int",
+      "value": "126",
+      "about": "Off phase: the bar from the center, its top."
+    },
+    {
+      "name": "barHeight",
+      "kind": "int",
+      "value": "4",
+      "about": "The bar's height."
+    },
+    {
+      "name": "barMax",
+      "kind": "int",
+      "value": "49",
+      "about": "The bar's longest, the rule's half, in px."
+    },
+    {
+      "name": "phaseDim",
+      "kind": "double",
+      "value": "0.35",
+      "about": "Off phase: how much of the deck color the rule keeps over the ground."
+    },
+    {
+      "name": "phaseCurve",
+      "kind": "double",
+      "value": "0.02",
+      "about": "The bar's curve, g(p) = p/(|p| + this), p in beats."
+    },
+    {
+      "name": "phaseFull",
+      "kind": "double",
+      "value": "0.5",
+      "about": "The offset in beats at which the bar is its whole half."
+    },
+    {
+      "name": "phaseUnitsPerBeat",
+      "kind": "int",
+      "value": "16384",
+      "about": "The phase's units in a beat, as op 0B carries it."
+    }
+  ]
+}

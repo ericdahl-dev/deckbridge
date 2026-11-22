@@ -190,4 +190,20 @@ struct CaptureFlowTests {
         #expect(file.summary.contains("Ended early: 1 of 3 steps"))
         #expect(flow.takeAnnouncement() == "Capture ended early: 1 of 3 steps.")
     }
+
+    @Test("Replugged on the idle step, it listens again and VoiceOver hears \"Next is available\" again (#316)")
+    func idleReadyAfterReplug() {
+        var flow = Self.started(at: 100)
+        _ = flow.takeAnnouncement()
+        flow.tick(at: 105.1)
+        #expect(flow.takeAnnouncement() == "Done listening. Next is available.")
+        flow.disconnected(at: 106)
+        _ = flow.takeAnnouncement()
+        flow.reconnected(at: 110)
+        _ = flow.takeAnnouncement()
+        flow.tick(at: 112)
+        #expect(flow.takeAnnouncement() == nil)
+        flow.tick(at: 115.1)
+        #expect(flow.takeAnnouncement() == "Done listening. Next is available.")
+    }
 }

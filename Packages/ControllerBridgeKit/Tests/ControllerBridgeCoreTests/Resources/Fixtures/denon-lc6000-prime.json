@@ -1,0 +1,306 @@
+{
+  "profile": "denon-lc6000-prime",
+  "device": "Demo controller",
+  "steps": [
+    {
+      "prompt": "idle",
+      "midi": [
+        "90 34 7F",
+        "90 34 7F",
+        "90 34 7F",
+        "90 34 7F",
+        "90 34 7F"
+      ]
+    },
+    {
+      "prompt": "deck1.play",
+      "midi": [
+        "90 01 7F",
+        "80 01 00"
+      ],
+      "expect": [
+        "Deck/1/PlayPause 1"
+      ]
+    },
+    {
+      "prompt": "deck1.cue",
+      "midi": [
+        "90 02 7F",
+        "80 02 00"
+      ],
+      "expect": [
+        "Deck/1/Cue 1",
+        "Deck/1/Cue 0"
+      ]
+    },
+    {
+      "prompt": "deck1.sync",
+      "midi": [
+        "90 14 7F",
+        "80 14 00"
+      ],
+      "expect": [
+        "Deck/1/TempoSync 1"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue1",
+      "midi": [
+        "90 20 7F",
+        "80 20 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 1 1",
+        "Deck/1/HotCue 1 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue2",
+      "midi": [
+        "90 21 7F",
+        "80 21 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 2 1",
+        "Deck/1/HotCue 2 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue3",
+      "midi": [
+        "90 22 7F",
+        "80 22 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 3 1",
+        "Deck/1/HotCue 3 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue4",
+      "midi": [
+        "90 23 7F",
+        "80 23 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 4 1",
+        "Deck/1/HotCue 4 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue5",
+      "midi": [
+        "90 24 7F",
+        "80 24 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 5 1",
+        "Deck/1/HotCue 5 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue6",
+      "midi": [
+        "90 25 7F",
+        "80 25 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 6 1",
+        "Deck/1/HotCue 6 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue7",
+      "midi": [
+        "90 26 7F",
+        "80 26 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 7 1",
+        "Deck/1/HotCue 7 0"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue8",
+      "midi": [
+        "90 27 7F",
+        "80 27 00"
+      ],
+      "expect": [
+        "Deck/1/HotCue 8 1",
+        "Deck/1/HotCue 8 0"
+      ]
+    },
+    {
+      "prompt": "deck1.pitch",
+      "midi": [
+        "B0 08 00",
+        "B0 28 00",
+        "B0 08 10",
+        "B0 28 00",
+        "B0 08 20",
+        "B0 28 00",
+        "B0 08 30",
+        "B0 28 00",
+        "B0 08 40",
+        "B0 28 00",
+        "B0 08 50",
+        "B0 28 00",
+        "B0 08 60",
+        "B0 28 00",
+        "B0 08 70",
+        "B0 28 00",
+        "B0 08 7F",
+        "B0 28 7F"
+      ]
+    },
+    {
+      "prompt": "deck1.jog.touch",
+      "midi": [
+        "90 28 7F",
+        "B0 11 3E",
+        "B0 31 40",
+        "B0 11 3F",
+        "B0 31 24",
+        "B0 11 40",
+        "B0 31 08",
+        "B0 11 3F",
+        "B0 31 24",
+        "B0 11 3E",
+        "B0 31 40",
+        "80 28 00"
+      ]
+    },
+    {
+      "prompt": "deck1.jog.edge",
+      "midi": [
+        "B0 11 3E",
+        "B0 31 40",
+        "B0 11 40",
+        "B0 31 08",
+        "B0 11 41",
+        "B0 31 50",
+        "B0 11 40",
+        "B0 31 08"
+      ]
+    },
+    {
+      "prompt": "deck1.needle",
+      "midi": [
+        "90 46 7F",
+        "B0 40 07",
+        "B0 41 68",
+        "B0 40 2E",
+        "B0 41 70",
+        "B0 40 55",
+        "B0 41 78",
+        "B0 40 75",
+        "B0 41 18",
+        "80 46 00"
+      ]
+    },
+    {
+      "prompt": "deck1.loop_in",
+      "midi": [
+        "90 08 7F",
+        "80 08 00"
+      ],
+      "expect": [
+        "Deck/1/LoopIn 1"
+      ]
+    },
+    {
+      "prompt": "deck1.loop_out",
+      "midi": [
+        "90 09 7F",
+        "80 09 00"
+      ],
+      "expect": [
+        "Deck/1/LoopOut 1"
+      ]
+    },
+    {
+      "prompt": "deck1.auto_loop",
+      "midi": [
+        "90 0A 7F",
+        "80 0A 00"
+      ],
+      "expect": [
+        "Deck/1/Loop 1"
+      ]
+    },
+    {
+      "prompt": "deck1.browse.turn",
+      "midi": [
+        "B0 06 01",
+        "B0 06 01",
+        "B0 06 01",
+        "B0 06 7F",
+        "B0 06 7F",
+        "B0 06 7F"
+      ]
+    },
+    {
+      "prompt": "deck1.browse.press",
+      "midi": [
+        "90 12 7F",
+        "80 12 00"
+      ]
+    },
+    {
+      "prompt": "deck1.shift",
+      "midi": [
+        "90 1A 7F",
+        "80 1A 00"
+      ]
+    },
+    {
+      "prompt": "deck1.play.shift",
+      "midi": [
+        "90 1A 7F",
+        "90 01 7F",
+        "80 01 00",
+        "80 1A 00"
+      ]
+    },
+    {
+      "prompt": "deck1.cue.shift",
+      "midi": [
+        "90 1A 7F",
+        "90 02 7F",
+        "80 02 00",
+        "80 1A 00"
+      ]
+    },
+    {
+      "prompt": "deck1.hotcue1.shift",
+      "midi": [
+        "90 1A 7F",
+        "90 20 7F",
+        "80 20 00",
+        "80 1A 00"
+      ]
+    },
+    {
+      "prompt": "layer2.select",
+      "midi": [
+        "90 1A 7F",
+        "9F 37 7F",
+        "8F 37 00",
+        "90 33 00",
+        "91 33 7F",
+        "80 1A 00"
+      ]
+    },
+    {
+      "prompt": "deck2.play",
+      "midi": [
+        "91 01 7F",
+        "81 01 00"
+      ],
+      "expect": [
+        "Deck/2/PlayPause 1"
+      ]
+    }
+  ]
+}

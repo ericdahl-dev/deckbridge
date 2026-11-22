@@ -74,6 +74,8 @@ struct DiagnosticsWindow: View {
     var jogSimulator = JogSimulatorLog()
     /// Picks the deck the jog display preview follows with no controller connected (#221); nil, the first loaded.
     var setJogPreviewDeck: (Int?) -> Void = { _ in }
+    /// Starts the 10 s meter capture (#582), Debug builds only.
+    var captureMeter: () -> Void = {}
     @State private var jogPreviewDeck: Int?
     @State var tab = Tab.monitor
     /// Off only for snapshots: ImageRenderer draws no ScrollView content.
@@ -166,6 +168,18 @@ struct DiagnosticsWindow: View {
                 .buttonStyle(PillButtonStyle(small: true))
                 .keyboardShortcut("k", modifiers: .command)
                 .accessibilityLabel("Clear the \(tab.rawValue)")
+            #if DEBUG
+            // The debug trace file (#395): agents read it directly; the path is in the tooltip and the log.
+            Button("Reveal log file") { NSWorkspace.shared.activateFileViewerSelecting([DebugTrace.shared.fileURL]) }
+                .buttonStyle(PillButtonStyle(kind: .quiet, small: true))
+                .help(DebugTrace.shared.fileURL.path)
+                .accessibilityLabel("Reveal the debug log file in Finder")
+            // #582: 10 s of Syndicate's full-rate meter stream, to a CSV beside the log, for choosing the meter's scale.
+            Button("Capture meter 10 s") { captureMeter() }
+                .buttonStyle(PillButtonStyle(kind: .quiet, small: true))
+                .help("Writes every Mixer/CHn/Meter value for 10 s to Logs/DeckBridge; play a track first")
+                .accessibilityLabel("Capture the meter stream for 10 seconds")
+            #endif
         }
     }
 

@@ -13,6 +13,7 @@ extension BridgeStatus {
     var shownDeck: Int { controller?.deck ?? deck }
 
     /// Unmatched devices: a quiet gray list, or one orange NO PROFILE row when no controller is connected (#43).
+    /// Each one that isn't a virtual port is offered Help add it… either way (#329).
     var otherDevices: OtherDevices {
         OtherDevices(
             unmatched: unmatchedDevices.map(\.name),
@@ -57,13 +58,15 @@ extension BridgeStatus {
                                         followsLayers: $0.followsLayers)
         }
         let first = entries.first
-        return BridgeState(
+        var state = BridgeState(
             controller: first?.controller ?? .notConnected, feedback: feedback, deck: first?.deck ?? deck,
             stopped: problem != nil, lastDropout: lastDropoutTime, master: self.controller?.master == true, demo: demo,
             lastEvent: first?.lastEvent, others: Array(entries.dropFirst()), stopReason: stopReason,
             followsLayers: first?.followsLayers ?? false, missingSubscriptions: missingSubscriptions.map { MissingSubscription(name: $0.syndicateName, breaks: $0.breaks) },
             requiredSubscriptions: requiredSubscriptions.map(\.syndicateName)
         )
+        state.otherHost = otherHost
+        return state
     }
 
     /// The panel's controller state, by the tested mapping in Presentation (#91).
@@ -218,7 +221,10 @@ private struct StatusCard: View {
                     StatusLightView(light: highlighted)
                         .help(status.unmatchedDevices.first { $0.name == highlighted.label }?.note ?? "")
                 }
-                if let offer = others.offer { CaptureOfferRow(offer: offer) { helpAdd(offer.device) } }
+                // One per unmatched device, each opening the capture with its own device preselected (#329).
+                ForEach(Array(others.offers.enumerated()), id: \.offset) { entry in
+                    CaptureOfferRow(offer: entry.element) { helpAdd(entry.element.device) }
+                }
                 if let summary = others.summary { OtherDevicesList(summary: summary, rows: others.rows) }
             }
             .padding([.horizontal, .bottom], Theme.Step.x3)
@@ -404,7 +410,8 @@ struct OtherDevicesList: View {
     }
 }
 
-/// "DDJ-FLX4 isn't supported yet." with Help add it…, under its NO PROFILE row (#200).
+/// "DDJ-FLX4 isn't supported yet." with Help add it… (#200): under its NO PROFILE row, or above the gray list while a
+/// controller is connected (#329).
 private struct CaptureOfferRow: View {
     let offer: CaptureOffer
     let action: () -> Void

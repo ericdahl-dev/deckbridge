@@ -21,6 +21,8 @@ public final class OSCDestination: OSCSender {
         var sink: (any DatagramSink)?
         var onReady: (@Sendable () -> Void)?
         var lastError: String?
+        var connectProblem: String?
+        var sendsFailing = false
         var address = ""
         var onSendFailure: (@Sendable () -> Void)?
         var lastFailureReport: Double?
@@ -58,6 +60,12 @@ public final class OSCDestination: OSCSender {
     /// Why the last connect, or the last send, failed; nil once a destination opens and sends work.
     public var lastError: String? { state.withLock { $0.lastError } }
 
+    /// Why the latest connect failed; nil once one opens. Unlike `lastError`, a failing send doesn't set it (#618).
+    public var connectProblem: String? { state.withLock { $0.connectProblem } }
+
+    /// The last send failed: true until a send works again (#618). `lastError` is untouched by a send that works.
+    public var sendsFailing: Bool { state.withLock { $0.sendsFailing } }
+
     /// Called each time a destination opens, so the app can ask Syndicate to resend its state: anything sent while
     /// there was no destination was dropped.
     public var onReady: (@Sendable () -> Void)? {
@@ -89,6 +97,7 @@ public final class OSCDestination: OSCSender {
                 state.sink = sink
                 state.address = "\(address):\(port)"
                 state.lastError = nil
+                state.connectProblem = nil
                 return .some(state.onReady)
             }
             if case .some(let callback) = ready { callback?() }
@@ -106,6 +115,7 @@ public final class OSCDestination: OSCSender {
         state.withLock { state -> String? in
             guard state.generation == generation else { return nil }
             state.lastError = problem
+            state.connectProblem = problem
             return problem
         }
     }
@@ -145,13 +155,24 @@ public final class OSCDestination: OSCSender {
     }
 
     public func send(_ message: OSCMessage) {
+        send(bytes: message.encoded())
+    }
+
+    /// One datagram for the whole bundle (#636).
+    public func send(bundle messages: [OSCMessage]) {
+        send(bytes: OSCPacket.bundle(messages))
+    }
+
+    private func send(bytes: [UInt8]) {
         guard let sink = state.withLock({ $0.sink }) else { return }
         do {
-            try sink.send(message.encoded())
+            try sink.send(bytes)
+            state.withLock { $0.sendsFailing = false }
         } catch {
             let now = clock.now
             let report = state.withLock { state -> (@Sendable () -> Void)? in
                 state.lastError = "Couldn't send OSC to \(state.address)"
+                state.sendsFailing = true
                 if let last = state.lastFailureReport, now - last < 1 { return nil }
                 state.lastFailureReport = now
                 return state.onSendFailure

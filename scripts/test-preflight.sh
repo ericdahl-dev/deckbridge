@@ -24,6 +24,7 @@ make_app() {
     -c "Add :LSApplicationCategoryType string public.app-category.music" \
     -c "Add :LSUIElement bool true" \
     -c "Add :CFBundleDisplayName string DeckBridge" \
+    -c "Add :NSLocalNetworkUsageDescription string 'DeckBridge sends to a deck panel on your network.'" \
     -c "Add :CFBundleIconName string AppIcon" "$plist" >/dev/null
   cp App/PrivacyInfo.xcprivacy "$app/Contents/Resources/PrivacyInfo.xcprivacy"
   echo icon > "$app/Contents/Resources/Assets.car"
@@ -38,6 +39,7 @@ make_app() {
   <key>com.apple.security.app-sandbox</key><true/>
   <key>com.apple.security.network.client</key><true/>
   <key>com.apple.security.network.server</key><true/>
+  <key>com.apple.security.device.serial</key><true/>
 </dict></plist>
 PLIST
   echo "$app"
@@ -72,7 +74,7 @@ app=$(make_app bundleid); /usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier de
 sign "$app" "$work/bundleid.entitlements"
 expect_fail "a bundle id App Store Connect doesn't know fails" "$app" "CFBundleIdentifier"
 
-for key in ITSAppUsesNonExemptEncryption LSApplicationCategoryType LSUIElement CFBundleDisplayName; do
+for key in ITSAppUsesNonExemptEncryption LSApplicationCategoryType LSUIElement CFBundleDisplayName NSLocalNetworkUsageDescription; do
   app=$(make_app "$key"); /usr/libexec/PlistBuddy -c "Delete :$key" "$app/Contents/Info.plist"
   sign "$app" "$work/$key.entitlements"
   expect_fail "a missing $key fails" "$app" "$key"
@@ -106,7 +108,8 @@ expect_fail "a manifest without the UserDefaults reason fails" "$app" "UserDefau
 app=$(make_app icon); rm "$app/Contents/Resources/Assets.car"; sign "$app" "$work/icon.entitlements"
 expect_fail "a missing compiled icon fails" "$app" "app icon"
 
-for entitlement in app-sandbox network.client network.server; do
+# The display feed over the USB cable (#667) opens the deck panel's serial port, which the sandbox refuses without it.
+for entitlement in app-sandbox network.client network.server device.serial; do
   name="no-${entitlement}"
   app=$(make_app "$name")
   /usr/libexec/PlistBuddy -c "Delete :com.apple.security.$entitlement" "$work/$name.entitlements"

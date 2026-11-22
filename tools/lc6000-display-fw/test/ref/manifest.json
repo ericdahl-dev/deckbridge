@@ -1,0 +1,596 @@
+{
+  "about": "Every drawn display reference image (#571): its file and the renderer inputs that make it. test/ref/make_refs.sh renders them all with jog-reference, and the Kit's DisplayFirmwareReferenceTests checks every one against the renderer now, from this one list. deck, color [r, g, b] and player (a Syndicate player type, or null for none) make the deck; stale draws the waiting look; title, artist, key and bpm are its text; beat (1-4), needle (0-16383, op 09's scale), meter [level, peak] (0-127), phase (1/16384 beats, op 0B's scale), time [elapsed, length] in seconds and look (red or white, the warning's) are the live parts. Each is JogDisplayRenderer.drawnImage cropped to the 198 frame, or with canvas 216 the whole drawn image.",
+  "references": [
+    {
+      "file": "deck2-red-track.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "track"
+    },
+    {
+      "file": "deck4-blue-empty.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty"
+    },
+    {
+      "file": "deck1-white-midi.ppm",
+      "deck": 1,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "player": "midiclip"
+    },
+    {
+      "file": "deck3-green-other.ppm",
+      "deck": 3,
+      "color": [
+        0,
+        200,
+        80
+      ],
+      "player": null
+    },
+    {
+      "file": "deck1-orange-osc.ppm",
+      "deck": 1,
+      "color": [
+        255,
+        128,
+        0
+      ],
+      "player": "osc"
+    },
+    {
+      "file": "deck3-purple-seq.ppm",
+      "deck": 3,
+      "color": [
+        180,
+        0,
+        255
+      ],
+      "player": "sequencer"
+    },
+    {
+      "file": "stale.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "track",
+      "stale": true
+    },
+    {
+      "file": "quit-deck2.ppm",
+      "deck": 2,
+      "color": [
+        213,
+        213,
+        213
+      ],
+      "player": "track",
+      "stale": true
+    },
+    {
+      "file": "text-strobe.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "track",
+      "title": "Strobe",
+      "artist": "Deadmau5",
+      "key": "F#m",
+      "bpm": 128
+    },
+    {
+      "file": "text-night-drive.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "track",
+      "title": "Night Drive",
+      "artist": "Café del Mar",
+      "key": "11B",
+      "bpm": 90
+    },
+    {
+      "file": "text-ten.ppm",
+      "deck": 1,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "player": "track",
+      "title": "Ten (Original Club Mix)",
+      "artist": "Mark Knight",
+      "key": "8A",
+      "bpm": 124.5
+    },
+    {
+      "file": "text-cut.ppm",
+      "deck": 3,
+      "color": [
+        0,
+        200,
+        80
+      ],
+      "player": "track",
+      "title": "Mark Knight Underworld Sander Van Doorn Remix Edition",
+      "artist": "Wolfgang Amadeus Mozart and the Vienna Philharmonic"
+    },
+    {
+      "file": "text-accents.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "track",
+      "title": "Tänzer aus Tübingen",
+      "artist": "Léa Seydoux & “Don’t”",
+      "key": "Ebm",
+      "bpm": 174
+    },
+    {
+      "file": "text-automation.ppm",
+      "deck": 3,
+      "color": [
+        0,
+        200,
+        80
+      ],
+      "player": "Automation"
+    },
+    {
+      "file": "deck4-blue-empty-beat1.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "beat": 1
+    },
+    {
+      "file": "deck4-blue-empty-beat2.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "beat": 2
+    },
+    {
+      "file": "deck4-blue-empty-beat3.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "beat": 3
+    },
+    {
+      "file": "deck4-blue-empty-beat4.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "beat": 4
+    },
+    {
+      "file": "deck4-blue-empty-needle0.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 0
+    },
+    {
+      "file": "deck4-blue-empty-needle4096.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 4096
+    },
+    {
+      "file": "deck4-blue-empty-needle8192.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 8192
+    },
+    {
+      "file": "deck4-blue-empty-needle12288.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 12288
+    },
+    {
+      "file": "deck4-blue-empty-needle1500.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 1500
+    },
+    {
+      "file": "deck4-blue-empty-beat3-needle11000.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "beat": 3,
+      "needle": 11000
+    },
+    {
+      "file": "deck4-blue-empty-meter0-0.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "meter": [
+        0,
+        0
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-meter64-90.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "meter": [
+        64,
+        90
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-meter110-120.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "meter": [
+        110,
+        120
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-meter127-127.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "meter": [
+        127,
+        127
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-phase0.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "phase": 0
+    },
+    {
+      "file": "deck4-blue-empty-phase-164.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "phase": -164
+    },
+    {
+      "file": "deck4-blue-empty-phase164.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "phase": 164
+    },
+    {
+      "file": "deck4-blue-empty-phase-1638.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "phase": -1638
+    },
+    {
+      "file": "deck4-blue-empty-phase8191.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "phase": 8191
+    },
+    {
+      "file": "deck4-blue-empty-time0-165.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        0,
+        165
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-time83-165.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        83,
+        165
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-time42-0.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        42,
+        0
+      ]
+    },
+    {
+      "file": "deck4-blue-empty-time135-165-red.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        135,
+        165
+      ],
+      "look": "red"
+    },
+    {
+      "file": "deck4-blue-empty-time135-165-white.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        135,
+        165
+      ],
+      "look": "white"
+    },
+    {
+      "file": "deck2-red-empty-time135-165-white.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "empty",
+      "time": [
+        135,
+        165
+      ],
+      "look": "white"
+    },
+    {
+      "file": "deck4-blue-empty-time120-165-red.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        120,
+        165
+      ],
+      "look": "red"
+    },
+    {
+      "file": "deck4-blue-empty-time83-165-needle4096.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "needle": 4096,
+      "time": [
+        83,
+        165
+      ]
+    },
+    {
+      "file": "band-deck4-blue-empty-time0-165.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        0,
+        165
+      ],
+      "canvas": 216
+    },
+    {
+      "file": "band-deck4-blue-empty-time83-165.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        83,
+        165
+      ],
+      "canvas": 216
+    },
+    {
+      "file": "band-deck4-blue-empty-time120-165-red.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        120,
+        165
+      ],
+      "look": "red",
+      "canvas": 216
+    },
+    {
+      "file": "band-deck4-blue-empty-time135-165-white.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        135,
+        165
+      ],
+      "look": "white",
+      "canvas": 216
+    },
+    {
+      "file": "band-deck2-red-empty-time135-165-white.ppm",
+      "deck": 2,
+      "color": [
+        255,
+        0,
+        0
+      ],
+      "player": "empty",
+      "time": [
+        135,
+        165
+      ],
+      "look": "white",
+      "canvas": 216
+    },
+    {
+      "file": "deck4-blue-empty-time0-5999.ppm",
+      "deck": 4,
+      "color": [
+        0,
+        128,
+        255
+      ],
+      "player": "empty",
+      "time": [
+        0,
+        5999
+      ]
+    }
+  ]
+}

@@ -9,17 +9,23 @@ public struct Mapping: Equatable, Sendable, Codable {
     public var midi: MIDI
     public var osc: OSC
     public var deck: Deck
-    public var jog: Jog
-    public var pitch: Pitch
-    public var needle: Needle
-    public var browse: Browse
+    /// The jog wheel; nil on a controller without one (#341).
+    public var jog: Jog?
+    /// The pitch fader; nil on a controller without one (#341).
+    public var pitch: Pitch?
+    /// The Needle Drop strip; nil on a controller without one (#341).
+    public var needle: Needle?
+    /// The browse knob; nil on a controller without one (#341).
+    public var browse: Browse?
     public var notes: Notes
     public var leds: LEDs
     /// What the pads play beyond their notes (#196): the roll each pad plays in Roll mode.
     public var pads: Pads
+    /// The mixer section (#207), for controllers that have one. Nil on the LC6000.
+    public var mixer: Mixer?
 
     enum CodingKeys: String, CodingKey {
-        case midi, osc, deck, jog, pitch, needle, browse, notes, leds, pads
+        case midi, osc, deck, jog, pitch, needle, browse, notes, leds, pads, mixer
     }
 
     /// `pads` may be left out: the LC6000's roll sizes.
@@ -28,13 +34,14 @@ public struct Mapping: Equatable, Sendable, Codable {
         midi = try c.decode(MIDI.self, forKey: .midi)
         osc = try c.decode(OSC.self, forKey: .osc)
         deck = try c.decode(Deck.self, forKey: .deck)
-        jog = try c.decode(Jog.self, forKey: .jog)
-        pitch = try c.decode(Pitch.self, forKey: .pitch)
-        needle = try c.decode(Needle.self, forKey: .needle)
-        browse = try c.decode(Browse.self, forKey: .browse)
+        jog = try c.decodeIfPresent(Jog.self, forKey: .jog)
+        pitch = try c.decodeIfPresent(Pitch.self, forKey: .pitch)
+        needle = try c.decodeIfPresent(Needle.self, forKey: .needle)
+        browse = try c.decodeIfPresent(Browse.self, forKey: .browse)
         notes = try c.decode(Notes.self, forKey: .notes)
         leds = try c.decode(LEDs.self, forKey: .leds)
         pads = try c.decodeIfPresent(Pads.self, forKey: .pads) ?? Pads()
+        mixer = try c.decodeIfPresent(Mixer.self, forKey: .mixer)
         if pads.modeSelect == .cycle, notes.buttons["mode_cycle"] == nil {
             throw ShapeError("pads: mode_select is cycle, but notes has no mode_cycle button")
         }
@@ -94,6 +101,9 @@ public struct Mapping: Equatable, Sendable, Codable {
         }
 
         public var modeNotes: ModeNotes?
+        /// The channel the pads send on with Shift held (#324), when the hardware does Shift itself: the DDJ-400's
+        /// deck 1 Shift pads are on 9. A pad on it is that pad with Shift.
+        public var shiftedChannel: Int?
 
         /// How the pad mode is chosen (#198): the LC6000's four mode buttons, or one button that cycles them.
         public enum ModeSelect: String, CaseIterable, Equatable, Sendable, Codable {
@@ -124,7 +134,7 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var modeCycleVelocities: ModeVelocities?
 
         /// The LC6000's: 1/32 of a beat on pad 1 up to 4 beats on pad 8.
-        public static let lc6000RollSizes = RollSize.allCases.map(\.rawValue)
+        public static let lc6000RollSizes: [String] = ProfileKeys.fallback("pads.roll_sizes")
 
         public init(rollSizes: [String] = Self.lc6000RollSizes, modeSelect: ModeSelect = .buttons,
                     modeCycleVelocities: ModeVelocities? = nil) {
@@ -134,17 +144,18 @@ public struct Mapping: Equatable, Sendable, Codable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case rollSizes = "roll_sizes", channel, modeNotes = "mode_notes"
+            case rollSizes = "roll_sizes", channel, modeNotes = "mode_notes", shiftedChannel = "shifted_channel"
             case modeSelect = "mode_select", modeCycleVelocities = "mode_cycle_velocities"
         }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            rollSizes = try c.decodeIfPresent([String].self, forKey: .rollSizes) ?? Self.lc6000RollSizes
-            modeSelect = try c.decodeIfPresent(ModeSelect.self, forKey: .modeSelect) ?? .buttons
+            rollSizes = try c.decodeIfPresent([String].self, forKey: .rollSizes) ?? ProfileKeys.fallback("pads.roll_sizes")
+            modeSelect = try c.decodeIfPresent(ModeSelect.self, forKey: .modeSelect) ?? ProfileKeys.fallback("pads.mode_select")
             modeCycleVelocities = try c.decodeIfPresent(ModeVelocities.self, forKey: .modeCycleVelocities)
             channel = try c.decodeIfPresent(Int.self, forKey: .channel)
             modeNotes = try c.decodeIfPresent(ModeNotes.self, forKey: .modeNotes)
+            shiftedChannel = try c.decodeIfPresent(Int.self, forKey: .shiftedChannel)
         }
     }
 
@@ -191,10 +202,10 @@ public struct Mapping: Equatable, Sendable, Codable {
             input = try container.decode(String.self, forKey: .input)
             output = try container.decode(String.self, forKey: .output)
             channel = try container.decode(Int.self, forKey: .channel)
-            ignoreNotes = try container.decodeIfPresent([Int].self, forKey: .ignoreNotes) ?? []
-            layers = try container.decodeIfPresent([Layer].self, forKey: .layers) ?? []
+            ignoreNotes = try container.decodeIfPresent([Int].self, forKey: .ignoreNotes) ?? ProfileKeys.fallback("midi.ignore_notes")
+            layers = try container.decodeIfPresent([Layer].self, forKey: .layers) ?? ProfileKeys.fallback("midi.layers")
             layerNote = try container.decodeIfPresent(Int.self, forKey: .layerNote)
-            encoderFormat = try container.decodeIfPresent(EncoderFormat.self, forKey: .encoderFormat) ?? .twosComplement
+            encoderFormat = try container.decodeIfPresent(EncoderFormat.self, forKey: .encoderFormat) ?? ProfileKeys.fallback("midi.encoder_format")
         }
     }
 
@@ -204,16 +215,19 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var deck: Int
         /// The channel this layer's pads use (#224), when not `channel`: the DDJ-400/FLX4's deck 2 pads are on 10.
         public var padChannel: Int?
+        /// The channel this layer's pads send on with Shift held (#324): the DDJ-400's deck 2 Shift pads are on 11.
+        public var shiftedPadChannel: Int?
 
         enum CodingKeys: String, CodingKey {
             case channel, deck
-            case padChannel = "pad_channel"
+            case padChannel = "pad_channel", shiftedPadChannel = "shifted_pad_channel"
         }
 
-        public init(channel: Int, deck: Int, padChannel: Int? = nil) {
+        public init(channel: Int, deck: Int, padChannel: Int? = nil, shiftedPadChannel: Int? = nil) {
             self.channel = channel
             self.deck = deck
             self.padChannel = padChannel
+            self.shiftedPadChannel = shiftedPadChannel
         }
     }
 
@@ -340,13 +354,13 @@ public struct Mapping: Equatable, Sendable, Codable {
         }
     }
 
-    /// A jog that can't tell how the platter reports movement (#204), in plain words.
     /// A profile body whose shape the decoder can't use (#195), in the words the DJ sees.
     public struct ShapeError: Error, Equatable, CustomStringConvertible {
         public let description: String
         public init(_ description: String) { self.description = description }
     }
 
+    /// A jog that can't tell how the platter reports movement (#204), in plain words.
     public enum JogError: Error, Equatable, CustomStringConvertible {
         case needsPairOrRelative
         case missing(String)
@@ -398,13 +412,13 @@ public struct Mapping: Equatable, Sendable, Codable {
         /// `bits` defaults to 14; a 7-bit fader may leave out `lsb_cc` (#195).
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            bits = try container.decodeIfPresent(Int.self, forKey: .bits) ?? 14
+            bits = try container.decodeIfPresent(Int.self, forKey: .bits) ?? ProfileKeys.fallback("pitch.bits")
             msbCC = try container.decode(Int.self, forKey: .msbCC)
             lsbCC = try container.decodeIfPresent(Int.self, forKey: .lsbCC)
             invert = try container.decode(Bool.self, forKey: .invert)
             deadZone = try container.decode(Double.self, forKey: .deadZone)
-            pickup = try container.decodeIfPresent(Bool.self, forKey: .pickup) ?? true
-            pickupTolerance = try container.decodeIfPresent(Double.self, forKey: .pickupTolerance) ?? 0.02
+            pickup = try container.decodeIfPresent(Bool.self, forKey: .pickup) ?? ProfileKeys.fallback("pitch.pickup")
+            pickupTolerance = try container.decodeIfPresent(Double.self, forKey: .pickupTolerance) ?? ProfileKeys.fallback("pitch.pickup_tolerance")
             if bits == 14, lsbCC == nil { throw ShapeError("pitch: lsb_cc is missing (or set bits to 7)") }
         }
     }
@@ -415,19 +429,45 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var lsbCC: Int
         public var touchNote: Int
         public var requireTouch: Bool
+        /// Whether the strip moves the deck's channel fader (#609): on a plain touch since #729, with Shift + the strip
+        /// seeking; off, the strip seeks either way. `shift_fader` keeps #609's name so existing profiles still load.
+        public var shiftFader: Bool
+        /// How the strip moves the channel fader (#609): from its level by the travel, or to the finger.
+        public var shiftFaderMode: ShiftFaderMode
+
+        public enum ShiftFaderMode: String, Equatable, Sendable, Codable, CaseIterable {
+            case relative, jump
+        }
 
         enum CodingKeys: String, CodingKey {
             case msbCC = "msb_cc"
             case lsbCC = "lsb_cc"
             case touchNote = "touch_note"
             case requireTouch = "require_touch"
+            case shiftFader = "shift_fader"
+            case shiftFaderMode = "shift_fader_mode"
         }
 
-        public init(msbCC: Int, lsbCC: Int, touchNote: Int, requireTouch: Bool) {
+        public init(msbCC: Int, lsbCC: Int, touchNote: Int, requireTouch: Bool, shiftFader: Bool = false,
+                    shiftFaderMode: ShiftFaderMode = .relative) {
             self.msbCC = msbCC
             self.lsbCC = lsbCC
             self.touchNote = touchNote
             self.requireTouch = requireTouch
+            self.shiftFader = shiftFader
+            self.shiftFaderMode = shiftFaderMode
+        }
+
+        /// `shift_fader` and `shift_fader_mode` may be left out: off, and relative.
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            msbCC = try container.decode(Int.self, forKey: .msbCC)
+            lsbCC = try container.decode(Int.self, forKey: .lsbCC)
+            touchNote = try container.decode(Int.self, forKey: .touchNote)
+            requireTouch = try container.decode(Bool.self, forKey: .requireTouch)
+            shiftFader = try container.decodeIfPresent(Bool.self, forKey: .shiftFader) ?? ProfileKeys.fallback("needle.shift_fader")
+            shiftFaderMode = try container.decodeIfPresent(ShiftFaderMode.self, forKey: .shiftFaderMode)
+                ?? ProfileKeys.fallback("needle.shift_fader_mode")
         }
     }
 
@@ -470,7 +510,7 @@ public struct Mapping: Equatable, Sendable, Codable {
         public init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: Key.self)
             pads = try container.decode([Int].self, forKey: Key(stringValue: "pads"))
-            shifted = try container.decodeIfPresent([String: Int].self, forKey: Key(stringValue: "shifted")) ?? [:]
+            shifted = try container.decodeIfPresent([String: Int].self, forKey: Key(stringValue: "shifted")) ?? ProfileKeys.fallback("notes.shifted")
             buttons = [:]
             for key in container.allKeys where !["pads", "shifted"].contains(key.stringValue) {
                 buttons[key.stringValue] = try container.decode(Int.self, forKey: key)
@@ -488,6 +528,10 @@ public struct Mapping: Equatable, Sendable, Codable {
 
     public struct LEDs: Equatable, Sendable, Codable {
         public var pitchCenter: Int
+        /// The pitch arrows (#475): lit during pickup to show which way to move the fader. Back is toward a lower raw
+        /// fader value, forward toward a higher one. Optional: a controller without them leaves them out.
+        public var pitchArrowBack: Int?
+        public var pitchArrowForward: Int?
         public var ring: Int
         /// The ring color when `ringFollowsDeck` is off.
         public var ringColor: [Int]
@@ -508,6 +552,15 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var colorTable: ColorTable
         /// Light a button's shifted note (#226) with the button's own state, on a controller where it has its own LED.
         public var mirrorShifted: Bool
+        /// The LEDs that take Denon's color message (#530): exact RGB, 7 bits a channel, in place of a velocity. Nil
+        /// on a controller without it.
+        public var colorMessage: ColorMessage?
+
+        /// Which notes' LEDs take the color message (#530).
+        public struct ColorMessage: Equatable, Sendable, Codable {
+            public var notes: [Int]
+            public init(notes: [Int]) { self.notes = notes }
+        }
 
         public enum BeatPulse: String, Equatable, Sendable, Codable, CaseIterable {
             case off, beat, downbeat
@@ -519,6 +572,8 @@ public struct Mapping: Equatable, Sendable, Codable {
 
         enum CodingKeys: String, CodingKey {
             case pitchCenter = "pitch_center"
+            case pitchArrowBack = "pitch_arrow_back"
+            case pitchArrowForward = "pitch_arrow_forward"
             case ring
             case ringColor = "ring_color"
             case ringFollowsDeck = "ring_follows_deck"
@@ -531,14 +586,19 @@ public struct Mapping: Equatable, Sendable, Codable {
             case levels
             case colorTable = "color_table"
             case mirrorShifted = "mirror_shifted"
+            case colorMessage = "color_message"
         }
 
         public init(
             pitchCenter: Int, ring: Int, ringColor: [Int], rollPadColor: [Int], loopPadColor: [Int], dimUnlitButtons: Bool,
             beatPulse: BeatPulse, pulseMs: Int, staleIdle: StaleIdle, ringFollowsDeck: Bool = true, levels: LEDLevels = .lc6000,
             colorTable: ColorTable = .rgb222,
-            mirrorShifted: Bool = false
+            mirrorShifted: Bool = false, pitchArrowBack: Int? = nil, pitchArrowForward: Int? = nil,
+            colorMessage: ColorMessage? = nil
         ) {
+            self.colorMessage = colorMessage
+            self.pitchArrowBack = pitchArrowBack
+            self.pitchArrowForward = pitchArrowForward
             self.levels = levels
             self.colorTable = colorTable
             self.mirrorShifted = mirrorShifted
@@ -565,10 +625,13 @@ public struct Mapping: Equatable, Sendable, Codable {
                 dimUnlitButtons: try c.decode(Bool.self, forKey: .dimUnlitButtons),
                 beatPulse: try c.decode(BeatPulse.self, forKey: .beatPulse), pulseMs: try c.decode(Int.self, forKey: .pulseMs),
                 staleIdle: try c.decode(StaleIdle.self, forKey: .staleIdle),
-                ringFollowsDeck: try c.decodeIfPresent(Bool.self, forKey: .ringFollowsDeck) ?? true,
+                ringFollowsDeck: try c.decodeIfPresent(Bool.self, forKey: .ringFollowsDeck) ?? ProfileKeys.fallback("leds.ring_follows_deck"),
                 levels: try c.decodeIfPresent(LEDLevels.self, forKey: .levels) ?? .lc6000,
-                colorTable: try c.decodeIfPresent(ColorTable.self, forKey: .colorTable) ?? .rgb222,
-                mirrorShifted: try c.decodeIfPresent(Bool.self, forKey: .mirrorShifted) ?? false
+                colorTable: try c.decodeIfPresent(ColorTable.self, forKey: .colorTable) ?? ProfileKeys.fallback("leds.color_table"),
+                mirrorShifted: try c.decodeIfPresent(Bool.self, forKey: .mirrorShifted) ?? ProfileKeys.fallback("leds.mirror_shifted"),
+                pitchArrowBack: try c.decodeIfPresent(Int.self, forKey: .pitchArrowBack),
+                pitchArrowForward: try c.decodeIfPresent(Int.self, forKey: .pitchArrowForward),
+                colorMessage: try c.decodeIfPresent(ColorMessage.self, forKey: .colorMessage)
             )
         }
     }
@@ -579,7 +642,8 @@ public struct Mapping: Equatable, Sendable, Codable {
         public var dim: Int
         public var off: Int
 
-        public static let lc6000 = LEDLevels(full: 127, dim: 1, off: 0)
+        public static let lc6000 = LEDLevels(full: ProfileKeys.fallback("leds.levels.full"), dim: ProfileKeys.fallback("leds.levels.dim"),
+                                             off: ProfileKeys.fallback("leds.levels.off"))
 
         public init(full: Int, dim: Int, off: Int) {
             self.full = full
@@ -589,9 +653,9 @@ public struct Mapping: Equatable, Sendable, Codable {
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
-            full = try c.decodeIfPresent(Int.self, forKey: .full) ?? Self.lc6000.full
-            dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? Self.lc6000.dim
-            off = try c.decodeIfPresent(Int.self, forKey: .off) ?? Self.lc6000.off
+            full = try c.decodeIfPresent(Int.self, forKey: .full) ?? ProfileKeys.fallback("leds.levels.full")
+            dim = try c.decodeIfPresent(Int.self, forKey: .dim) ?? ProfileKeys.fallback("leds.levels.dim")
+            off = try c.decodeIfPresent(Int.self, forKey: .off) ?? ProfileKeys.fallback("leds.levels.off")
         }
 
         enum CodingKeys: String, CodingKey { case full, dim, off }
@@ -647,4 +711,111 @@ public struct Mapping: Equatable, Sendable, Codable {
 /// A mapping the bridge can't run with. Each problem names the key and what was expected.
 public enum MappingError: Error, Equatable {
     case invalid([String])
+}
+
+extension Mapping {
+    /// A fader or knob: one CC (7-bit) or an MSB/LSB pair (14-bit), as the pitch fader (#195, #207).
+    public struct Control: Equatable, Sendable, Codable {
+        public var bits: Int
+        public var msbCC: Int
+        public var lsbCC: Int?
+
+        public init(bits: Int, msbCC: Int, lsbCC: Int?) {
+            self.bits = bits
+            self.msbCC = msbCC
+            self.lsbCC = lsbCC
+        }
+
+        enum CodingKeys: String, CodingKey { case bits, msbCC = "msb_cc", lsbCC = "lsb_cc" }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            bits = try c.decodeIfPresent(Int.self, forKey: .bits) ?? ProfileKeys.fallback("mixer.volume.bits")
+            msbCC = try c.decode(Int.self, forKey: .msbCC)
+            lsbCC = try c.decodeIfPresent(Int.self, forKey: .lsbCC)
+            if bits == 14, lsbCC == nil {
+                let name = c.codingPath.last.map { "mixer.\($0.stringValue)" } ?? "mixer"
+                throw ShapeError("\(name): lsb_cc is missing (or set bits to 7)")
+            }
+        }
+    }
+
+    /// The mixer section (#207). Every control is optional and on the controller entry's MIDI channel; the mixer
+    /// channel is the deck the entry drives.
+    public struct Mixer: Equatable, Sendable, Codable {
+        public var volume: Control?
+        public var trim: Control?
+        public var eqHigh: Control?
+        public var eqMid: Control?
+        public var eqLow: Control?
+        public var filter: Control?
+        public var filterRes: Control?
+        public var filterWidth: Control?
+        /// The headphone cue, mute and solo buttons: a note each, whose LED follows Syndicate.
+        public var cueNote: Int?
+        public var muteNote: Int?
+        public var soloNote: Int?
+        public var meter: Meter?
+        /// As the pitch fader's (#22): after Syndicate reports a value the controller didn't send, a control waits
+        /// until it meets it.
+        public var pickup: Bool
+        public var pickupTolerance: Double
+
+        /// The channel's VU meter LEDs: one CC whose value lights a number of segments.
+        public struct Meter: Equatable, Sendable, Codable {
+            public var cc: Int
+            /// The CC value for 0, 1, 2… segments lit, lowest first.
+            public var steps: [Int]
+            /// The value for a clip (Syndicate's Meter above 1.0); nil keeps the top step.
+            public var clip: Int?
+            /// How long a peak holds before the meter falls back, in milliseconds.
+            public var holdMs: Int
+            /// The most updates a second, per channel.
+            public var rateHz: Int
+
+            public init(cc: Int, steps: [Int], clip: Int?, holdMs: Int, rateHz: Int) {
+                self.cc = cc
+                self.steps = steps
+                self.clip = clip
+                self.holdMs = holdMs
+                self.rateHz = rateHz
+            }
+
+            enum CodingKeys: String, CodingKey { case cc, steps, clip, holdMs = "hold_ms", rateHz = "rate_hz" }
+
+            public init(from decoder: any Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                cc = try c.decode(Int.self, forKey: .cc)
+                steps = try c.decode([Int].self, forKey: .steps)
+                clip = try c.decodeIfPresent(Int.self, forKey: .clip)
+                holdMs = try c.decodeIfPresent(Int.self, forKey: .holdMs) ?? ProfileKeys.fallback("mixer.meter.hold_ms")
+                rateHz = try c.decodeIfPresent(Int.self, forKey: .rateHz) ?? ProfileKeys.fallback("mixer.meter.rate_hz")
+            }
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case volume, trim, eqHigh = "eq_high", eqMid = "eq_mid", eqLow = "eq_low", filter
+            case filterRes = "filter_res", filterWidth = "filter_width"
+            case cueNote = "cue_note", muteNote = "mute_note", soloNote = "solo_note", meter, pickup
+            case pickupTolerance = "pickup_tolerance"
+        }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            volume = try c.decodeIfPresent(Control.self, forKey: .volume)
+            trim = try c.decodeIfPresent(Control.self, forKey: .trim)
+            eqHigh = try c.decodeIfPresent(Control.self, forKey: .eqHigh)
+            eqMid = try c.decodeIfPresent(Control.self, forKey: .eqMid)
+            eqLow = try c.decodeIfPresent(Control.self, forKey: .eqLow)
+            filter = try c.decodeIfPresent(Control.self, forKey: .filter)
+            filterRes = try c.decodeIfPresent(Control.self, forKey: .filterRes)
+            filterWidth = try c.decodeIfPresent(Control.self, forKey: .filterWidth)
+            cueNote = try c.decodeIfPresent(Int.self, forKey: .cueNote)
+            muteNote = try c.decodeIfPresent(Int.self, forKey: .muteNote)
+            soloNote = try c.decodeIfPresent(Int.self, forKey: .soloNote)
+            meter = try c.decodeIfPresent(Meter.self, forKey: .meter)
+            pickup = try c.decodeIfPresent(Bool.self, forKey: .pickup) ?? ProfileKeys.fallback("mixer.pickup")
+            pickupTolerance = try c.decodeIfPresent(Double.self, forKey: .pickupTolerance) ?? ProfileKeys.fallback("mixer.pickup_tolerance")
+        }
+    }
 }

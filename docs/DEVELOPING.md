@@ -51,11 +51,15 @@ These steps are tracked on #28:
 
 ### Checking the release scripts
 
-The workflow can't run without the secrets, so its scripts are tested on every pull request (`ci.yml`, in the Kit tests job):
+The workflow can't run without the secrets, so its scripts are tested on every pull request (`ci.yml`: the Kit tests
+job, and the release docs in the Site check job, which a docs-only change also runs):
 
 ```sh
 scripts/test-preflight.sh            # fake app bundles: a good one passes, each fault fails with its own line
+scripts/test-tag-external.sh         # only [external] in an annotated tag's message sends a release out (#244)
 python3 -I scripts/test_ci_profile.py  # ci_profile.py against a fake App Store Connect API
+python3 -I scripts/test_testflight_distribute.py  # What to Test, groups and Beta App Review, against a fake API
+python3 -I scripts/test_release_docs.py  # the release checklist and What to Test (Site check job)
 scripts/preflight.sh build/Build/Products/Release/ControllerBridge.app   # a real Release build
 ```
 

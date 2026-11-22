@@ -4,6 +4,8 @@ import SwiftUI
 @main
 enum Entry {
     static func main() {
+        // First: the log's print to stdout must not kill the app when stdout is a pipe nobody reads (#653).
+        ProcessSignals.ignoreBrokenPipe()
         Theme.registerFonts()
         #if DEBUG
         // Debug builds only: renders the panel to PNGs for PR screenshots and exits (#34). Not in Release.
@@ -25,7 +27,7 @@ struct ControllerBridgeApp: App {
         MenuBarExtra {
             StatusPanel(
                 status: model.status, setDemo: model.setDemo, setDeck: { model.setDeck($0, controller: $1) },
-                helpAdd: { model.captureDevice = $0 }
+                helpAdd: { model.captureRequest.device = $0 }
             )
                 .environment(\.deckColors, model.status.deckColors)
         } label: {
@@ -38,7 +40,7 @@ struct ControllerBridgeApp: App {
                 log: model.diagnostics, status: model.status, sweeping: model.status.sweeping, setOpen: model.setDiagnostics(open:),
                 startSweep: model.startLEDSweep(delay:), stopSweep: model.stopLEDSweep,
                 hiddenNotes: model.profiles.first?.mapping.midi.ignoreNotes ?? [], jogSimulator: model.jogSimulator,
-                setJogPreviewDeck: model.setJogPreviewDeck
+                setJogPreviewDeck: model.setJogPreviewDeck, captureMeter: { model.captureMeter(seconds: 10) }
             )
             .environment(\.deckColors, model.status.deckColors)
         }

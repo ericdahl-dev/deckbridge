@@ -326,6 +326,103 @@ struct SettingsTests {
         #expect(BridgeSettings.rebased(draft: exact, base: Self.defaults, onto: saved).ringColors == .exact)
     }
 
+    @Test("Shift + Needle Drop's fader (#609): old settings keep the profile's choice; a choice round-trips and survives a rebase")
+    func stripFaderSetting() {
+        let store = MemoryStore()
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true}
+            """#.utf8)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).stripFader == StripFaderSetting())
+        var jump = Self.defaults
+        jump.stripFader = StripFaderSetting(enabled: true, mode: .jump)
+        try? jump.save(to: store)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).stripFader == StripFaderSetting(enabled: true, mode: .jump))
+        var saved = Self.defaults
+        saved.controllers[0].deck = 2
+        #expect(BridgeSettings.rebased(draft: jump, base: Self.defaults, onto: saved).stripFader.mode == .jump)
+    }
+
+    // #530: pads and ring in exact RGB through Denon's color message, or the 64-color table.
+
+    @Test("The color message is on by default, also for old settings; the table (the way back) round-trips and survives a rebase")
+    func colorMessagesSetting() {
+        #expect(Self.defaults.colorMessages)
+        let store = MemoryStore()
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true}
+            """#.utf8)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).colorMessages)
+        var table = Self.defaults
+        table.colorMessages = false
+        try? table.save(to: store)
+        #expect(!BridgeSettings.load(from: store, defaults: Self.defaults).colorMessages)
+        var saved = Self.defaults
+        saved.controllers[0].deck = 2
+        #expect(!BridgeSettings.rebased(draft: table, base: Self.defaults, onto: saved).colorMessages)
+    }
+
+    // #532: a brightness for the color-message LEDs (pads and ring), in percent; full is today's level.
+
+    @Test("Light brightness is 100% (today's level) by default, also for old settings; a dimmer one round-trips and survives a rebase")
+    func lightBrightnessSetting() {
+        #expect(Self.defaults.lightBrightness == 100)
+        let store = MemoryStore()
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true}
+            """#.utf8)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).lightBrightness == 100)
+        var dim = Self.defaults
+        dim.lightBrightness = 40
+        try? dim.save(to: store)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).lightBrightness == 40)
+        var saved = Self.defaults
+        saved.controllers[0].deck = 2
+        #expect(BridgeSettings.rebased(draft: dim, base: Self.defaults, onto: saved).lightBrightness == 40)
+    }
+
+    // #425: the LC6000's display firmware, Denon's or custom.
+
+    @Test("Display firmware defaults to Denon's; old settings load as Denon's; Custom round-trips and survives a rebase")
+    func displayFirmwareSetting() {
+        #expect(Self.defaults.displayFirmware == .denon)
+        let store = MemoryStore()
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true}
+            """#.utf8)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).displayFirmware == .denon)
+        var custom = Self.defaults
+        custom.displayFirmware = .custom
+        try? custom.save(to: store)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).displayFirmware == .custom)
+        var saved = Self.defaults
+        saved.controllers[0].deck = 2
+        #expect(BridgeSettings.rebased(draft: custom, base: Self.defaults, onto: saved).displayFirmware == .custom)
+    }
+
+    // #590: how the jog display writes the key.
+
+    @Test("Key display defaults to Traditional; old settings load as Traditional; Camelot round-trips and survives a rebase")
+    func keyDisplaySetting() {
+        #expect(Self.defaults.keyDisplay == .traditional)
+        let store = MemoryStore()
+        store.values[BridgeSettings.storageKey] = Data(#"""
+            {"controllers":[{"deck":1}],"syndicateHost":"127.0.0.1","syndicatePort":9090,"feedbackPort":9096,
+             "feedbackListen":"thisMac","ledsEnabled":true}
+            """#.utf8)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).keyDisplay == .traditional)
+        var camelot = Self.defaults
+        camelot.keyDisplay = .camelot
+        try? camelot.save(to: store)
+        #expect(BridgeSettings.load(from: store, defaults: Self.defaults).keyDisplay == .camelot)
+        var saved = Self.defaults
+        saved.controllers[0].deck = 2
+        #expect(BridgeSettings.rebased(draft: camelot, base: Self.defaults, onto: saved).keyDisplay == .camelot)
+    }
+
     @Test("A field the DJ also edited in Settings keeps the DJ's value")
     func editedFieldWins() {
         let base = Self.defaults

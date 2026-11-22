@@ -166,6 +166,9 @@ public struct CaptureFlow: Sendable {
         session?.redo(at: time)
         stepStart = time
         refresh(at: time)
+        // The step starts again, so the idle step's "Next is available" is news again (#316).
+        idleReadyStep = nil
+        announcedIdleReady = nil
         announcedStep = stepNumber
         announcedDetection = []
         connectionNote = "Controller reconnected. Step \(stepNumber) of \(stepCount). \(prompt?.text ?? "")"

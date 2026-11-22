@@ -42,17 +42,21 @@ final class CoreMIDISystem: MIDISystem {
         self.onChange = onChange
         // A device came or went: refresh the names, and let the Coordinator re-read the devices (#20). Through the pipe,
         // so it stays in order behind the MIDI already queued from that device.
-        relay.set { [weak self] in
+        // What was removed rides along (#429): a unit power-cycled quickly is back before the Coordinator looks.
+        relay.set { [weak self] removed in
             self?.pruneRemovedSources()
-            producer.devicesChanged()
+            producer.devicesChanged(removed: removed)
         }
     }
 
-    var sources: [MIDIEndpoint] { (0..<MIDIGetNumberOfSources()).map { Self.endpoint(MIDIGetSource($0)) } }
-    var destinations: [MIDIEndpoint] { (0..<MIDIGetNumberOfDestinations()).map { Self.endpoint(MIDIGetDestination($0)) } }
+    /// Calls `observer` on every change to CoreMIDI's setup, before the Coordinator hears of it.
+    func observeChanges(_ observer: @escaping @Sendable () -> Void) { relay.observe(observer) }
+
+    var sources: [MIDIEndpoint] { (0..<MIDIGetNumberOfSources()).map { relay.remember(MIDIGetSource($0)) } }
+    var destinations: [MIDIEndpoint] { (0..<MIDIGetNumberOfDestinations()).map { relay.remember(MIDIGetDestination($0)) } }
 
     func connect(source: MIDIEndpoint) throws {
-        let ref = try Self.find(source)
+        let ref = try ref(source)
         // The unique id rides along as the connection refCon, so each event knows its source.
         try check("MIDIPortConnectSource", MIDIPortConnectSource(input, ref, UnsafeMutableRawPointer(bitPattern: Int(source.id))))
         let names = connected.withLock { $0[source.id] = source.name; return Array($0.values) }
@@ -60,13 +64,13 @@ final class CoreMIDISystem: MIDISystem {
     }
 
     func disconnect(source: MIDIEndpoint) {
-        if let ref = try? Self.find(source) { MIDIPortDisconnectSource(input, ref) }
+        if let ref = try? ref(source) { MIDIPortDisconnectSource(input, ref) }
         let names = connected.withLock { $0[source.id] = nil; return Array($0.values) }
         onChange(names)
     }
 
     func openOutput(destination: MIDIEndpoint) throws -> any MIDIOutput {
-        CoreMIDIOutput(port: output, destination: try Self.find(destination))
+        CoreMIDIOutput(port: output, destination: try ref(destination))
     }
 
     private func pruneRemovedSources() {
@@ -91,7 +95,11 @@ final class CoreMIDISystem: MIDISystem {
     private nonisolated static func notifyBlock(_ relay: ChangeRelay) -> MIDINotifyBlock {
         { notification in
             switch notification.pointee.messageID {
-            case .msgObjectAdded, .msgObjectRemoved, .msgSetupChanged: relay.fire()
+            case .msgObjectRemoved:
+                let child = UnsafeRawPointer(notification).assumingMemoryBound(to: MIDIObjectAddRemoveNotification.self).pointee.child
+                relay.removed(child)
+                relay.fire()
+            case .msgObjectAdded, .msgSetupChanged: relay.fire()
             default: break
             }
         }
@@ -105,6 +113,13 @@ final class CoreMIDISystem: MIDISystem {
         var name: Unmanaged<CFString>?
         MIDIObjectGetStringProperty(ref, kMIDIPropertyDisplayName, &name)
         return MIDIEndpoint(id: id, name: (name?.takeRetainedValue() as String?) ?? "MIDI \(id)")
+    }
+
+    /// The endpoint's ref as last listed (#595), so connecting and opening on the engine's loop don't look it up in
+    /// CoreMIDI; one never listed is looked up.
+    private func ref(_ endpoint: MIDIEndpoint) throws -> MIDIEndpointRef {
+        if let known = relay.ref(for: endpoint.id) { return known }
+        return try Self.find(endpoint)
     }
 
     private static func find(_ endpoint: MIDIEndpoint) throws -> MIDIEndpointRef {
@@ -131,6 +146,20 @@ struct CoreMIDIOutput: MIDIOutput {
         try check("MIDISendEventList", MIDISendEventList(port, destination, &list))
     }
 
+    /// Denon's color message (#530) as UMP SysEx7 packets, one event list. The unit has taken it as a MIDI 1.0 SysEx
+    /// packet; this UMP path is the one still to be seen on the unit.
+    func send(color: LEDColorMessage) throws {
+        // As the jog display sends its SysEx (CoreMIDIJogDisplay): a list in its own buffer, one packet per SysEx7 pair.
+        let capacity = 1024
+        let list = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: 8).bindMemory(to: MIDIEventList.self, capacity: 1)
+        defer { list.deallocate() }
+        var packet = MIDIEventListInit(list, ._1_0)
+        for words in UMP.sysex7(color.bytes) {
+            packet = MIDIEventListAdd(list, capacity, packet, 0, words.count, words)
+        }
+        try check("MIDISendEventList", MIDISendEventList(port, destination, list))
+    }
+
     /// The output port is shared by every destination and lives as long as the MIDI client, so there is nothing to
     /// close per destination.
     func close() {}
@@ -146,11 +175,56 @@ struct CoreMIDIOutput: MIDIOutput {
     }
 }
 
-/// Lets the notify block, made before `self` exists, reach the system once it does.
+/// Lets the notify block, made before `self` exists, reach the system once it does. It also keeps the endpoints removed
+/// since the last change (#429), by unique id: a removed endpoint may no longer answer, so its id comes from the last
+/// time it was listed.
 final class ChangeRelay: Sendable {
-    private let action = Mutex<(@Sendable () -> Void)?>(nil)
-    func set(_ action: @escaping @Sendable () -> Void) { self.action.withLock { $0 = action } }
-    func fire() { action.withLock { $0 }?() }
+    private let action = Mutex<(@Sendable (Set<MIDIUniqueID>) -> Void)?>(nil)
+    /// Others told of every change, such as the jog display's remembered ports (#552).
+    private let observers = Mutex<[@Sendable () -> Void]>([])
+
+    func observe(_ observer: @escaping @Sendable () -> Void) { observers.withLock { $0.append(observer) } }
+    private let known = Mutex<[MIDIObjectRef: MIDIUniqueID]>([:])
+    /// The other way round: each listed endpoint's ref by id, until it's removed (#595).
+    private let refs = Mutex<[MIDIUniqueID: MIDIEndpointRef]>([:])
+    private let removedIDs = Mutex<Set<MIDIUniqueID>>([])
+    /// Where a change is handled (#595): not the main thread, where CoreMIDI's notifications arrive and the UI runs,
+    /// and not the engine's loop. Observers (the snapshots' refreshes) run before the Coordinator hears of it.
+    private let setup = DispatchQueue(label: "dev.ericdahl.ControllerBridge.midi-setup")
+
+    func ref(for id: MIDIUniqueID) -> MIDIEndpointRef? { refs.withLock { $0[id] } }
+
+    func set(_ action: @escaping @Sendable (Set<MIDIUniqueID>) -> Void) { self.action.withLock { $0 = action } }
+
+    /// The endpoint as the Kit sees it, remembering its id for a later removal.
+    func remember(_ ref: MIDIEndpointRef) -> MIDIEndpoint {
+        var id: MIDIUniqueID = 0
+        MIDIObjectGetIntegerProperty(ref, kMIDIPropertyUniqueID, &id)
+        var name: Unmanaged<CFString>?
+        MIDIObjectGetStringProperty(ref, kMIDIPropertyDisplayName, &name)
+        known.withLock { $0[ref] = id }
+        refs.withLock { $0[id] = ref }
+        return MIDIEndpoint(id: id, name: (name?.takeRetainedValue() as String?) ?? "MIDI \(id)")
+    }
+
+    /// An object CoreMIDI removed: an endpoint we listed, by the id it had then, or one whose id still reads. Anything
+    /// else (another device, an object we never listed) is ignored, so unplugging something unrelated can't make a
+    /// controller reconnect and release what it holds.
+    func removed(_ object: MIDIObjectRef) {
+        var id: MIDIUniqueID = 0
+        let read = MIDIObjectGetIntegerProperty(object, kMIDIPropertyUniqueID, &id) == noErr
+        guard let removed = known.withLock({ $0[object] }) ?? (read ? id : nil) else { return }
+        refs.withLock { if $0[removed] == object { $0[removed] = nil } }
+        removedIDs.withLock { _ = $0.insert(removed) }
+    }
+
+    func fire() {
+        let removed = removedIDs.withLock { ids in defer { ids = [] }; return ids }
+        setup.async { [self] in
+            for observer in observers.withLock({ $0 }) { observer() }
+            action.withLock { $0 }?(removed)
+        }
+    }
 }
 
 private func check(_ call: String, _ status: OSStatus) throws {

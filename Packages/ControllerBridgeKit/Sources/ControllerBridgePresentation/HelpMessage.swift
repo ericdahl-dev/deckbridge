@@ -37,6 +37,11 @@ public struct HelpMessage: Equatable, Sendable {
             }
             return
         }
+        // Another DJ app has the unit (#333): nothing else helps until it lets go.
+        if state.otherHost {
+            self.init(text: "Another DJ app is using the LC6000: quit it, then replug.", showsGuide: false)
+            return
+        }
         // Two short lines each (#66).
         switch state.feedback {
         case .portInUse(let port):

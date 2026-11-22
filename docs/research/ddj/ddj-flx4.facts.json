@@ -1,0 +1,143 @@
+{
+  "mapping": {
+    "midi": {
+      "channel": 1,
+      "layers": [
+        {
+          "channel": 1,
+          "deck": 1,
+          "pad_channel": 8,
+          "shifted_pad_channel": 9
+        },
+        {
+          "channel": 2,
+          "deck": 2,
+          "pad_channel": 10,
+          "shifted_pad_channel": 11
+        }
+      ],
+      "encoder_format": "offset_64"
+    },
+    "notes": {
+      "play": 11,
+      "cue": 12,
+      "sync": 88,
+      "loop_in": 16,
+      "loop_out": 17,
+      "shift": 63,
+      "platter_touch": 54,
+      "shifted": {
+        "cue": 72,
+        "sync": 96,
+        "loop_in": 76,
+        "loop_out": 78,
+        "play": 14
+      },
+      "pads": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    "pads": {
+      "channel": 8,
+      "shifted_channel": 9
+    },
+    "jog": {
+      "relative_cc": 34,
+      "relative_edge_cc": 33
+    },
+    "pitch": {
+      "bits": 14,
+      "msb_cc": 0,
+      "lsb_cc": 32
+    },
+    "mixer": {
+      "volume": {
+        "bits": 14,
+        "msb_cc": 19,
+        "lsb_cc": 51
+      },
+      "trim": {
+        "bits": 14,
+        "msb_cc": 4,
+        "lsb_cc": 36
+      },
+      "eq_high": {
+        "bits": 14,
+        "msb_cc": 7,
+        "lsb_cc": 39
+      },
+      "eq_mid": {
+        "bits": 14,
+        "msb_cc": 11,
+        "lsb_cc": 43
+      },
+      "eq_low": {
+        "bits": 14,
+        "msb_cc": 15,
+        "lsb_cc": 47
+      },
+      "cue_note": 84,
+      "meter": {
+        "cc": 2,
+        "steps": [
+          0,
+          38,
+          65,
+          87,
+          101,
+          119
+        ]
+      }
+    }
+  },
+  "sources": {
+    "mapping.midi.channel": "DDJ-FLX4 MIDI list v1.0 p.1: deck 1's buttons on channel 1 (status 90)",
+    "mapping.midi.layers": "DDJ-FLX4 MIDI list v1.0 p.1: decks 1 and 2 on channels 1 and 2; pp.3-5: pads on 8 and 10, with Shift on 9 and 11",
+    "mapping.midi.encoder_format": "DDJ-FLX4 MIDI list v1.0 p.1: the jog sends the change, up from 0x41 clockwise, down from 0x3F",
+    "mapping.notes.play": "DDJ-FLX4 MIDI list v1.0 p.1: PLAY/PAUSE, note 0x0B",
+    "mapping.notes.cue": "DDJ-FLX4 MIDI list v1.0 p.1: CUE, note 0x0C",
+    "mapping.notes.sync": "DDJ-FLX4 MIDI list v1.0 p.2: BEAT SYNC, note 0x58 (sent on release, footnote 3)",
+    "mapping.notes.loop_in": "DDJ-FLX4 MIDI list v1.0 p.1: LOOP IN, note 0x10",
+    "mapping.notes.loop_out": "DDJ-FLX4 MIDI list v1.0 p.1: LOOP OUT, note 0x11",
+    "mapping.notes.shift": "DDJ-FLX4 MIDI list v1.0 p.1: SHIFT, note 0x3F",
+    "mapping.notes.platter_touch": "DDJ-FLX4 MIDI list v1.0 p.1: jog top touch, note 0x36",
+    "mapping.notes.shifted.cue": "DDJ-FLX4 MIDI list v1.0 p.1: CUE with Shift, note 0x48",
+    "mapping.notes.shifted.sync": "DDJ-FLX4 MIDI list v1.0 p.2: BEAT SYNC with Shift, note 0x60",
+    "mapping.notes.shifted.loop_in": "DDJ-FLX4 MIDI list v1.0 p.1: LOOP IN with Shift, note 0x4C",
+    "mapping.notes.shifted.loop_out": "DDJ-FLX4 MIDI list v1.0 p.1: LOOP OUT with Shift, note 0x4E",
+    "mapping.notes.pads": "DDJ-FLX4 MIDI list v1.0 p.3: HOT CUE mode pads 1-8, notes 0x00-0x07",
+    "mapping.pads.channel": "DDJ-FLX4 MIDI list v1.0 p.3: deck 1's pads on channel 8",
+    "mapping.pads.shifted_channel": "DDJ-FLX4 MIDI list v1.0 p.3: deck 1's pads with Shift on channel 9",
+    "mapping.jog.relative_cc": "DDJ-FLX4 MIDI list v1.0 p.1: platter top with vinyl mode on, CC 0x22; p.5: vinyl mode defaults on",
+    "mapping.jog.relative_edge_cc": "DDJ-FLX4 MIDI list v1.0 p.1: wheel side, CC 0x21",
+    "mapping.pitch.bits": "DDJ-FLX4 MIDI list v1.0 p.2: TEMPO, an MSB/LSB pair",
+    "mapping.pitch.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: TEMPO MSB, CC 0x00",
+    "mapping.pitch.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: TEMPO LSB, CC 0x20",
+    "mapping.mixer.volume.bits": "DDJ-FLX4 MIDI list v1.0 p.2: CH FADER, CC 0x13/0x33",
+    "mapping.mixer.volume.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: CH FADER, CC 0x13/0x33",
+    "mapping.mixer.volume.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: CH FADER, CC 0x13/0x33",
+    "mapping.mixer.trim.bits": "DDJ-FLX4 MIDI list v1.0 p.2: TRIM, CC 0x04/0x24",
+    "mapping.mixer.trim.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: TRIM, CC 0x04/0x24",
+    "mapping.mixer.trim.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: TRIM, CC 0x04/0x24",
+    "mapping.mixer.eq_high.bits": "DDJ-FLX4 MIDI list v1.0 p.2: EQ HI, CC 0x07/0x27",
+    "mapping.mixer.eq_high.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ HI, CC 0x07/0x27",
+    "mapping.mixer.eq_high.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ HI, CC 0x07/0x27",
+    "mapping.mixer.eq_mid.bits": "DDJ-FLX4 MIDI list v1.0 p.2: EQ MID, CC 0x0B/0x2B",
+    "mapping.mixer.eq_mid.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ MID, CC 0x0B/0x2B",
+    "mapping.mixer.eq_mid.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ MID, CC 0x0B/0x2B",
+    "mapping.mixer.eq_low.bits": "DDJ-FLX4 MIDI list v1.0 p.2: EQ LOW, CC 0x0F/0x2F",
+    "mapping.mixer.eq_low.msb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ LOW, CC 0x0F/0x2F",
+    "mapping.mixer.eq_low.lsb_cc": "DDJ-FLX4 MIDI list v1.0 p.2: EQ LOW, CC 0x0F/0x2F",
+    "mapping.mixer.cue_note": "DDJ-FLX4 MIDI list v1.0 p.2: headphone CUE, note 0x54",
+    "mapping.mixer.meter.cc": "DDJ-FLX4 MIDI list v1.0 p.2: CH LEVEL METER out, CC 0x02 on the deck's channel",
+    "mapping.mixer.meter.steps": "DDJ-FLX4 MIDI list v1.0 p.2: lights from the bottom, five bands from 0x26, 0x41, 0x57, 0x65 and 0x77",
+    "mapping.notes.shifted.play": "DDJ-FLX4 MIDI list v1.0 p.1: PLAY/PAUSE with Shift, note 0x0E"
+  }
+}

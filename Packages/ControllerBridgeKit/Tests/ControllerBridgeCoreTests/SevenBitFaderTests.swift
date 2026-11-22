@@ -17,7 +17,7 @@ struct SevenBitFaderMappingTests {
 
     @Test("The bundled LC6000 is 14-bit on CC 8 and 40, as before #195")
     func lc6000() throws {
-        let pitch = try Mapping.bundledDefault().pitch
+        let pitch = try #require(try Mapping.bundledDefault().pitch)
         #expect([pitch.bits, pitch.msbCC, pitch.lsbCC] == [14, 8, 40])
     }
 }

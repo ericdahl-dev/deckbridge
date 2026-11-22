@@ -29,9 +29,11 @@ final class CaptureController {
 
     private var input: CaptureMIDIInput?
     private var listenTask: Task<Void, Never>?
-    private var paused: MIDIEndpoint.ID?
+    /// When the bridge pauses the controller and gets it back: the Kit's rules (#326).
+    private var hold = CaptureHold(source: nil)
     /// The picked source, watched for an unplug mid-capture (#229).
     private var watched: MIDIEndpoint?
+    private var watch: CaptureWatch?
     private var demoTask: Task<Void, Never>?
     private var clockTask: Task<Void, Never>?
     private let setCapture: (MIDIEndpoint.ID?) -> Void
@@ -78,9 +80,10 @@ final class CaptureController {
             let ports = CapturePorts.suggested(for: picked.name, sources: others.map(\.name), destinations: destinations.map(\.name))
             // The picked endpoint itself, then the device's other ports (the first of each name).
             let listened = [endpoint] + ports.input.dropFirst().compactMap { name in others.first { $0.name == name } }
-            paused = endpoint.id
             watched = endpoint
-            setCapture(endpoint.id)
+            watch = CaptureWatch(source: endpoint.id)
+            hold = CaptureHold(source: endpoint.id)
+            apply(hold.stepsStarted())
             listen(to: listened)
             // The output on the same device entity; by name only when exactly one destination has it.
             ledDestination = CaptureMIDIOutput.destination(pairedWith: endpoint) ?? ports.output.first.flatMap { name in
@@ -120,14 +123,14 @@ final class CaptureController {
 
     // MARK: The LED test (#187)
 
-    /// Starts the LED test: opens the controller's main output (the demo controller has none: its sends go nowhere)
-    /// and lets ProbeSender's messages out every 50 ms.
     /// Whether the done page offers the LED test: once, and only with a way to reach the controller (the demo has none
     /// to reach, and needs none).
     var canTestLEDs: Bool { flow.canStartLEDs && (isDemo || ledDestination != nil) }
 
     private var isDemo: Bool { flow.file?.device == DemoCapture.deviceName }
 
+    /// Starts the LED test: opens the controller's main output (the demo controller has none: its sends go nowhere)
+    /// and lets ProbeSender's messages out every 50 ms.
     func startLEDs() {
         guard canTestLEDs else { return }
         if !isDemo {
@@ -137,10 +140,7 @@ final class CaptureController {
                 return
             }
             // The bridge holds the controller again, LEDs included, so the test isn't painted over (#187).
-            if let watched {
-                paused = watched.id
-                setCapture(watched.id)
-            }
+            apply(hold.ledTestStarted())
         }
         flow.startLEDs(scope: ledScope, at: ProcessInfo.processInfo.systemUptime)
         announce()
@@ -166,19 +166,17 @@ final class CaptureController {
     private func sendDue() {
         for message in flow.dueSends(at: ProcessInfo.processInfo.systemUptime) { ledOutput?.send(message) }
         // The test is over and everything is off: give the controller back, which repaints its LEDs.
-        if flow.phase == .done, !flow.hasPendingSends, paused != nil {
-            setCapture(nil)
-            paused = nil
-        }
+        apply(hold.sendsDrained(phase: flow.phase, pending: flow.hasPendingSends))
     }
 
-    /// Before the output closes: ends the LED test, and sends what's still queued (its off messages), keeping the gap.
-    private func flushLEDs() {
+    /// Before the output closes: ends the LED test, and sends what's still queued (its off messages), keeping the gap,
+    /// without blocking the main thread (#326).
+    private func flushLEDs() async {
         flow.skipLEDs(at: ProcessInfo.processInfo.systemUptime)
         var left = 64
         while flow.hasPendingSends, left > 0 {
             sendDue()
-            if flow.hasPendingSends { Thread.sleep(forTimeInterval: ProbeSender.interval) }
+            if flow.hasPendingSends { try? await Task.sleep(for: .seconds(ProbeSender.interval)) }
             left -= 1
         }
     }
@@ -189,8 +187,7 @@ final class CaptureController {
         input = nil
         listenTask?.cancel()
         demoTask?.cancel()
-        if paused != nil { setCapture(nil) }
-        paused = nil
+        apply(hold.stepsDone())
     }
 
     /// Ends the capture: the LED test turns off what it lit, the bridge gets the controller back, and nothing more is
@@ -198,16 +195,32 @@ final class CaptureController {
     func end() {
         sendTask?.cancel()
         sendTask = nil
-        if ledOutput != nil { flushLEDs() }
-        ledOutput?.close()
-        ledOutput = nil
         input?.stop()
         input = nil
         listenTask?.cancel()
         demoTask?.cancel()
         clockTask?.cancel()
-        if paused != nil { setCapture(nil) }
-        paused = nil
+        // With an LED output open, its lights go off first (a few messages, 100 ms apart), then it closes and the
+        // controller goes back; the flush runs on, without holding up the window or the main thread (#326).
+        guard let output = ledOutput else { return apply(hold.end()) }
+        ledOutput = nil
+        Task { [weak self] in
+            guard let self else { return output.close() }
+            self.ledOutput = output
+            await self.flushLEDs()
+            output.close()
+            self.ledOutput = nil
+            self.apply(self.hold.end())
+        }
+    }
+
+    /// Pauses or gives back the controller, as CaptureHold says.
+    private func apply(_ action: CaptureHold.Action?) {
+        switch action {
+        case .pause(let source): setCapture(source)
+        case .giveBack: setCapture(nil)
+        case nil: break
+        }
     }
 
     private func act(_ change: (Double) -> Void) {
@@ -295,15 +308,17 @@ final class CaptureController {
     /// The picked controller went away or came back (#229). Back, it's listened to again, and the bridge pauses it
     /// again: an unplug had ended that pause.
     private func devicesChanged() {
-        guard let watched, flow.phase == .steps else { return }
+        guard watched != nil, flow.phase == .steps else { return }
         let time = ProcessInfo.processInfo.systemUptime
-        let present = CaptureMIDIInput.isPresent(watched)
-        if !present, !flow.isDisconnected {
+        switch watch?.sourcesChanged(online: CaptureMIDIInput.onlineSourceIDs()) {
+        case .disconnected:
             flow.disconnected(at: time)
-        } else if present, flow.isDisconnected {
+        case .reconnected:
             input?.connect()
-            setCapture(watched.id)
+            apply(hold.reconnected())
             flow.reconnected(at: time)
+        case nil:
+            break
         }
         announce()
     }

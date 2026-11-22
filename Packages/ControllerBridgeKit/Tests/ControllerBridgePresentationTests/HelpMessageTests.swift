@@ -88,4 +88,22 @@ struct HelpMessageTests {
             text: "Controller 2 was unplugged. Plug it back in; the bridge picks it up again.", showsGuide: false
         ))
     }
+
+    // MARK: Another DJ app as host (#333)
+
+    @Test("Another DJ app holds the LC6000 as host: says so and how to fix it, ahead of the subscriptions")
+    func otherHost() {
+        var state = Self.state(.live(port: 9096))
+        state.otherHost = true
+        state.missingSubscriptions = [MissingSubscription(name: "Cues", breaks: "hot cue pads stay dark")]
+        #expect(HelpMessage(state) == HelpMessage(text: "Another DJ app is using the LC6000: quit it, then replug.", showsGuide: false))
+    }
+
+    @Test("A bridge that couldn't start still comes first")
+    func stoppedBeatsOtherHost() {
+        var state = Self.state(.live(port: 9096))
+        state.otherHost = true
+        state.stopped = true
+        #expect(HelpMessage(state)?.text.hasPrefix("The bridge couldn't open MIDI") == true)
+    }
 }

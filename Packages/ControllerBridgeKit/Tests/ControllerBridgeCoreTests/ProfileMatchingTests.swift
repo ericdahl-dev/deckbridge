@@ -11,6 +11,7 @@ struct ProfileMatchingTests {
         let midi: Rig.FakeMIDISystem
         let osc = Rig.FakeOSC()
         let log = Rig.FakeLog()
+        let clock = Rig.FakeClock()
         let coordinator: Coordinator
 
         init(profiles: [ControllerProfile], sources: [MIDIEndpoint]) {
@@ -18,7 +19,7 @@ struct ProfileMatchingTests {
                 sources: sources,
                 destinations: sources.map { MIDIEndpoint(id: $0.id + 1000, name: $0.name) }
             )
-            coordinator = Coordinator(profiles: profiles, midi: midi, osc: osc, clock: Rig.FakeClock(), log: log)
+            coordinator = Coordinator(profiles: profiles, midi: midi, osc: osc, clock: clock, log: log)
         }
     }
 

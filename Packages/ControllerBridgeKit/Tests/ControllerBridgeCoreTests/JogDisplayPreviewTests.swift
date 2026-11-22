@@ -120,7 +120,7 @@ struct JogDisplayPreviewPipeTests {
         let (rig, take) = try JogDisplayPreviewNoControllerTests.rig()
         _ = take()
         let pipe = EventPipe()
-        pipe.producer.setJogPreviewDeck(4)
+        pipe.producer.send(.setJogPreviewDeck(4))
         pipe.producer.finish()
         await Engine(coordinator: rig.coordinator, log: rig.log).run(pipe.events)
         #expect(JogDisplayPreviewNoControllerTests.decks(take()) == [4])
@@ -159,5 +159,93 @@ struct JogDisplayPreviewAllDecksTests {
         #expect(previews[1] == "Daybreak")
         #expect(previews[3] == "Night Drive")
         #expect(JogDisplayPreviewNoControllerTests.decks(events) == [3], "only deck 3, the one followed, uploads")
+    }
+}
+
+/// Stale feedback in the preview (#502): while the unit draws, the Diagnostics simulator shows the logo, as the drawn
+/// display does (#464), from the same stale signal as the state message's stale bit. The preview is what the jog
+/// display would show, so in image mode or with no unit (the screen never shows the logo there) it stays as before.
+@Suite("Jog display preview when feedback goes stale")
+struct JogDisplayPreviewStaleTests {
+    typealias Handshake = DrawnDisplayHandshakeTests
+
+    static func lastPreview(_ events: [JogDisplayEvent], deck: Int) -> JogDisplayContent? {
+        events.compactMap { if case .preview(let content) = $0, content.deck == deck { return content }; return nil }.last
+    }
+
+    /// Handshake.rig's unit on custom firmware, with the driver's events kept.
+    static func unit() -> (ProfileMatchingTests.ProfileRig, Rig.FakeClock, () -> [JogDisplayEvent]) {
+        let rig = ProfileMatchingTests.ProfileRig(profiles: try! ControllerProfile.bundled(),
+                                                  sources: [JogDisplayRingHoldTests.lc6000, JogDisplayRingHoldTests.wd])
+        let clock = Rig.FakeClock()
+        let driver = JogDisplayDriver(port: Handshake.Port(), clock: clock, log: rig.log, size: 1,
+                                      renderBeat: { _, beat in [UInt8(beat), 0, 0, 255] }) { _ in [0, 0, 0, 255] }
+        var events: [JogDisplayEvent] = []
+        driver.onEvent = { events.append($0) }
+        rig.coordinator.attachJogDisplay(driver)
+        rig.coordinator.start()
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Loaded", [.int(1)]))
+        rig.coordinator.setDisplayFirmware(.custom)
+        rig.coordinator.setJogDisplay(enabled: true)
+        return (rig, clock, { defer { events.removeAll() }; return events })
+    }
+
+    /// Deck 1's track, then Syndicate silent long enough to go stale.
+    static func goStale(_ rig: ProfileMatchingTests.ProfileRig) {
+        rig.clock.now = 0.5
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(deck: 1, title: "Night Drive"))
+        rig.coordinator.tick()
+        for time in [10.5, 12.5, 13.0] {
+            rig.clock.now = time
+            rig.coordinator.tick()
+        }
+    }
+
+    @Test("Drawing: feedback stops, deck 1's preview goes stale; fresh feedback brings the deck back; no upload carries stale")
+    func drawingStaleAndBack() throws {
+        let (rig, _, take) = Self.unit()
+        rig.coordinator.jogDisplayReply(Handshake.answer)
+        Self.goStale(rig)
+        #expect(rig.coordinator.status.feedback == .stale)
+        var events = take()
+        let stale = try #require(Self.lastPreview(events, deck: 1))
+        #expect(stale.stale)
+        #expect(stale.title == "Night Drive")
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(deck: 1, title: "Night Drive"))
+        rig.coordinator.tick()
+        events += take()
+        #expect(rig.coordinator.status.feedback == .live)
+        #expect(Self.lastPreview(events, deck: 1)?.stale == false)
+        #expect(!events.contains { if case .uploadStarted(_, let content, _) = $0 { return content.stale }; return false })
+    }
+
+    @Test("Image mode (no drawing answer): the preview never goes stale, as the screen never shows the logo")
+    func imagesNeverStale() throws {
+        let (rig, clock, take) = Self.unit()
+        clock.now = 0.5
+        rig.coordinator.tick()
+        #expect(rig.coordinator.status.displayFound?.label == "Custom (images)")
+        Self.goStale(rig)
+        #expect(rig.coordinator.status.feedback == .stale)
+        let events = take()
+        #expect(Self.lastPreview(events, deck: 1)?.title == "Night Drive")
+        #expect(!events.contains { if case .preview(let content) = $0 { return content.stale }; return false })
+    }
+
+    @Test("No unit: the preview never goes stale")
+    func noUnitNeverStale() throws {
+        let (rig, take) = try JogDisplayPreviewNoControllerTests.rig()
+        rig.coordinator.setJogPreviewDeck(3)
+        rig.clock.now = 0.5
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(deck: 3, title: "Night Drive"))
+        rig.coordinator.tick()
+        for time in [10.5, 12.5, 13.0] {
+            rig.clock.now = time
+            rig.coordinator.tick()
+        }
+        #expect(rig.coordinator.status.feedback == .stale)
+        let events = take()
+        #expect(Self.lastPreview(events, deck: 3)?.title == "Night Drive")
+        #expect(!events.contains { if case .preview(let content) = $0 { return content.stale }; return false })
     }
 }

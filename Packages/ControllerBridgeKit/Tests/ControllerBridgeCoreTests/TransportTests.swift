@@ -54,6 +54,30 @@ struct TransportTests {
         ])
     }
 
+    // #478: the panel prints OFF under Sync. With Shift held, Sync turns sync off, and only off: TempoSync toggles.
+
+    @Test("Shift + Sync on a synced deck sends TempoSync 1 once, turning sync off; nothing on release")
+    func shiftSyncTurnsSyncOff() throws {
+        let rig = try Self.started()
+        PickupTests.report(rig, "Sync", .int(1))
+        rig.osc.sent.removeAll()
+        Self.press(rig, 26)
+        Self.press(rig, 20)
+        Self.release(rig, 20)
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/1/TempoSync", [.int(1)])])
+    }
+
+    @Test("Shift + Sync on a deck that isn't synced sends nothing: it never turns sync on")
+    func shiftSyncNotSynced() throws {
+        let rig = try Self.started()
+        PickupTests.report(rig, "Sync", .int(0))
+        rig.osc.sent.removeAll()
+        Self.press(rig, 26)
+        Self.press(rig, 20)
+        Self.release(rig, 20)
+        #expect(rig.osc.sent == [])
+    }
+
     // #114: the LC6000's printed Shift functions. Pitch Bend − / + nudge the tempo while held (Syndicate §14.6).
 
     @Test("Pitch Bend − / + are holds: PhaseMinus or PhasePlus 1 on press, 0 on release")
@@ -98,16 +122,34 @@ struct TransportTests {
         #expect(rig.osc.sent.filter { $0.address.hasSuffix("PhasePlus") }.count == 1)
     }
 
-    @Test("Shift + Pitch Bend (pitch range) sends nothing; the log says once that Syndicate has no route for it")
-    func shiftPitchBendIsNotAvailable() throws {
+    @Test("Shift + Pitch Bend − / + transposes (#377): key lock on, then PitchDown or PitchUp 1, once per press; nothing on release, no nudge")
+    func shiftPitchBendTransposes() throws {
         let rig = try Self.started()
         Self.press(rig, 26)   // Shift down
         Self.press(rig, 24)
         Self.release(rig, 24)
         Self.press(rig, 25)
         Self.release(rig, 25)
-        #expect(rig.osc.sent == [])
-        #expect(rig.log.lines.filter { $0.contains("Pitch range") } == ["Pitch range (Shift + Pitch Bend) isn't available in Syndicate"])
+        Self.press(rig, 25)
+        let on = OSCMessage("/Syndicate/Deck/1/PitchPreserve", [.int(1)])
+        #expect(rig.osc.sent == [
+            on, OSCMessage("/Syndicate/Deck/1/PitchDown", [.int(1)]),
+            on, OSCMessage("/Syndicate/Deck/1/PitchUp", [.int(1)]),
+            on, OSCMessage("/Syndicate/Deck/1/PitchUp", [.int(1)]),
+        ])
+    }
+
+    @Test("Shift + Pitch Bend turns key lock on first, as Syndicate transposes only with P on (the user's pick): its LED lights, and the next Key Lock press turns it off")
+    func transposeTurnsKeyLockOn() throws {
+        let rig = try Self.started()
+        Self.press(rig, 26)   // Shift down
+        Self.press(rig, 25)
+        Self.release(rig, 25)
+        Self.release(rig, 26)
+        #expect(rig.leds[22] == 127)
+        rig.osc.sent.removeAll()
+        Self.press(rig, 22)   // Key Lock
+        #expect(rig.osc.sent == [OSCMessage("/Syndicate/Deck/1/PitchPreserve", [.int(0)])])
     }
 
     @Test("Shift + Key Lock resets the tempo: one TempoSlider 0.0, Key Lock untouched, and the fader waits to meet 0.0")
@@ -205,15 +247,17 @@ struct TransportTests {
         ])
     }
 
-    @Test("Slip toggles on each press: CueSlip 1, then 0, and its LED follows")
+    @Test("On a profile that maps Slip (the LC6000 doesn't, #420), it toggles on each press: CueSlip 1, then 0, and its LED follows")
     func slipToggles() throws {
-        let rig = try Self.started()
-        #expect(rig.leds[23] == 1)
-        Self.press(rig, 23)
-        Self.release(rig, 23)
-        #expect(rig.leds[23] == 127)
-        Self.press(rig, 23)
-        #expect(rig.leds[23] == 1)
+        let rig = try Rig(override: #"{ "notes": { "slip": 99 } }"#)
+        rig.coordinator.start()
+        rig.osc.sent.removeAll()
+        #expect(rig.leds[99] == 1)
+        Self.press(rig, 99)
+        Self.release(rig, 99)
+        #expect(rig.leds[99] == 127)
+        Self.press(rig, 99)
+        #expect(rig.leds[99] == 1)
         #expect(rig.osc.sent == [
             OSCMessage("/Syndicate/Deck/1/CueSlip", [.int(1)]),
             OSCMessage("/Syndicate/Deck/1/CueSlip", [.int(0)]),
@@ -269,9 +313,9 @@ struct TransportTests {
     @Test("Stop releases every held control exactly once, and a second stop sends nothing")
     func stopReleasesHolds() throws {
         let rig = try Self.started()
+        Self.press(rig, 1)   // Play, a trigger: nothing to release (before Cue: with Cue held it latches, #360)
         Self.press(rig, 2)   // Cue, held
         Self.press(rig, 7)   // Censor, held
-        Self.press(rig, 1)   // Play, a trigger: nothing to release
         rig.osc.sent.removeAll()
 
         rig.coordinator.stop()

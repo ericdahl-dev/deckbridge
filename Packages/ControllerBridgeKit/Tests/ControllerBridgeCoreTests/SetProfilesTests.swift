@@ -155,17 +155,16 @@ struct SetProfilesTests {
         #expect(rig.osc.sent == [])
     }
 
-    @Test("The bridge's own state carries over a swap: Key Lock, Slip and Roll mode stay lit, and Key Lock toggles off next (#115)")
+    @Test("The bridge's own state carries over a swap: Key Lock and Roll mode stay lit, and Key Lock toggles off next (#115)")
     func ownStateCarries() throws {
         let rig = try Rig()
         rig.coordinator.start()
-        for note: UInt8 in [22, 23, 28] {   // Key Lock, Slip, Roll mode
+        for note: UInt8 in [22, 28] {   // Key Lock, Roll mode (the LC6000 has no Slip since #420)
             rig.coordinator.midi(.noteOn(channel: 0, note: note, velocity: 127), source: Rig.lc6000.id)
             rig.coordinator.midi(.noteOff(channel: 0, note: note, velocity: 0), source: Rig.lc6000.id)
         }
         rig.coordinator.setProfiles(try Self.newPlay())
         #expect(rig.leds[22] == 127)
-        #expect(rig.leds[23] == 127)
         #expect(PadsTests.modeLEDs(rig) == [1, 127, 1, 1])
         rig.osc.sent.removeAll()
         rig.coordinator.midi(.noteOn(channel: 0, note: 22, velocity: 127), source: Rig.lc6000.id)

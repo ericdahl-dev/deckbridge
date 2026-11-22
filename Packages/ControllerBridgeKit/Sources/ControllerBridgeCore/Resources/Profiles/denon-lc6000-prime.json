@@ -58,7 +58,9 @@
       "msb_cc": 64,
       "lsb_cc": 65,
       "touch_note": 70,
-      "require_touch": true
+      "require_touch": true,
+      "shift_fader": true,
+      "shift_fader_mode": "relative"
     },
     "browse": {
       "select_turn_cc": 6,
@@ -82,7 +84,7 @@
       "sync": 20,
       "master": 21,
       "key_lock": 22,
-      "slip": 23,
+      "deck_select": 23,
       "pitch_minus": 24,
       "pitch_plus": 25,
       "shift": 26,
@@ -106,6 +108,8 @@
     },
     "leds": {
       "pitch_center": 42,
+      "pitch_arrow_back": 41,
+      "pitch_arrow_forward": 43,
       "ring": 40,
       "ring_color": [
         0,
@@ -129,7 +133,10 @@
       "pulse_ms": 100,
       "stale_idle": "dim",
       "levels": { "full": 127, "dim": 1, "off": 0 },
-      "color_table": "rgb222"
+      "color_table": "rgb222",
+      "color_message": {
+        "notes": [32, 33, 34, 35, 36, 37, 38, 39, 40]
+      }
     },
     "pads": {
       "roll_sizes": ["ThirtySecond", "Sixteenth", "Eighth", "Quarter", "Half", "One", "Two", "Four"],

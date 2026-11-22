@@ -181,8 +181,25 @@ struct SettingsView: View {
         }
         section(nil) {
             switchRow("Controller LEDs", isOn: settings.ledsEnabled)
-            switchRow("Show the deck on the jog display", hint: "LC6000 only. Off until tested on hardware.",
+            switchRow("Show the deck on the jog display", hint: "LC6000 only.",
                       isOn: settings.jogDisplay)
+            if settings.wrappedValue.jogDisplay {
+                // Denon's firmware shows 15 image slots; a unit flashed with the slot 16 patch shows 16 (#425).
+                // The hint ends with what was found on the unit (#456): Denon, Custom (images), or drawn.
+                row("Firmware", hint: settings.wrappedValue.displayFirmware.hint(found: model.status.displayFound)) {
+                    SegmentedPills(options: [DisplayFirmware.denon, .custom], title: { $0 == .denon ? "Denon" : "Custom" },
+                                   selection: settings.displayFirmware)
+                        .accessibilityElement(children: .contain).accessibilityLabel("Firmware")
+                }
+                // Syndicate sends the key as traditional text whatever its own Camelot setting is (#590).
+                row("Key display", hint: "Match Syndicate's own key setting.") {
+                    SegmentedPills(options: [KeyNotation.traditional, .camelot],
+                                   title: { $0 == .traditional ? "Traditional" : "Camelot" },
+                                   selection: settings.keyDisplay)
+                        .accessibilityElement(children: .contain).accessibilityLabel("Key display")
+                }
+            }
+            stripFaderRows(settings)
             ForEach(settings.wrappedValue.warnings, id: \.self) { note($0, color: Theme.attention) }
             if settings.wrappedValue.controllers.count < 4 {
                 Button("Add controller") {
@@ -192,6 +209,35 @@ struct SettingsView: View {
             }
         }
         mappingSection
+    }
+
+    /// The strip of the controller in use, else the default profile's: what the fader rows show unless the DJ chose.
+    private var stripFaderNeedle: Mapping.Needle? {
+        let inUse = model.status.bridges.compactMap(\.profile).first
+        return (model.profiles.first { $0.name == inUse } ?? model.profiles.first)?.mapping.needle
+    }
+
+    /// Needle Drop on the deck's channel fader (#609), its plain layer since #729 (Shift seeks): on or off, and relative
+    /// or jump, each the profile's until changed here. A strip without a touch note shows neither.
+    @ViewBuilder
+    private func stripFaderRows(_ settings: Binding<BridgeSettings>) -> some View {
+        if let shown = settings.wrappedValue.stripFader.shown(for: stripFaderNeedle) {
+            switchRow("Needle Drop moves the channel fader",
+                      hint: shown.enabled
+                          ? "Slide the strip to move the deck's fader in Syndicate's mixer; hold Shift to move through the track"
+                          : "The strip always moves through the track",
+                      isOn: Binding(get: { shown.enabled }, set: { settings.wrappedValue.stripFader.enabled = $0 }))
+            if shown.enabled {
+                row("Fader movement", hint: shown.mode == .relative
+                    ? "From where the fader is, by how far you slide. Needs Syndicate's Volume feedback"
+                    : "The fader goes to where you touch the strip") {
+                    SegmentedPills(options: [Mapping.Needle.ShiftFaderMode.relative, .jump],
+                                   title: { $0 == .relative ? "Relative" : "Jump" },
+                                   selection: Binding(get: { shown.mode }, set: { settings.wrappedValue.stripFader.mode = $0 }))
+                        .accessibilityElement(children: .contain).accessibilityLabel("Fader movement")
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -213,6 +259,38 @@ struct SettingsView: View {
             }
             if settings.wrappedValue.feedbackListen == .allNetworks {
                 hint("For Syndicate on another Mac. macOS asks once for local-network permission; allow it, or no feedback arrives.")
+            }
+        }
+        displayFeedSection(settings)
+    }
+
+    /// The display feed (#618): on/off, the deck panel's host and port, and what the feed is doing. Bad input is shown
+    /// under its field on Apply, as the Syndicate port's is.
+    @ViewBuilder
+    private func displayFeedSection(_ settings: Binding<BridgeSettings>) -> some View {
+        section("Display feed") {
+            hint("Sends the deck in front to a deck panel on your network, or plugged into this Mac.")
+            switchRow("Send the display feed", isOn: settings.displayFeed.enabled)
+            if settings.wrappedValue.displayFeed.enabled {
+                row("Host", hint: "The panel's IP address, shown on its waiting screen") {
+                    field(text: settings.displayFeed.host, width: 160, field: .displayFeedHost)
+                }
+                row("Port", hint: "The panel's port, shown on its waiting screen") {
+                    field(value: settings.displayFeed.port, field: .displayFeedPort)
+                }
+            }
+            // The applied setting's status, read again each second: a feed that can't send never fails silently.
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let status = model.displayFeedStatus
+                note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+            }
+            // The USB cable (#667): no Wi-Fi setup on the panel. Off by default, apart from the switch above.
+            switchRow("Send over the USB cable", isOn: settings.displayFeed.cable)
+            if settings.wrappedValue.displayFeed.cable {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    let status = model.cableFeedStatus
+                    note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+                }
             }
         }
     }
@@ -378,7 +456,8 @@ struct SettingsView: View {
         let picker = ProfilePicker(
             chosenInput: entry.input?.name,
             connectedDevice: single ? model.status.bridges.compactMap(\.device).first : nil,
-            unsupported: model.status.otherDevices.offer?.device,
+            // Only the device the panel highlights, with no controller connected, as before #329: this entry is unchanged.
+            unsupported: model.status.otherDevices.highlighted?.label,
             profiles: model.profiles.map { (id: $0.id, name: $0.name) },
             choices: settings.wrappedValue.profileChoices
         )
@@ -386,7 +465,7 @@ struct SettingsView: View {
             get: { picker.selected },
             set: { id in
                 if id == Self.notFoundTag {
-                    model.captureDevice = picker.device
+                    model.captureRequest.device = picker.device
                     openWindow(id: CaptureWindow.id)
                     // Nothing was chosen: redraw the menu so it shows the saved choice again, not this item.
                     profileMenuRedraw += 1
@@ -461,10 +540,38 @@ struct SettingsView: View {
                           ? "Cue palette slots 1, 3, 5 and 7 in Syndicate's CUE COLORS, as they change"
                           : "Your own colors, for the app's badges and the LC6000's ring",
                       isOn: settings.followSyndicateDeckColors)
-            // Vivid keeps a color's hue on the LC6000's 64 colors; Exact rounds each channel (#151).
-            row("Ring colors", hint: settings.wrappedValue.ringColors == .vivid
-                ? "Strong colors on the ring and a held pad, keeping each hue"
-                : "Each channel rounded, as the pads' cue colors are; softer colors look paler") {
+            // #530: Denon's own color message gives the ring (and, later, the pads) their exact color. Off is the way
+            // back to the 64-color table, for a top panel firmware that doesn't take it.
+            switchRow("Exact colors on the LC6000",
+                      hint: settings.wrappedValue.colorMessages
+                          ? "The ring shows each deck's exact color"
+                          : "The ring uses the LC6000's 64 colors",
+                      isOn: settings.colorMessages)
+            // #532: how bright the exact-color LEDs (the ring, and the pads with #531) are; the user's pick, 10% to 100%
+            // in tens. Only with exact colors on: the 64-color table and the single-color buttons don't take it.
+            if settings.wrappedValue.colorMessages {
+                row("Light brightness", hint: "How bright the ring and pads are: dim them in a dark room") {
+                    HStack(spacing: 8) {
+                        Slider(value: Binding(
+                            get: { Double(settings.wrappedValue.lightBrightness) },
+                            set: { settings.wrappedValue.lightBrightness = LightBrightness.snapped(Int($0.rounded())) }
+                        ), in: 10...100, step: 10)
+                            .frame(width: 160)
+                            .accessibilityLabel("Light brightness")
+                            .accessibilityValue(LightBrightness.label(settings.wrappedValue.lightBrightness))
+                        Text(LightBrightness.label(settings.wrappedValue.lightBrightness))
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+            }
+            // Vivid keeps a color's hue on the LC6000's 64 colors; Exact rounds each channel (#151). With exact colors on,
+            // only a held pad still takes the table, until the pads move to the color message too (#531).
+            row("Ring colors", hint: settings.wrappedValue.colorMessages
+                ? "For a held pad; the ring shows exact colors"
+                : settings.wrappedValue.ringColors == .vivid
+                    ? "Strong colors on the ring and a held pad, keeping each hue"
+                    : "Each channel rounded, as the pads' cue colors are; softer colors look paler") {
                 SegmentedPills(options: [RingColors.vivid, .exact], title: { $0 == .vivid ? "Vivid" : "Exact" },
                                selection: settings.ringColors)
                     .accessibilityElement(children: .contain).accessibilityLabel("Ring colors")
@@ -474,6 +581,8 @@ struct SettingsView: View {
                 Button("Reset to default") { settings.wrappedValue.customDeckColors = .defaults }
                     .buttonStyle(PillButtonStyle(kind: .quiet))
             }
+            // #363, #366: the jump and paused seeks turn the deck's quantize off and back to Use Global; Syndicate doesn't say what it was.
+            hint("Shift + a hot cue pad on a stopped deck jumps to the cue at once, and the jog and Needle Drop seek a paused deck exactly. For those moves DeckBridge turns that deck's quantize off in Syndicate, then sets it to Use Global, so a deck's own quantize setting is reset.")
         }
     }
 
@@ -490,10 +599,11 @@ struct SettingsView: View {
                 Spacer(minLength: 0)
                 hint("On the LC6000")
                 RoundedRectangle(cornerRadius: Theme.Radius.small)
-                    .fill(Color(RGB(deckColor: DeckColors.ledPreview(
-                        shown ?? [0, 0, 0], mode: settings.wrappedValue.ringColors,
-                        table: model.profiles.first?.mapping.leds.colorTable ?? .rgb222
-                    ))))
+                    .fill(Color(RGB(deckColor: settings.wrappedValue.colorMessages
+                        // The color message (#530): the deck's own color.
+                        ? (shown ?? [0, 0, 0])
+                        // rgb222, the LC6000's table, as the label says and #197 planned (#313): not a profile lookup.
+                        : DeckColors.ledPreview(shown ?? [0, 0, 0], mode: settings.wrappedValue.ringColors, table: .rgb222))))
                     .frame(width: 26, height: 26)
                     .accessibilityLabel("Deck \(deck) on the LC6000")
             }

@@ -26,28 +26,6 @@ struct JogMarkerTests {
         marker.beat(4, bpm: 120, at: 11)
         #expect(marker.pitchBend(at: 11.5) == 0)
     }
-
-    @Test("The platter turns it: 900 of 3600 counts is a quarter turn either way, from where it was")
-    func platter() {
-        var marker = JogMarker()
-        marker.beat(2, bpm: 120, at: 0)   // 0.25
-        marker.platter(counts: 900, countsPerRev: 3600, at: 0)
-        #expect(marker.pitchBend(at: 0) == 8192)
-        marker.platter(counts: -1800, countsPerRev: 3600, at: 0)
-        #expect(marker.pitchBend(at: 0) == 0)
-        marker.platter(counts: -900, countsPerRev: 3600, at: 0)
-        #expect(marker.pitchBend(at: 0) == 12288)
-    }
-
-    @Test("While the platter moves, the clock doesn't pull it back; the next beat takes over again")
-    func platterThenClock() {
-        var marker = JogMarker()
-        marker.beat(1, bpm: 120, at: 0)
-        marker.platter(counts: 900, countsPerRev: 3600, at: 0)   // from 0 to a quarter
-        #expect(marker.pitchBend(at: 0.3) == 4096)
-        marker.beat(2, bpm: 120, at: 0.5)
-        #expect(marker.pitchBend(at: 0.5) == 4096)
-    }
 }
 
 /// The deck's own needle (#165, the user's pick): its phase in the bar from the deck's BarRamp, running on at the
@@ -77,11 +55,4 @@ struct JogMarkerRampTests {
         #expect(marker.pitchBend(at: 20) == 4096)
     }
 
-    @Test("The platter moves it from where it is, as before")
-    func platter() {
-        var marker = JogMarker()
-        marker.ramp(0.25, bpm: 120, at: 10)
-        marker.platter(counts: 900, countsPerRev: 3600, at: 10)
-        #expect(marker.pitchBend(at: 11) == 8192)
-    }
 }

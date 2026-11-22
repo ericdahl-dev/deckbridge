@@ -189,21 +189,24 @@ struct ContinuousTests {
         cc(rig, 65, lsb)
     }
 
-    @Test("Needle Drop seeks only while the strip is touched: 127/127 seeks to the end, 64/0 just past the middle")
+    @Test("Shift + Needle Drop seeks only while the strip is touched: 127/127 seeks to the end, 64/0 just past the middle")
     func needleSeeksWhileTouched() throws {
         let rig = try Self.started()
         Self.strip(rig, 64, 0)
         #expect(rig.osc.sent == [])
+        rig.coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)   // Shift: seek (#729)
         rig.coordinator.midi(.noteOn(channel: 0, note: 70, velocity: 127), source: Rig.lc6000.id)
         Self.strip(rig, 127, 127)
         Self.strip(rig, 64, 0)   // 8192 / 16383
-        #expect(rig.osc.sent == [
+        // The deck is paused, so the seeks also hold its quantize at None (#366, JogQuantizeTests); only the seeks here.
+        let seeks = { rig.osc.sent.filter { $0.address.hasSuffix("/WaveformSeek") } }
+        #expect(seeks() == [
             OSCMessage("/Syndicate/Deck/1/WaveformSeek", [.float(1.0)]),
             OSCMessage("/Syndicate/Deck/1/WaveformSeek", [.float(0.500_030_5)]),
         ])
         rig.coordinator.midi(.noteOff(channel: 0, note: 70, velocity: 0), source: Rig.lc6000.id)
         Self.strip(rig, 0, 0)
-        #expect(rig.osc.sent.count == 2)
+        #expect(seeks().count == 2)
     }
 
     @Test("Release-all clears the needle touch: afterwards, moving the strip seeks nothing")
@@ -259,7 +262,7 @@ struct ContinuousTests {
     @Test("A hand-built mapping with 0 counts per turn doesn't crash a paused jog: it moves nothing (#92)")
     func zeroCountsPerRev() throws {
         var mapping = try Mapping.bundledDefault()
-        mapping.jog.countsPerRev = 0
+        mapping.jog?.countsPerRev = 0
         let rig = try Rig()
         let coordinator = Coordinator(mapping: mapping, midi: rig.midi, osc: rig.osc, clock: rig.clock, log: rig.log)
         coordinator.start()
