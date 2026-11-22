@@ -26,7 +26,11 @@ WEBSITE = ('<h2>This website</h2><p>It counts visits with PostHog and sets no co
            ' To have your visits removed, email us. On the capture page it counts only that a capture started and finished.</p>'
            '<p>The web capture saves the file on your computer; nothing is uploaded.</p>')
 
-CAPTURE_LD = '<script type="application/ld+json">{"text": "Record it at https://getdeckbridge.app/capture/."}</script>'
+CAPTURE_LD = ('<script type="application/ld+json">{"@type": "FAQPage", "mainEntity": [{"@type": "Question", '
+              '"name": "Which controllers does DeckBridge support?", "acceptedAnswer": {"@type": "Answer", '
+              '"text": "The LC6000 PRIME. Record yours at https://getdeckbridge.app/capture/."}}]}</script>')
+
+CONTROLLERS = '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}]\n'
 
 PRICE_LD = ('<script type="application/ld+json">{"@graph": [{"@type": "SoftwareApplication", '
             '"offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}, {"@type": "FAQPage", "mainEntity": '
@@ -34,9 +38,12 @@ PRICE_LD = ('<script type="application/ld+json">{"@graph": [{"@type": "SoftwareA
             '"text": "DeckBridge is free."}}]}]}</script>')
 
 GOOD = {
+    "controllers.json": CONTROLLERS,
     "index.html": page(head='<link rel="stylesheet" href="style.css"><link rel="icon" href="img/icon.png">' + CAPTURE_LD + PRICE_LD,
                        body='<a href="support/">Support</a> <a href="privacy/">Privacy</a> <img src="img/icon.png" alt="">'
                             ' <a href="capture/">record it in your browser</a>'
+                            ' <ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" data-status="supported">'
+                            'Denon DJ LC6000 PRIME</li></ul>'
                             ' <a href="for/lc6000/">DeckBridge for the LC6000</a>'
                             ' <a href="https://testflight.apple.com/join/XXXX">TestFlight</a>'),
     "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'),
@@ -108,6 +115,8 @@ class CheckSiteTests(unittest.TestCase):
                                body='<img src="//cdn.example.com/a.png" alt=""> <script src="http://x.example/t.js"></script>'
                                     ' <a href="https://testflight.apple.com/join/XXXX">ok</a>'
                                     ' <a href="support/">s</a> <a href="privacy/">p</a> <a href="capture/">c</a>'
+                                    ' <ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" data-status="supported">'
+                                    'x</li></ul>'
                                     ' <a href="for/lc6000/">l</a>'),
             "style.css": '@import url("https://fonts.example/x.css"); body { background: url(https://x.example/bg.png); }',
         })
@@ -284,7 +293,7 @@ class CheckSiteTests(unittest.TestCase):
 
     def test_the_home_page_links_the_web_capture_in_the_faq_and_its_json_ld(self):
         no_link = GOOD["index.html"].replace(' <a href="capture/">record it in your browser</a>', "")
-        no_ld = GOOD["index.html"].replace(CAPTURE_LD, "")
+        no_ld = GOOD["index.html"].replace(" Record yours at https://getdeckbridge.app/capture/.", "")
         self.assertEqual(check_site.problems(self.site({"index.html": no_link})),
                          ["index.html: doesn't link the web capture (capture/)"])
         self.assertEqual(check_site.problems(self.site({"index.html": no_ld})),
@@ -309,6 +318,49 @@ class CheckSiteTests(unittest.TestCase):
                          ["for/lc6000/index.html: its canonical is https://getdeckbridge.app/, "
                           "not https://getdeckbridge.app/for/lc6000/"])
         self.assertEqual(check_site.problems(self.site({"for/lc6000/index.html": own})), [])
+
+    def test_controllers_json_is_the_one_list_of_controllers(self):
+        self.assertEqual(check_site.problems(self.site(remove=["controllers.json"])), ["controllers.json: missing"])
+        bad = check_site.problems(self.site({"controllers.json": "[{"}))
+        self.assertEqual(len(bad), 1, bad)
+        self.assertTrue(bad[0].startswith("controllers.json: doesn't parse as JSON: "), bad)
+        self.assertEqual(check_site.problems(self.site({"controllers.json": '[{"name": "", "maker": "Denon DJ"}, {"maker": "x"}]'})), [
+            "controllers.json[0]: needs a name and a maker",
+            "controllers.json[1]: needs a name and a maker",
+            "controllers.json: lists no supported controller",
+        ])
+        self.assertEqual(check_site.problems(self.site({"controllers.json":
+            '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}, {"name": "DDJ-400", "maker": "Pioneer DJ", "status": "soon"}]'})),
+            ['controllers.json[1]: status "soon" isn\'t one of supported, in progress'])
+
+    def test_the_home_page_lists_exactly_controllers_json(self):
+        drifted = GOOD["index.html"].replace('data-controller="Denon DJ LC6000 PRIME"', 'data-controller="Denon DJ LC6000"')
+        self.assertEqual(check_site.problems(self.site({"index.html": drifted})), [
+            "index.html: its controller list (Denon DJ LC6000: supported) isn't controllers.json's "
+            "(Denon DJ LC6000 PRIME: supported)",
+        ])
+        missing = GOOD["index.html"].replace('<ul data-controllers><li data-controller="Denon DJ LC6000 PRIME" '
+                                             'data-status="supported">Denon DJ LC6000 PRIME</li></ul>', "")
+        self.assertEqual(check_site.problems(self.site({"index.html": missing})), [
+            "index.html: its controller list (none) isn't controllers.json's (Denon DJ LC6000 PRIME: supported)",
+        ])
+
+    def test_the_faq_json_ld_names_every_supported_controller(self):
+        home = GOOD["index.html"].replace("The LC6000 PRIME.", "One controller.")
+        self.assertEqual(check_site.problems(self.site({"index.html": home})), [
+            'index.html: the JSON-LD answer to "Which controllers does DeckBridge support?" doesn\'t name LC6000 PRIME',
+        ])
+        no_question = GOOD["index.html"].replace("Which controllers does DeckBridge support?", "What is it?")
+        self.assertEqual(check_site.problems(self.site({"index.html": no_question})), [
+            'index.html: the JSON-LD has no "Which controllers does DeckBridge support?" question',
+        ])
+
+    def test_an_in_progress_controller_is_allowed(self):
+        home = GOOD["index.html"].replace("</ul>", '<li data-controller="Pioneer DJ DDJ-400" data-status="in progress">'
+                                                    'Pioneer DJ DDJ-400, in progress</li></ul>')
+        root = self.site({"index.html": home, "controllers.json":
+            '[{"name": "LC6000 PRIME", "maker": "Denon DJ"}, {"name": "DDJ-400", "maker": "Pioneer DJ", "status": "in progress"}]'})
+        self.assertEqual(check_site.problems(root), [])
 
     def test_the_price_and_the_faq_answer_agree(self):
         paid = GOOD["index.html"].replace('"price": "0"', '"price": "9.99"')
