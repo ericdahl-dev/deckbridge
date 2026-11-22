@@ -1,0 +1,41 @@
+[
+  {
+    "name": "wd 00.50 slot-16 patch on a synthetic wd image",
+    "chip": "wd", "size": "0x4000", "fill": "5aa50ff0",
+    "plant": [{"at": "0x0800BDA4", "hex": "0f28"}],
+    "patch_file": "patches/wd-00.50-show-slot-16.patch",
+    "sha256": "eb894ec5760f85270fae149b7940ca8c4289fbeed9ce3338aa94248084d0f87d"
+  },
+  {
+    "name": "tp 00.31 no-deck-select patch on a synthetic tp image",
+    "chip": "tp", "size": "0xE000", "fill": "ff",
+    "plant": [{"at": "0x08015CDB", "hex": "0a14ff64"}],
+    "patch_file": "patches/tp-00.31-no-deck-select-on-hello.patch",
+    "sha256": "ebf1969b4db0eb7717b0fa51beae94ff0097a3c5e0d98a859c335230ba7448cf"
+  },
+  {
+    "name": "two lines on a wd image, one of them odd-aligned",
+    "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
+    "patch": "# synthetic\n0x08008040 5aa5 1234\n0x08008101 a50f 0000\n",
+    "sha256": "a95ab580d32b4aa9e77ad6eeb44f093b55e310ded9c3f00b6d36b321fc3be7ec"
+  },
+  {
+    "name": "old bytes that don't match: refused",
+    "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
+    "patch": "0x08008040 0000 1234\n",
+    "sha256": null
+  },
+  {
+    "name": "already patched (old bytes are the patch's new ones): refused by the kit",
+    "chip": "wd", "size": "0x4000", "fill": "5aa50ff0",
+    "plant": [{"at": "0x0800BDA4", "hex": "1028"}],
+    "patch_file": "patches/wd-00.50-show-slot-16.patch",
+    "sha256": null
+  },
+  {
+    "name": "a patch into the trailer: refused",
+    "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
+    "patch": "0x080083E0 0000 1111\n",
+    "sha256": null
+  }
+]
