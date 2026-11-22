@@ -59,6 +59,8 @@ GOOD = {
     "capture/index.html": page(body='<a href="../">Home</a>'),
     "for/lc6000/index.html": page(body='<a href="../../">Home</a>'),
     "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + FEED + WEBSITE),
+    "404.html": page(title="Track not found · DeckBridge", body='<h1>Track not found.</h1><p>This page isn\u2019t in the '
+                     'crate. The decks are still running.</p><a href="/">Back to DeckBridge</a>'),
     "style.css": '@font-face { font-family: Inter; src: url("fonts/Inter-Regular.ttf"); } body { color: #EDEDEA; }',
     "fonts/Inter-Regular.ttf": "font",
     "img/icon.png": "png",
@@ -577,6 +579,80 @@ class CheckSiteTests(unittest.TestCase):
             found = [line for line in lines if line.startswith(row)]
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)
+
+    def test_every_footer_has_the_sixteen_thousand_steps_line(self):
+        # #753: after the footer lede, on every page with one.
+        good = check_site.problems(self.site({"support/index.html": page(body='<a href="../">Home</a>', footer=FOOTER.replace(
+            "</footer>", '<p class="footer__lede">A Mac menu-bar app.</p><p class="footer__line">' + check_site.FOOTER_LINE + "</p></footer>"))}))
+        self.assertEqual(good, [])
+        bare = check_site.problems(self.site({"support/index.html": page(body='<a href="../">Home</a>', footer=FOOTER.replace(
+            "</footer>", '<p class="footer__lede">A Mac menu-bar app.</p></footer>'))}))
+        self.assertEqual(bare, [f'support/index.html: the footer doesn\'t say "{check_site.FOOTER_LINE}" after its lede'])
+
+    def test_the_footer_line_is_the_owners(self):
+        self.assertEqual(check_site.FOOTER_LINE, "Four decks, one Mac, every one of the 16,384 steps.")
+
+    def test_the_home_page_says_hello_in_the_console_once(self):
+        # #753: one console.info, with the app's own default ports (ProfileKeys: osc.port 9090, osc.feedback_port 9096).
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        self.assertIn('<script type="module" src="assets/delight.js"></script>', home)
+        with open(os.path.join(site, "assets", "delight.js"), encoding="utf-8") as f:
+            script = f.read()
+        self.assertEqual(script.count("console.info("), 1)
+        self.assertIn('console.info("DeckBridge: OSC out on 9090, feedback in on 9096. Hello, fellow tinkerer.")', script)
+
+    def test_the_why_rows_draw_their_faders_as_an_illustration(self):
+        # #753: the 7-bit and 14-bit rows each get a fader, hidden from screen readers, moved by one scrub that obeys
+        # reduced motion; the pair is labeled as an illustration.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        for steps in ("128", "16384"):
+            self.assertRegex(home, r'<span class="db-fader" aria-hidden="true" data-steps="' + steps + r'">')
+        self.assertIn("Illustration:", home)
+        with open(os.path.join(site, "assets", "delight.js"), encoding="utf-8") as f:
+            script = f.read()
+        for words in ("lib.scrub(", "lib.reduced()", ".db-fader"):
+            self.assertIn(words, script)
+
+    def test_the_hero_pill_lights_four_decks_once_without_motion_for_reduced(self):
+        # #753: four dots on the hero pill, hidden from screen readers. With motion they light 1-2-3-4 once, then hold
+        # on deck 1; without it (and before CSS animates) deck 1 is simply lit.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        self.assertRegex(home, r'<p class="pill"><span class="db-decks" aria-hidden="true">(<i></i>){4}</span>')
+        with open(os.path.join(site, "site.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertIn(".db-decks i:first-child", css)
+        motion = css[css.index("@media (prefers-reduced-motion: no-preference)"):]
+        self.assertIn("db-decks", motion)
+
+    def test_the_header_has_a_four_beat_reading_bar_only_with_scroll_timelines_and_motion(self):
+        # #753: a 2px bar of four beat segments in the home page's header fills as you scroll, through
+        # animation-timeline: scroll(); without support, or under reduced motion, there's no bar at all.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        header = home[home.index('<header class="nav'):home.index("</header>")]
+        self.assertRegex(header, r'<span class="db-phase" aria-hidden="true">(<i></i>){4}</span>')
+        with open(os.path.join(site, "site.css"), encoding="utf-8") as f:
+            css = f.read()
+        self.assertRegex(css, r"\.db-phase \{[^}]*display: none")
+        shown = css[css.index("@supports (animation-timeline: scroll())"):]
+        self.assertIn("@media (prefers-reduced-motion: no-preference)", shown)
+        self.assertIn("animation-timeline: scroll(", shown)
+
+    def test_the_404_page_says_track_not_found_and_links_home(self):
+        # #753: a page the server sends for any path it doesn't have, in the site's own words.
+        self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])
+        wrong = GOOD["404.html"].replace("Track not found.", "Not found").replace('href="/"', 'href="index.html"')
+        self.assertEqual(check_site.problems(self.site({"404.html": wrong})), [
+            '404.html: doesn\'t say "Track not found."',
+            '404.html: no "Back to DeckBridge" link to /',
+        ])
 
     def test_every_deckbridge_version_on_the_site_is_the_apps(self):
         root = self.site({

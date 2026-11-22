@@ -208,5 +208,47 @@ i.db-wire { display: block; height: 2px; padding: 0; background: linear-gradient
   main > :is(section, .section) > .wrap > :is(.fill, .db-split) { flex: none; }
 }
 
+/* #753: the owner's footer line, under the lede, in the footer's own muted ink */
+.footer__line { color: var(--muted, currentColor); font-size: var(--t-small, .9rem); max-width: 34ch; }
+
+/* #753: the 7-bit and 14-bit faders under the why rows (assets/delight.js moves --p, 0 to 1); decorative, aria-hidden */
+.db-fader { --p: .62; position: relative; display: block; grid-column: 1 / -1; height: 18px; margin-top: 10px; }
+.db-fader::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; border-radius: 1px; background: var(--muted); }
+.db-fader__cap { position: absolute; top: 0; left: calc(var(--p) * (100% - 10px)); width: 10px; height: 18px; border-radius: 3px; background: var(--accent); }
+/* with the rows: shown only where they are (360-1023 px) */
+.db-res__note { display: none; }
+@media (min-width: 360px) and (max-width: 1023px) { .db-res__note { display: block; margin-top: 12px; color: color-mix(in oklab, var(--ink) 70%, transparent); font-size: var(--t-small); } }
+
+/* #753: the hero pill's deck lights, aria-hidden. Still (and under reduced motion): deck 1 lit. With motion they light
+   1-2-3-4 once as the hero enters, then hold on deck 1. */
+.db-decks { display: inline-flex; gap: 4px; }
+.db-decks i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.db-decks i:first-child { background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .db-decks i { animation: db-deck-blip .28s linear both; }
+  .db-decks i:first-child { animation: db-deck-first 1.12s linear .35s both; }
+  .db-decks i:nth-child(2) { animation-delay: .63s; }
+  .db-decks i:nth-child(3) { animation-delay: .91s; }
+  .db-decks i:nth-child(4) { animation-delay: 1.19s; }
+  @keyframes db-deck-blip { from, to { background: var(--muted); } 1%, 99% { background: var(--accent); } }
+  @keyframes db-deck-first { 0%, 24.9% { background: var(--accent); } 25%, 99.9% { background: var(--muted); } 100% { background: var(--accent); } }
+}
+
+/* #753: reading progress as the phase bar, four beat segments along the header's foot, filling as the page scrolls.
+   Only where scroll timelines exist and motion is welcome; anywhere else there's no bar. aria-hidden. */
+.db-phase { display: none; }
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .db-phase { display: flex; gap: 3px; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; pointer-events: none; }
+    .db-phase i { flex: 1; position: relative; background: color-mix(in srgb, var(--muted) 35%, transparent); overflow: hidden; }
+    .db-phase i::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left;
+      animation: db-phase-fill linear both; animation-timeline: scroll(root); }
+    .db-phase i:nth-child(1)::after { animation-range: 0% 25%; }
+    .db-phase i:nth-child(2)::after { animation-range: 25% 50%; }
+    .db-phase i:nth-child(3)::after { animation-range: 50% 75%; }
+    .db-phase i:nth-child(4)::after { animation-range: 75% 100%; }
+    @keyframes db-phase-fill { to { transform: scaleX(1); } }
+  }
+}
 /* v1.1: a screenshot in a doc section */
 .db-shotimg { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }

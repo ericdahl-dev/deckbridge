@@ -312,13 +312,14 @@
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     </button>
   </div>
+  <span class="db-phase" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
 </header>
 
 <main id="top">
   <section class="hero hero--centred" data-enter aria-labelledby="hero-h"><!-- spelling: ok (kit class name) -->
     <div class="wrap"><div class="hero-text">
       <div class="hero__c">
-        <p class="pill"><span>Version 1.1.0 on TestFlight</span><span class="muted pill__more">Mac App Store coming soon</span></p>
+        <p class="pill"><span class="db-decks" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Version 1.1.0 on TestFlight</span><span class="muted pill__more">Mac App Store coming soon</span></p>
         <h1 id="hero-h">The LC6000 PRIME bridge for your Mac</h1>
         <p class="hero__lead">A menu-bar app that plays Syndicate from a Denon LC6000 PRIME over OSC, with 14‑bit jog and pitch.</p>
         <div class="btn-row">
@@ -353,9 +354,10 @@
       <p class="t-label">Why DeckBridge</p>
       <p class="mo-wh__text">Syndicate’s own MIDI mapping (0.3.7) can’t read the LC6000’s 14‑bit jog wheel or pitch fader, and it lights only the DDJ-FLX4 and FLX10. DeckBridge sends both at full resolution and lights the LC6000 from Syndicate’s feedback.</p>
       <dl class="db-res" aria-label="Pitch fader positions">
-        <div class="db-res__row"><dt>Syndicate’s MIDI mapping, 7-bit</dt><dd><b>128</b> pitch fader positions</dd></div>
-        <div class="db-res__row"><dt>DeckBridge over OSC, 14-bit</dt><dd><b>16,384</b> pitch fader positions</dd></div>
+        <div class="db-res__row"><dt>Syndicate’s MIDI mapping, 7-bit</dt><dd><b>128</b> pitch fader positions</dd><span class="db-fader" aria-hidden="true" data-steps="128"><span class="db-fader__cap"></span></span></div>
+        <div class="db-res__row"><dt>DeckBridge over OSC, 14-bit</dt><dd><b>16,384</b> pitch fader positions</dd><span class="db-fader" aria-hidden="true" data-steps="16384"><span class="db-fader__cap"></span></span></div>
       </dl>
+      <p class="db-res__note">Illustration: the same move on both faders.</p>
     </div>
   </section>
 
@@ -508,6 +510,7 @@
         <div class="span-4 stack-4">
           <a class="footer__mark" href="#top"><img src="img/favicon-64.png" alt="" width="28" height="28" loading="lazy" decoding="async">DeckBridge</a>
           <p class="footer__lede">A Mac menu-bar app for the LC6000 PRIME.</p>
+          <p class="footer__line">Four decks, one Mac, every one of the 16,384 steps.</p>
         </div>
         <div class="span-2 start-9 footer__col"><h3>Help</h3><ul><li><a href="support/">Support</a></li><li><a href="support/#setup">Setup guide</a></li><li><a href="for/lc6000/">LC6000 PRIME</a></li></ul></div>
         <div class="span-2 footer__col"><h3>Contact</h3><ul><li><a href="mailto:deckbridge@ericdahl.dev" data-track="contact_email_clicked">deckbridge@ericdahl.dev</a></li><li><a href="privacy/">Privacy</a></li></ul></div>
@@ -526,5 +529,6 @@
 <script type="module" src="assets/system.js"></script>
 <script type="module" src="assets/motion/motion.js"></script>
 <script type="module" src="assets/layout/layout.js"></script>
+<script type="module" src="assets/delight.js"></script>
 </body>
 </html>
