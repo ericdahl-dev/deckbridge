@@ -142,6 +142,7 @@ struct FirmwareRow: View {
 /// Updating the panel over its cable (#687): the offer, each step while it runs with Cancel, then the result.
 struct PanelUpdateView: View {
     let model: Updater
+    @State private var confirmingRepair = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -162,6 +163,16 @@ struct PanelUpdateView: View {
                     if let note = offer.note { Text(note).foregroundStyle(.secondary) }
                     Button("Update the panel to \(offer.version)") { Task { await model.updatePanel() } }
                         .disabled(model.looking)
+                }
+                if let repair = model.screen.panelRepair {
+                    Button("Repair the panel") { confirmingRepair = true }
+                        .disabled(model.looking)
+                        .confirmationDialog("Repair the panel?", isPresented: $confirmingRepair) {
+                            Button("Repair: write \(repair.version)") { Task { await model.repairPanel() } }
+                            Button("Not now", role: .cancel) {}
+                        } message: {
+                            Text(UpdaterScreen.repairConfirm(version: repair.version))
+                        }
                 }
             }
         }
