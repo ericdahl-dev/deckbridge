@@ -14,6 +14,8 @@ public struct WritePlan: Sendable, Equatable {
     /// How many bytes differ from the backup.
     public let changedBytes: Int
     private let backup: [UInt8]
+    /// The backup's bytes going back (Restore backup), not the update's write.
+    public let isRestore: Bool
 
     /// `backup` and `patched`: the chip's app area, as the unit check reads it and as the patch makes it.
     public init(chip: ChipKind, backup: [UInt8], patched: [UInt8]) {
@@ -33,6 +35,7 @@ public struct WritePlan: Sendable, Equatable {
         }
         self.sectors = sectors
         changedBytes = changed
+        isRestore = false
     }
 
     private init(chip: ChipKind, sectors: [Sector], changedBytes: Int, backup: [UInt8]) {
@@ -40,6 +43,7 @@ public struct WritePlan: Sendable, Equatable {
         self.sectors = sectors
         self.changedBytes = changedBytes
         self.backup = backup
+        isRestore = true
     }
 
     /// The same sectors with the backup's bytes: what the restore button writes.

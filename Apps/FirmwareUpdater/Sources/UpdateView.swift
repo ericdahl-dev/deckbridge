@@ -13,6 +13,9 @@ final class UpdateModel {
     /// Why a write didn't start (DeckBridge running, the chip not found): nothing was sent.
     private(set) var stop: String?
     var confirming = false
+    var confirmingRestore = false
+    /// The word typed in the write's confirm (#762): the write's button stays off until it's UPDATE.
+    var typed = ""
 
     /// `read`: the backup read just taken, in this run of the app.
     init(read: ChipRead) {
@@ -26,11 +29,19 @@ final class UpdateModel {
                           known: catalog?.knownNumbers ?? .none)
     }
 
-    func write() async { await run(flow.plan) }
-    func restore() async { await run(flow.restorePlan) }
+    /// The write's confirmation, only with the typed word; the button is off without it.
+    var writeConfirmation: Confirmation? { flow.plan.flatMap { Confirmation(typed: typed, for: $0) } }
 
-    private func run(_ plan: WritePlan?) async {
-        guard let plan, !running else { return }
+    func write() async {
+        let confirmed = writeConfirmation
+        typed = ""
+        await run(flow.plan, confirmed)
+    }
+
+    func restore() async { await run(flow.restorePlan, flow.restorePlan.flatMap(Confirmation.init(restoring:))) }
+
+    private func run(_ plan: WritePlan?, _ confirmed: Confirmation?) async {
+        guard let plan, let confirmed, !running else { return }
         stop = nil
         if let reason = await Preflight(apps: WorkspaceApps()).stop() {
             stop = reason
@@ -44,7 +55,7 @@ final class UpdateModel {
         }
         running = true
         defer { running = false }
-        let outcome = await ChipWriter(transport: usb).write(plan, confirmed: Confirmation(plan))
+        let outcome = await ChipWriter(transport: usb).write(plan, confirmed: confirmed)
         flow.finished(outcome)
         FileLog.shared.log("LC6000 \(flow.chip == .display ? "display" : "top panel") chip: update \(Self.word(outcome))")
     }
@@ -73,18 +84,27 @@ struct UpdateView: View {
                     Button(model.flow.confirmButton + "…") { model.confirming = true }.disabled(model.running)
                 }
                 if model.flow.canRestore {
-                    Button(model.flow.restoreButton) { Task { await model.restore() } }.disabled(model.running)
+                    Button(model.flow.restoreButton + "…") { model.confirmingRestore = true }.disabled(model.running)
                 }
                 if let guide = model.flow.recoveryGuide { Link("Recovery guide", destination: guide) }
                 if model.running { ProgressView().controlSize(.small) }
             }
         }
         .padding(.top, 4)
+        // Return never fires a destructive button: Cancel is the default in both, and the write needs the typed word.
         .alert(model.flow.confirmTitle, isPresented: $model.confirming) {
+            TextField("Type \(Confirmation.word)", text: $model.typed)
             Button(model.flow.confirmButton, role: .destructive) { Task { await model.write() } }
-            Button("Cancel", role: .cancel) {}
+                .disabled(model.writeConfirmation == nil)
+            Button("Cancel", role: .cancel) { model.typed = "" }.keyboardShortcut(.defaultAction)
         } message: {
             Text(model.flow.confirmBody)
+        }
+        .alert("Restore your backup?", isPresented: $model.confirmingRestore) {
+            Button(model.flow.restoreButton, role: .destructive) { Task { await model.restore() } }
+            Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+        } message: {
+            Text("This writes your backup's bytes back to the same sectors, then reads them back. Keep the LC6000 on and plugged in until it's done.")
         }
     }
 }

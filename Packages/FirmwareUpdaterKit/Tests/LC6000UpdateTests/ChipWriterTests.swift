@@ -25,7 +25,7 @@ struct ChipWriterTests {
     func confirmIsForThisPlan() async throws {
         let (chip, plan, stock, _) = try Self.display()
         let other = WritePlan(chip: .display, backup: stock, patched: stock.enumerated().map { $0.offset == 0x10 ? 0 : $0.element })
-        let outcome = await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(other))
+        let outcome = await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(typed: "UPDATE", for: other)!)
         #expect(outcome == .refused)
         #expect(chip.log.isEmpty)
     }
@@ -34,7 +34,7 @@ struct ChipWriterTests {
     func writesAndVerifies() async throws {
         let (chip, plan, _, patched) = try Self.display()
         let before = chip.bytes(0x0800_0000, 0x10_0000)
-        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(plan)) == .written)
+        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(typed: "UPDATE", for: plan)!) == .written)
         #expect(Self.app(chip) == patched)
         let after = chip.bytes(0x0800_0000, 0x10_0000)
         let changed = zip(before, after).enumerated().filter { $0.element.0 != $0.element.1 }.map { 0x0800_0000 + UInt32($0.offset) }
@@ -47,17 +47,17 @@ struct ChipWriterTests {
     func mismatch() async throws {
         let (chip, plan, stock, _) = try Self.display()
         chip.stuckAt = 0x0800_BDA4
-        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(plan)) == .mismatch(at: 0x0800_BDA4))
+        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(typed: "UPDATE", for: plan)!) == .mismatch(at: 0x0800_BDA4))
         chip.stuckAt = nil
-        #expect(await ChipWriter(transport: chip).write(plan.restore, confirmed: Confirmation(plan.restore)) == .written)
+        #expect(await ChipWriter(transport: chip).write(plan.restore, confirmed: Confirmation(restoring: plan.restore)!) == .written)
         #expect(Self.app(chip) == stock)
     }
 
     @Test("Restore after a good write: the backup's bytes again in the same sectors")
     func restore() async throws {
         let (chip, plan, stock, _) = try Self.display()
-        _ = await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(plan))
-        #expect(await ChipWriter(transport: chip).write(plan.restore, confirmed: Confirmation(plan.restore)) == .written)
+        _ = await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(typed: "UPDATE", for: plan)!)
+        #expect(await ChipWriter(transport: chip).write(plan.restore, confirmed: Confirmation(restoring: plan.restore)!) == .written)
         #expect(Self.app(chip) == stock)
     }
 
@@ -65,7 +65,7 @@ struct ChipWriterTests {
     func noAnswer() async throws {
         let (chip, plan, _, _) = try Self.display()
         chip.goneAfterErases = 1
-        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(plan)) == .noAnswer)
+        #expect(await ChipWriter(transport: chip).write(plan, confirmed: Confirmation(typed: "UPDATE", for: plan)!) == .noAnswer)
     }
 
     @Test("The write guard: another sector's erase, a block that isn't the plan's, or one past its sector never reach the chip")
