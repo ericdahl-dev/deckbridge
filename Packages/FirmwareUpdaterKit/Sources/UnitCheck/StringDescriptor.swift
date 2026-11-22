@@ -8,9 +8,16 @@ public enum StringDescriptor {
     public static func text(_ bytes: [UInt8]) -> String? {
         guard bytes.count >= 2, bytes[1] == 0x03 else { return nil }
         let length = Int(bytes[0])
-        guard length >= 2, length <= bytes.count else { return nil }
-        let body = bytes[2..<length]
+        guard length >= 2 else { return nil }
+        // A bLength past what came is the bootloader's own count: the text is what came.
+        let body = bytes[2..<min(length, bytes.count)]
         let units = stride(from: body.startIndex, to: body.endIndex - 1, by: 2).map { UInt16(bytes[$0]) | UInt16(bytes[$0 + 1]) << 8 }
         return String(decoding: units, as: UTF16.self)
+    }
+
+    /// For the log when a read isn't a string: bLength, type and the count, never the text.
+    public static func header(_ bytes: [UInt8]) -> String {
+        guard bytes.count >= 2 else { return "\(bytes.count) bytes" }
+        return "bLength \(bytes[0]), type \(bytes[1]), \(bytes.count) bytes"
     }
 }

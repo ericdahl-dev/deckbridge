@@ -24,8 +24,19 @@ struct StringDescriptorTests {
     }
 
     @Test("Not a string descriptor, too short, or bLength past the bytes: nil",
-          arguments: [[], [0x02], [0x04, 0x02, 0x41, 0x00], Self.descriptor("@Flash", length: 40)] as [[UInt8]])
+          arguments: [[], [0x02], [0x04, 0x02, 0x41, 0x00]] as [[UInt8]])
     func notAString(bytes: [UInt8]) {
         #expect(StringDescriptor.text(bytes) == nil)
+    }
+
+    @Test("bLength past the bytes that came (a ROM bootloader's own count): the text is what came")
+    func lengthPastBytes() {
+        #expect(StringDescriptor.text(Self.descriptor("@Flash", length: 0xFF)) == "@Flash")
+    }
+
+    @Test("For the log: bLength, type and the count, never the text")
+    func header() {
+        #expect(StringDescriptor.header(Self.descriptor("@Flash")) == "bLength 14, type 3, 14 bytes")
+        #expect(StringDescriptor.header([0x09]) == "1 bytes")
     }
 }
