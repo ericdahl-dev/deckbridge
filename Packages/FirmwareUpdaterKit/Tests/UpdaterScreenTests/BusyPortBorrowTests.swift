@@ -55,7 +55,7 @@ struct BusyPortBorrowTests {
         rig.serial.busy = [Screen.port]
         let deckBridge = DeckBridge(serial: rig.serial, answers: answers)
         let borrow: @Sendable () -> PortBorrow = { PortBorrow(channel: deckBridge) { _ in for _ in 0..<50 { await Task.yield() } } }
-        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, borrow: borrow)
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, log: rig.log, borrow: borrow)
         return (updater, rig, deckBridge)
     }
 
@@ -95,5 +95,22 @@ struct BusyPortBorrowTests {
         await updater.refresh()
         #expect(updater.screen.panel.detail == UpdaterScreen.portBusy)
         #expect(deckBridge.posted == [.release, .release, .done])
+    }
+
+    @Test("The log says DeckBridge let go, then that the port went back (#710's owner run had neither)")
+    func logsLentAndGivenBack() async {
+        let (updater, rig, _) = Self.updater(answers: true)
+        await updater.refresh()
+        let asked = rig.log.lines.firstIndex(of: "deck panel: asked DeckBridge for the port, it let go")
+        let back = rig.log.lines.firstIndex(of: "deck panel: gave the port back to DeckBridge")
+        #expect(asked != nil && back != nil && asked! < back!)
+    }
+
+    @Test("The log says DeckBridge didn't answer, and nothing about giving back")
+    func logsNoAnswer() async {
+        let (updater, rig, _) = Self.updater(answers: false)
+        await updater.refresh()
+        #expect(rig.log.lines.contains("deck panel: asked DeckBridge for the port, no answer in 3 s"))
+        #expect(!rig.log.lines.contains("deck panel: gave the port back to DeckBridge"))
     }
 }
