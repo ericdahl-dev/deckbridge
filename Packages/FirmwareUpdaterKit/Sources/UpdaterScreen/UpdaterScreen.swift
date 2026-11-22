@@ -42,7 +42,7 @@ public struct UpdaterScreen: Sendable, Equatable {
 
     /// The LC6000 section's own warning (#685, spec #684 story 9), so someone who owns only a panel never starts on it.
     public static let lc6000Warning = """
-        This section changes the firmware inside a Denon LC6000 PRIME. It is not made or supported by Denon. \
+        This section changes the firmware inside a Denon LC6000 PRIME. It is not made, supported or endorsed by Denon. \
         If a change goes wrong, the unit may stop working, and the worst case needs a hardware debug probe to \
         recover. If you only have a deck panel, you don't need this section.
         """
