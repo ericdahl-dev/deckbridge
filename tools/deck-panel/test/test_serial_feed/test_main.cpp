@@ -214,6 +214,18 @@ void test_a_stall_with_the_rest_waiting_keeps_the_frame() {
     TEST_ASSERT_EQUAL(2, got.size());
 }
 
+// Codex on #754: one next_size() reads at most kMostPerCall bytes, so a stream of text or one huge frame can't hold
+// the read step; the rest waits for the next call.
+void test_one_look_reads_at_most_its_byte_cap() {
+    FakeCable cable;
+    serial_feed::SerialFeed feed(cable);
+    const size_t total = 4 * serial_feed::SerialFeed::kMostPerCall;
+    cable.add(std::vector<uint8_t>(total, 'x'));
+    TEST_ASSERT_EQUAL(0, feed.next_size());
+    TEST_ASSERT_TRUE(cable.waiting.size() >= total - serial_feed::SerialFeed::kMostPerCall - 64);
+    TEST_ASSERT_TRUE(cable.waiting.size() > 0);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_each_shared_example_frame_comes_out_as_its_packet);
@@ -225,5 +237,6 @@ int main() {
     RUN_TEST(test_a_cut_frame_is_dropped_after_quiet_and_text_reads_again);
     RUN_TEST(test_an_opening_end_alone_is_dropped_after_quiet);
     RUN_TEST(test_a_stall_with_the_rest_waiting_keeps_the_frame);
+    RUN_TEST(test_one_look_reads_at_most_its_byte_cap);
     return UNITY_END();
 }

@@ -21,7 +21,8 @@ int SerialFeed::next() {
 size_t SerialFeed::next_size() {
     // Once per call: the loop asks every frame, and a byte read now arrived since the last ask.
     const uint32_t now = clock_ ? clock_() : 0;
-    while (!complete_) {
+    for (size_t seen = 0; !complete_; ++seen) {
+        if (seen == kMostPerCall) return 0;
         const int next = this->next();
         if (next < 0) {
             // Nothing waiting and nothing read for kQuietMs inside a frame: it was cut (DeckBridge writes each whole),

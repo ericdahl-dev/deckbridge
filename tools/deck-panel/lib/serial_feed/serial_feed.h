@@ -28,6 +28,9 @@ class SerialFeed : public feed_drain::Socket {
 public:
     /// A frame with no byte for this long is dropped: DeckBridge writes each frame whole, so it was cut (#667).
     static constexpr uint32_t kQuietMs = 100;
+    /// One look reads at most this many bytes (Codex on #754): a frame of 1,472 B, escaped, fits; a stream of text or
+    /// a runaway frame can't hold the read step, and the rest waits for the next look.
+    static constexpr size_t kMostPerCall = 4096;
 
     /// `clock`: milliseconds (millis on the board), to drop a cut frame; without one, a cut frame waits for an END.
     explicit SerialFeed(Bytes& bytes, Text* text = nullptr, feed_drain::Clock clock = nullptr)
