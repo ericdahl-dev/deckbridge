@@ -219,6 +219,19 @@ void test_a_lead_lights_the_next_beat_that_much_early() {
     TEST_ASSERT_EQUAL(3, clock.beat_at(1888));  // due at 1938, less 50
 }
 
+// #718: the lead is longer than the time since an edge just heard; that beat still shows, from its message until the
+// lead brings the next, and the next holds through its own message: no box skipped or lit twice.
+void test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge() {
+    BeatClock clock(50);
+    clock.edge(1, 1000);
+    clock.edge(2, 1469);
+    for (uint32_t t = 1469; t < 1888; ++t) TEST_ASSERT_EQUAL(2, clock.beat_at(t));
+    for (uint32_t t = 1888; t < 1938; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
+    clock.edge(3, 1938);
+    for (uint32_t t = 1938; t < 2356; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
+    TEST_ASSERT_EQUAL(4, clock.beat_at(2357));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -240,5 +253,6 @@ int main(int, char**) {
     RUN_TEST(test_the_clock_bpm_just_after_the_first_edge_times_it);
     RUN_TEST(test_a_clock_bpm_after_a_stop_doesnt_restart_it);
     RUN_TEST(test_a_lead_lights_the_next_beat_that_much_early);
+    RUN_TEST(test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge);
     return UNITY_END();
 }
