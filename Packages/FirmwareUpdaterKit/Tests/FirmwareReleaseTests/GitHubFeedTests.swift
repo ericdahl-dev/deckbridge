@@ -69,21 +69,22 @@ func aDraftOrPreReleaseIsNeverFetched(draft: Bool, prerelease: Bool) async throw
 @Test func aReleaseWithoutItsSignatureGivesNothing() async throws {
     let github = publishedGitHub()
     github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: ["manifest.json", "catalog.json"]))
-    await #expect(throws: FeedError.missingAsset("manifest.sig")) { try await GitHubReleaseFeed(http: github).latest() }
+    await #expect(throws: FeedError.nothingPublished) { try await GitHubReleaseFeed(http: github).latest() }
 }
 
 /// GitHub can't be reached, answers with an error, or with something that isn't a release: the fetch is "unreachable",
 /// and the firmware built into the app stays in use.
-@Test(arguments: ["release 404", "release 500", "release timeout", "release not JSON", "asset 403", "asset timeout"])
+@Test(arguments: ["release 500", "release timeout", "release not JSON", "asset 403", "asset 404", "asset timeout"])
 func anythingWrongTalkingToGitHubIsUnreachableAndTheBuiltInStays(_ fault: String) async throws {
     let github = publishedGitHub()
     let stored = "https://objects.githubusercontent.com/github-production-release-asset/manifest.sig?sig=x"
     switch fault {
-    case "release 404": github.answers[latestURL] = HTTPResponse(status: 404, body: Data())
     case "release 500": github.answers[latestURL] = HTTPResponse(status: 500, body: Data())
     case "release timeout": github.timingOut = [latestURL]
     case "release not JSON": github.answers[latestURL] = HTTPResponse(status: 200, body: Data("<html>".utf8))
     case "asset 403": github.answers[stored] = HTTPResponse(status: 403, body: Data())
+    // Listed, so a release is published: its download failing is the network's, not "none published yet".
+    case "asset 404": github.answers[stored] = HTTPResponse(status: 404, body: Data())
     default: github.timingOut = [stored]
     }
     let builtIn = try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa")
