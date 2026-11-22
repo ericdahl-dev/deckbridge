@@ -1,5 +1,6 @@
 import AppKit
 import FirmwareCatalog
+import LC6000Update
 import SwiftUI
 import UnitCheck
 
@@ -49,7 +50,7 @@ final class BackupModel {
         let report = await UnitCheck(known: Self.known, log: FileLog.shared)
             .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: Self.stamp())
         update = report.read.map { UpdateModel(read: $0) }
-        // With a read, the update's view of it: a chip already running this app's patch is said to (#748).
+        // With a read, the update's view of it: a chip already running DeckBridge's firmware is said to (#748).
         result = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
     }
 
@@ -66,16 +67,7 @@ final class BackupModel {
     }
 
     static func text(_ report: UnitCheck.Result) -> String {
-        if let refusal = report.refusal { return refusal }
-        var lines = ["Backup saved: read twice and the same, \(report.files.count) files."]
-        if let found = report.identified {
-            let chip = found.kind == .display ? "Display chip" : "Top panel chip"
-            if let version = found.version {
-                lines.append("\(chip): firmware \(version)\(found.ours ? ", with DeckBridge's changes already on it" : "").")
-            }
-            if let refusal = found.refusal { lines.append(refusal) }
-        }
-        return lines.joined(separator: "\n")
+        report.refusal ?? UpdateFlow.backupLine(files: report.files.count, identified: report.identified)
     }
 }
 

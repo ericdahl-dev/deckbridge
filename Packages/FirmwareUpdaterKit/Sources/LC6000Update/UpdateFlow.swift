@@ -59,7 +59,7 @@ public struct UpdateFlow: Sendable {
     public var status: String? {
         switch phase {
         case .ready:
-            if case .alreadyPatched(let version) = state { return "Up to date: \(version) with this app's patch" }
+            if case .alreadyPatched(let version) = state { return "Up to date: \(version) with \(Self.ours(chip))" }
             return nil
         case .mismatch:
             return "The chip read back different, so the update didn't take. Restore your backup now."
@@ -70,21 +70,33 @@ public struct UpdateFlow: Sendable {
         }
     }
 
-    /// The backup's result line, agreeing with this flow: a chip that already runs this app's patch is said to, not
-    /// called firmware the app doesn't know (its hash or CRC is no longer stock's).
+    /// Our firmware change on a chip, in the one wording the app uses (#763).
+    static func ours(_ chip: ChipKind) -> String {
+        chip == .display ? "DeckBridge's display firmware" : "DeckBridge's top panel firmware"
+    }
+
+    static func chipName(_ chip: ChipKind) -> String { chip == .display ? "Display chip" : "Top panel chip" }
+
+    /// The backup's result line, agreeing with this flow: a chip that already runs DeckBridge's firmware is said to,
+    /// not called firmware the app doesn't know (its hash or CRC is no longer stock's).
     public func backupLine(files: Int, identified: Identified?) -> String {
-        var lines = ["Backup saved: read twice and the same, \(files) files."]
-        let chipName = chip == .display ? "Display chip" : "Top panel chip"
-        if case .alreadyPatched(let version) = state {
-            lines.append("\(chipName): firmware \(version), with this app's patch.")
-        } else if let found = identified {
+        guard case .alreadyPatched(let version) = state else { return Self.backupLine(files: files, identified: identified) }
+        return Self.saved(files) + "\n\(Self.chipName(chip)): firmware \(version), with \(Self.ours(chip))."
+    }
+
+    /// The backup's result line when no update is open for the chip: what the read identified.
+    public static func backupLine(files: Int, identified: Identified?) -> String {
+        var lines = [saved(files)]
+        if let found = identified {
             if let version = found.version {
-                lines.append("\(chipName): firmware \(version)\(found.ours ? ", with DeckBridge's changes already on it" : "").")
+                lines.append("\(chipName(found.kind)): firmware \(version)\(found.ours ? ", with \(ours(found.kind)) already on it" : "").")
             }
             if let refusal = found.refusal { lines.append(refusal) }
         }
         return lines.joined(separator: "\n")
     }
+
+    static func saved(_ files: Int) -> String { "Backup saved: read twice and the same, \(files) files." }
 
     /// The log's line for a write's outcome: fixed words, and the first address that read back different. The
     /// address is for the log only; the screen never shows hex (#763).
