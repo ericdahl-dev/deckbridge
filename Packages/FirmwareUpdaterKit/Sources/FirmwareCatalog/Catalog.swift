@@ -226,6 +226,11 @@ public struct KnownNumbers: Sendable, Hashable {
     public let topPanel: [String: String]
     /// Nothing known: every version refused for updates, backups still allowed.
     public static let none = KnownNumbers(display: [:], topPanel: [:])
+
+    public init(display: [UInt32: String], topPanel: [String: String]) {
+        self.display = display
+        self.topPanel = topPanel
+    }
 }
 
 /// What the app offers a deck panel.
