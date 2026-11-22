@@ -30,7 +30,9 @@ bool Intake::push(const uint8_t* bytes, size_t length, uint64_t at_us, deck_core
 
 int Intake::pump(feed_drain::Socket& socket, ClockUs clock, deck_core::Source source) {
     int kept = 0;
-    for (size_t size = socket.next_size(); size > 0; size = socket.next_size()) {
+    size_t looks = 0;
+    for (size_t size = socket.next_size(); size > 0 && looks < kMostPerPump; size = socket.next_size()) {
+        ++looks;
         const uint64_t at_us = clock();
         if (size > kMaxDatagram) {
             count(too_big_);

@@ -162,6 +162,17 @@ void test_pumping_a_socket_stamps_each_datagram_as_it_is_taken() {
     TEST_ASSERT_EQUAL_UINT32(1, intake.dropped());
 }
 
+// A flood (#713's firmware review): one pump looks at no more than kMostPerPump datagrams, so the receive task returns
+// to its wait and lets core 0's idle task run; the rest stay on the socket for the next pump.
+void test_one_pump_takes_no_more_than_its_share_of_a_flood() {
+    feed_intake::Intake intake;
+    FakeSocket socket;
+    for (int i = 0; i < 100; ++i) socket.waiting.push_back(deck_message(2));
+    intake.pump(socket, ticking_us);
+    TEST_ASSERT_EQUAL(100 - int(feed_intake::kMostPerPump), int(socket.waiting.size()));
+    TEST_ASSERT_EQUAL(int(2 * feed_intake::kSlots), int(feed_intake::kMostPerPump));
+}
+
 /// One datagram waiting, again and again, from fixed memory: a socket that allocates nothing itself.
 struct SameSocket : feed_drain::Socket {
     const std::vector<uint8_t>* datagram = nullptr;
@@ -272,6 +283,7 @@ int main(int, char**) {
     RUN_TEST(test_a_full_queue_drops_the_newcomer_and_counts_it);
     RUN_TEST(test_a_datagram_too_big_is_counted_and_never_queued);
     RUN_TEST(test_pumping_a_socket_stamps_each_datagram_as_it_is_taken);
+    RUN_TEST(test_one_pump_takes_no_more_than_its_share_of_a_flood);
     RUN_TEST(test_taking_and_draining_datagrams_uses_no_heap);
     RUN_TEST(test_two_tasks_at_once_lose_nothing_uncounted_and_tear_nothing);
     RUN_TEST(test_each_datagram_keeps_its_source_across_wifi_and_the_cable);

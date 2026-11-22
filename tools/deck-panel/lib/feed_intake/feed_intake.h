@@ -30,6 +30,9 @@ constexpr size_t kMaxDatagram = 1472;
 /// frame. 16 holds three frames' worth, so a frame late by two periods (a Wi-Fi rejoin, a slow chore) drops nothing;
 /// a drop is counted and the 2 s keepalive heals it. 16 x 1.5 KB = 24 KB, fixed.
 constexpr size_t kSlots = 16;
+// One pump looks at no more than this many datagrams (#713's firmware review): under a flood the receive task goes
+// back to its wait, so core 0's idle task still runs and the task watchdog stays quiet. The rest wait on the socket.
+constexpr size_t kMostPerPump = 2 * kSlots;
 static_assert((kSlots & (kSlots - 1)) == 0, "the indexes wrap cleanly only for a power of two");
 
 /// What a frame took: how many datagrams, and when the oldest and the newest of them arrived (0 if none): the

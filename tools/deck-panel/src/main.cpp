@@ -150,6 +150,9 @@ void receive_loop(void*) {
         vTaskDelay(FEED_RX_DELAY_TICKS);
 #else
         if (g_udp.wait(FEED_RX_WAIT_MS)) g_intake.pump(g_udp, clock_us);
+        // A pump takes at most kMostPerPump; if more are still waiting (a flood), give core 0's idle task a tick, or
+        // wait() returns at once forever and the task watchdog fires (#713's firmware review).
+        if (g_udp.next_size() > 0) vTaskDelay(1);
 #endif
         // #711, the USB cable: pump its reader here, after each wake, into the same intake (one producer, this task):
         //   g_intake.pump(g_cable, clock_us, deck_core::Source::cable);
