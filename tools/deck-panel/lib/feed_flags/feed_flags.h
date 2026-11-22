@@ -11,7 +11,7 @@
 //                         cable, #711) and waits again: woken by a datagram, else N ms on. Bounded, never forever: the
 //                         cable isn't a socket, so nothing could wake a wait for it. Default 5.
 //   FEED_RX_DELAY_TICKS=N the receive task doesn't wait on the socket: it looks, then sleeps N ticks (1 ms each), as
-//                         #713 did (1 there; env crowpanel-perf-rx-5ms is 5). 0, the default, is the wait above.
+//                         #713 first did (1 tick). 0, the default, is the wait above.
 // The boot line names any that differ from the default.
 #pragma once
 
