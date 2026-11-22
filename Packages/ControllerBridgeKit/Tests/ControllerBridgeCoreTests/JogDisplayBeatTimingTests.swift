@@ -134,4 +134,28 @@ struct JogDisplayBeatTimingTests {
         let sent = try #require(Self.thirdBeatSent(rig, port))
         #expect(abs(sent - sentAt) < 1e-6)
     }
+
+    @Test("16 beats at the default lead, some messages 30 ms late: each beat goes once, in order, and nothing else")
+    func steadyBeatsOnceEach() throws {
+        let (rig, port) = try Live.playing()
+        let expected = (0..<16).map { UInt8($0 % 4 + 1) }
+        for k in 0..<16 {
+            let due = 1.00 + Double(k) * 0.47
+            Self.clock(rig, Int(expected[k]), at: due + (k % 5 == 3 ? 0.03 : 0))
+        }
+        Self.tick(rig, until: 8.10)  // the last at 8.05; the next goes at 8.46
+        #expect(Self.beats(port) == expected)
+    }
+
+    @Test("The master stops after its next beat went early: the display steps back to the beat heard (the panel's model)")
+    func stopAfterEarlyBeatStepsBack() throws {
+        let (rig, port) = try Live.playing()  // the default 60 ms lead
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Sync", [.int(1)]))
+        Self.clock(rig, 1, at: 1.00)
+        Self.clock(rig, 2, at: 1.47)
+        Self.tick(rig, until: 1.90)  // 3 went at 1.88
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Playing", [.int(0)]))
+        Self.tick(rig, until: 2.50)
+        #expect(Self.beats(port) == [1, 2, 3, 2])
+    }
 }
