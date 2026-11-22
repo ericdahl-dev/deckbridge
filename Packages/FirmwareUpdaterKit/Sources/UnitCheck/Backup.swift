@@ -38,6 +38,22 @@ public enum Backup {
         return (first, files.map(\.0))
     }
 
+    /// The display chip's flash above its image, 0x08080000-0x080FFFFF (sectors 8-11), where block B goes (#751): read
+    /// twice and compared, saved only when both match, as the app is.
+    public static func upper(reader: DFUReader, into folder: URL, stamp: String) async throws
+        -> (bytes: [UInt8], file: URL) {
+        if insideARepo(folder) { throw BackupError.insideARepo }
+        let first = try await reader.read(address: upperArea.address, length: upperArea.length)
+        let second = try await reader.read(address: upperArea.address, length: upperArea.length)
+        guard first == second else { throw BackupError.readsDiffer }
+        let file = folder.appendingPathComponent("lc6000-display-upper-\(stamp).bin")
+        try Data(first).write(to: file, options: .withoutOverwriting)
+        return (first, file)
+    }
+
+    /// Block B's area on the display chip.
+    public static let upperArea = (address: UInt32(0x0808_0000), length: 0x8_0000)
+
     /// The folder or any folder above it holds `.git`.
     static func insideARepo(_ folder: URL) -> Bool {
         var path = folder.standardizedFileURL.resolvingSymlinksInPath().path
