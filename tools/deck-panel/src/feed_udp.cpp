@@ -128,6 +128,12 @@ size_t FeedUdp::read(uint8_t* into, size_t room) {
     // Straight into the caller's slot. Whatever didn't fit goes too: one datagram is one message.
     const ssize_t got = recvfrom(fd_, into, room, MSG_DONTWAIT, nullptr, nullptr);
     pending_ = 0;
+    if (got < 0 && errno != EWOULDBLOCK && errno != EAGAIN) {
+        // As in next_size(): a hard error would come back at every wake, so shut, and poll() reopens it.
+        Serial.printf("deck panel: feed port read failed (errno %d); reopening\n", errno);
+        shut();
+        return 0;
+    }
 #if !FEED_RX_TASK && defined(PANEL_PERF_LOG)
     if (got > 0) perf_log::feed_read(now_us());
 #endif

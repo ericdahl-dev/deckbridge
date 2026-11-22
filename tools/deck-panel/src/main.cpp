@@ -1,7 +1,8 @@
 // The deck panel (#490, #620): joins Wi-Fi, listens for DeckBridge's display feed and shows the deck in front, or the
 // waiting screen with its address and port. The core and LVGL run on Arduino's loop task (core 1): the core isn't
-// thread-safe. The feed's socket is the receive task's (core 0, with lwIP, #664): it stamps each datagram as it
-// arrives into a fixed queue (lib/feed_intake), and the loop's frame drains that into the core. Built with
+// thread-safe. By default (#713) the loop's frame reads the feed's socket itself, in its read step. Built with
+// FEED_RX_TASK=1 (lib/feed_flags), a receive task on core 0 owns the socket instead (#664): it stamps each datagram as
+// it arrives into a fixed queue (lib/feed_intake), and the loop's frame drains that into the core. Built with
 // DECK_PANEL_TEST_SCREEN (env crowpanel-test), it shows the test screen (#615) instead, with no Wi-Fi.
 //
 // One frame clock (#663, lib/frame_clock): loop() is one frame. It waits for the panel's latch and the vsync after it
@@ -215,9 +216,9 @@ void build_screen() {
 // framebuffers are PSRAM, its fonts flash rodata) can evict the preload, and then the copy runs cold, 667-969 us
 // against its 666 us margin. That copy ends by +4.26 ms at worst (the slowest seen, cold); with the loop asleep it
 // ran at most 589 us (owner's run c4), ending by about +3.9 ms. So render and refresh start at +4.3 ms, past even
-// the cold worst. The feed's drain runs in the gap: it reads the intake's slots (g_intake, a static in internal
-// RAM) and feeds the core, another, with no heap and no socket call. Only its code and a few flash constants pass
-// through the caches. -DPANEL_DRAW_AT_US=0 drops the hold.
+// the cold worst. The feed's drain runs in the gap and feeds the core, with no heap. By default it reads the socket
+// (two recvfrom calls a datagram, a peek and the read, as WiFiUDP did); with the receive task it reads the intake's
+// slots (g_intake, a static in internal RAM) and makes no socket call. -DPANEL_DRAW_AT_US=0 drops the hold.
 #ifndef PANEL_DRAW_AT_US
 #define PANEL_DRAW_AT_US 4300
 #endif
@@ -271,9 +272,9 @@ class PanelBoard : public frame_clock::Board {
     void read_feed() override {
         MARK(read);
 #ifndef DECK_PANEL_TEST_SCREEN
-        // At the frame's start, the vsync after the latch, in the gap before the draw (PANEL_DRAW_AT_US): what the
-        // receive task queued since the last frame, each datagram at its arrival (#664). Only what was queued when it
-        // looked, so never more than 16, and no socket call: internal RAM and the core.
+        // At the frame's start, the vsync after the latch, in the gap before the draw (PANEL_DRAW_AT_US): the feed
+        // that came since the last frame. With the receive task, what it queued, each datagram at its arrival (#664),
+        // never more than 16 and no socket call; by default, the socket itself, drained here (feed_drain).
 #if FEED_RX_TASK
         const feed_intake::Drained got = g_intake.drain(g_core);
         g_read = got.count;
