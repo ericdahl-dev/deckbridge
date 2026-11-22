@@ -74,7 +74,7 @@ No. DeckBridge works with Syndicate only. Quit djay Pro, Engine DJ or any other 
 
 ### Which controllers are supported?
 
-Only the Denon LC6000 PRIME, today. To help add yours, DeckBridge 1.2's Help add it… (in the panel) or Controller not found? (in Settings) records what your controller sends, and you choose whether to email the file: https://getdeckbridge.app/support/#add-controller
+Only the Denon LC6000 PRIME, today. To help add yours, DeckBridge's Help add it… (in the panel) or Controller not found? (in Settings) records what your controller sends, and you choose whether to email the file: https://getdeckbridge.app/support/#add-controller
 
 ### The controller works, but the LEDs stay dark.
 
