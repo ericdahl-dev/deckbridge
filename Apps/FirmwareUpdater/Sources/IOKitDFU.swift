@@ -82,8 +82,9 @@ enum IOKitDFU {
             FileLog.shared.log("update mode: alt name, raw read failed (code \((error as NSError).code))")
             return nil
         }
-        let text = StringDescriptor.text(Array(Data(referencing: data).prefix(transferred)))
-        FileLog.shared.log("update mode: alt name, raw read \(transferred) bytes, " + (text == nil ? "not a string" : "read"))
+        let bytes = [UInt8](Data(referencing: data).prefix(transferred))
+        let text = StringDescriptor.text(bytes)
+        FileLog.shared.log("update mode: alt name, raw read \(StringDescriptor.header(bytes)), " + (text == nil ? "not a string" : "read"))
         return text
     }
 }
