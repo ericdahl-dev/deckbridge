@@ -15,12 +15,28 @@ public struct SystemClock: UpdaterClock {
     public func sleep(for seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
 }
 
+/// The firmware the updater offers (#704), as the screen says it: where it comes from, and why the newest release
+/// wasn't used (nil when it was). Plain words, so this target never sees the release code.
+public struct FirmwareLine: Equatable, Sendable {
+    public let source: String
+    public let reason: String?
+
+    public init(source: String, reason: String?) {
+        self.source = source
+        self.reason = reason
+    }
+}
+
 /// The app's model (#688): finds what is plugged in, and looks again when USB changes, so a newly installed driver
 /// shows without a restart. Looks never overlap: one asked for during a look runs once, after it.
 @MainActor @Observable
 public final class Updater {
     public private(set) var screen = UpdaterScreen(found: Found(), lc6000WarningAccepted: false)
     public private(set) var looking = false
+    /// The firmware offered (#704): nil until `loadFirmware()` has its answer. Its own line, never a device's detail.
+    public private(set) var firmware: FirmwareLine?
+    private let fetchFirmware: (@Sendable () async -> FirmwareLine)?
+    private var firmwareAsked = false
     private var lookAgain = false
     private var found = Found()
     private var lc6000WarningAccepted = false
@@ -39,8 +55,9 @@ public final class Updater {
     /// `changes` yields when a USB device arrives or leaves, or a serial port appears.
     /// `log`: the finder's log, for the line when the wait for the port is up.
     public init(finder: DeviceFinder, changes: AsyncStream<Void>, clock: any UpdaterClock = SystemClock(),
-                log: (any LogSink)? = nil) {
+                log: (any LogSink)? = nil, firmware: (@Sendable () async -> FirmwareLine)? = nil) {
         self.finder = finder
+        self.fetchFirmware = firmware
         self.changes = changes
         self.clock = clock
         self.log = log
@@ -59,6 +76,13 @@ public final class Updater {
             show()
         } while lookAgain
         looking = false
+    }
+
+    /// Fetches the firmware line, once: for launch. Looking again never fetches it (one GitHub request per launch).
+    public func loadFirmware() async {
+        guard let fetchFirmware, !firmwareAsked else { return }
+        firmwareAsked = true
+        firmware = await fetchFirmware()
     }
 
     /// Looks again on every USB change, until the stream ends.
