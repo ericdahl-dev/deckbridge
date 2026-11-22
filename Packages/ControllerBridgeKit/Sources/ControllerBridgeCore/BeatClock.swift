@@ -16,6 +16,8 @@ struct BeatClock {
     static let averagedEdges = 4
     /// An edge more than this many beats after the last starts the clock over: a gap, not a beat.
     static let gapBeats = 1.5
+    /// An edge further than this off the grid isn't jitter: the clock moves to it at once, keeping the tempo.
+    static let snapDistance = 0.040
     /// A boundary hit exactly is the beat's: times are sums of seconds, so allow for their rounding.
     private static let epsilon = 1e-9
 
@@ -40,6 +42,9 @@ struct BeatClock {
         let sinceLast = at - edgeAt
         // Too long since the last for one beat: a gap (the master stopped, or the feedback went quiet), not a length.
         let gap = sinceLast > (period > 0 ? Self.gapBeats * period : Self.longestBeat)
+        if self.beat != 0, !gap, period > 0, beat != Self.next(self.beat) {
+            return snap(beat, at: at)  // out of turn: a cue jump on the master
+        }
         if self.beat == 0 || beat != Self.next(self.beat) || gap {
             // A first beat, or not the next one: a new run starts here.
             self.beat = beat
@@ -56,6 +61,9 @@ struct BeatClock {
             edgeAt = at
             return
         }
+        guard abs(sinceLast - period) <= Self.snapDistance else {
+            return snap(beat, at: at)  // in turn but far off the grid: a loop wrapping, a jump
+        }
         let error = min(max(sinceLast - period, -Self.maxError), Self.maxError)
         edgeAt += period + Self.phaseGain * error
         if edges <= Self.averagedEdges {
@@ -63,6 +71,13 @@ struct BeatClock {
         } else {
             period += Self.tempoGain * error
         }
+    }
+
+    /// The beat as heard, from now; the tempo holds, and from here on only the lock moves it.
+    private mutating func snap(_ beat: Int, at: Double) {
+        self.beat = beat
+        edgeAt = at
+        edges = max(edges, Self.averagedEdges)
     }
 
     /// The beat to show at `now`, 1-4; 0 for none.

@@ -112,4 +112,29 @@ struct BeatClockTests {
         clock.edge(4, at: Self.ms(6469))
         #expect(clock.beat(at: Self.ms(6938)) == 1)
     }
+
+    /// 8 beats in time at 128 BPM from 1000 ms: the last (beat 4) at 4281.
+    static func locked() -> BeatClock {
+        var clock = BeatClock()
+        for k in 0..<8 { clock.edge(beat(k), at: ms((1000 + Double(k) * 468.75).rounded())) }
+        return clock
+    }
+
+    @Test("A cue jump on the master: a beat out of turn shows at once, and the tempo holds")
+    func outOfTurnKeepsTempo() throws {
+        var clock = Self.locked()
+        clock.edge(3, at: Self.ms(4500))  // 2 was next, at 4750
+        #expect(clock.beat(at: Self.ms(4500)) == 3)
+        let shown = try #require(Self.firstShows(clock, 4, from: 4500, to: 5200))
+        #expect(abs(shown - 4969) <= 3)
+    }
+
+    @Test("A loop wrapping on the master: the next beat far off the grid moves the clock at once, tempo held")
+    func farOffGridSnaps() throws {
+        var clock = Self.locked()
+        clock.edge(1, at: Self.ms(4600))  // due at 4750
+        #expect(clock.beat(at: Self.ms(4600)) == 1)
+        let shown = try #require(Self.firstShows(clock, 2, from: 4600, to: 5400))
+        #expect(abs(shown - 5069) <= 3)
+    }
 }
