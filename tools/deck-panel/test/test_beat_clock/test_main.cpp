@@ -239,6 +239,22 @@ void test_a_lead_holds_through_a_tempo_change() {
     TEST_ASSERT_UINT32_WITHIN(2, 4660, first_shows(clock, 1, 4281, 5000));
 }
 
+// #718: the lead shows nothing a stop could take back beyond what predicting allows: never two past the last edge, the
+// beat heard once stopped, and with no beat or no tempo, as without a lead.
+void test_a_lead_never_shows_more_than_predicting_allows() {
+    BeatClock none(50);
+    TEST_ASSERT_EQUAL(0, none.beat_at(1000));
+    BeatClock one(50);
+    one.edge(3, 1000);
+    TEST_ASSERT_EQUAL(3, one.beat_at(5000));      // one edge: no tempo, nothing ahead
+    BeatClock clock = locked(50);                 // the last edge, beat 4, at 4281
+    TEST_ASSERT_EQUAL(1, clock.beat_at(4720));    // 1, lit early (due 4750)
+    TEST_ASSERT_EQUAL(1, clock.beat_at(9000));    // and never 2
+    clock.stop();
+    TEST_ASSERT_EQUAL(4, clock.beat_at(4730));    // stopped: the beat heard
+    TEST_ASSERT_EQUAL(4, clock.beat_at(9000));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -262,5 +278,6 @@ int main(int, char**) {
     RUN_TEST(test_a_lead_lights_the_next_beat_that_much_early);
     RUN_TEST(test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge);
     RUN_TEST(test_a_lead_holds_through_a_tempo_change);
+    RUN_TEST(test_a_lead_never_shows_more_than_predicting_allows);
     return UNITY_END();
 }
