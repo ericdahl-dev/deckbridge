@@ -55,6 +55,8 @@ jobs:
           # The domain docs (GLOSSARY.md, docs/adr): every term still used, every ADR numbered, dated and linked.
           python3 -I scripts/test_check_domain_docs.py
           python3 -I scripts/check_domain_docs.py
+          # The firmware updater's launch smoke check (#734), against a stand-in app: the real run is in the app job.
+          python3 -I scripts/test_updater_smoke.py
       - name: LC6000 firmware tool tests
         # tools/lc6000-firmware (#430): the tests build synthetic DfuSe files, so no vendor data is needed.
         run: python3 -I -m unittest discover tools/lc6000-firmware
