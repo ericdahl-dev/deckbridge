@@ -79,6 +79,8 @@ private:
     bool cable_heard_ = false;
     /// Each source's bundle numbers (#750): [0] Wi-Fi, [1] the cable.
     feed_seq::Counter seq_[2];
+    /// When each source's last numbered bundle came: past kWaitAfterMs quiet, the next one starts a new count.
+    uint32_t seq_ms_[2] = {0, 0};
     uint32_t last_cable_ms_ = 0;
     Network network_ = Network::connected;
     char ip_[16] = "";

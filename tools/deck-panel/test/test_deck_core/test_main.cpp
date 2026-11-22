@@ -707,6 +707,17 @@ void test_each_source_counts_its_own_numbers() {
     TEST_ASSERT_EQUAL_UINT32(2, core.lost());
 }
 
+// After the feed was quiet past the wait (a restart overlapping an outage, #750's review), the next number starts a
+// new count: 40, then nothing for 5 s, then 46 is not 5 lost.
+void test_after_a_quiet_feed_the_count_starts_again() {
+    deck_core::DeckCore core;
+    feed(core, numbered(40, {int_message(prefix + "deck", 2)}), 100);
+    feed(core, numbered(46, {int_message(prefix + "deck", 2)}), 100 + deck_core::DeckCore::kWaitAfterMs + 1);
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
+    feed(core, numbered(48, {int_message(prefix + "deck", 2)}), 100 + deck_core::DeckCore::kWaitAfterMs + 40);
+    TEST_ASSERT_EQUAL_UINT32(1, core.lost());
+}
+
 // A DeckBridge from before #750 numbers nothing: nothing seen, so no count can be told.
 void test_an_unnumbered_feed_is_not_seen() {
     deck_core::DeckCore core;
@@ -1150,6 +1161,7 @@ int main(int, char**) {
     RUN_TEST(test_numbered_bundles_count_the_ones_that_never_came);
     RUN_TEST(test_each_source_counts_its_own_numbers);
     RUN_TEST(test_an_unnumbered_feed_is_not_seen);
+    RUN_TEST(test_after_a_quiet_feed_the_count_starts_again);
     RUN_TEST(test_a_clipped_stream_after_boot_never_says_no_track_loaded);
     RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
     RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);

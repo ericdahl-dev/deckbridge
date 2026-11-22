@@ -219,7 +219,13 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms, Sourc
     }
     // DeckBridge's bundle number (#750), first in every bundle: counted per source, before anything else is read.
     if (std::strcmp(message.name, "seq") == 0) {
-        if (message.type == 'i') seq_[source == Source::cable ? 1 : 0].saw(static_cast<uint32_t>(message.i));
+        if (message.type == 'i') {
+            const int at = source == Source::cable ? 1 : 0;
+            // Quiet past the wait (an outage, maybe with a DeckBridge restart in it, #750's review): count afresh.
+            if (static_cast<int32_t>(now_ms - seq_ms_[at]) > static_cast<int32_t>(kWaitAfterMs)) seq_[at].restart();
+            seq_ms_[at] = now_ms;
+            seq_[at].saw(static_cast<uint32_t>(message.i));
+        }
         return true;
     }
     // An address this panel doesn't know is a newer DeckBridge's (ADR 0011): ignored, but the feed is alive.

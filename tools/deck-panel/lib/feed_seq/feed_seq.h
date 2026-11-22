@@ -14,6 +14,8 @@ class Counter {
 
     /// A bundle numbered `seq` came.
     void saw(uint32_t seq);
+    /// The next number starts a new count (the feed was quiet): a baseline, not a gap.
+    void restart() { seen_ = false; }
     /// Datagrams missing since boot.
     uint32_t lost() const;
     /// A numbered bundle has come at least once: a DeckBridge from before #750 sends none.
