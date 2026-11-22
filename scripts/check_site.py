@@ -621,6 +621,9 @@ def problems(root, app_prompts=None, release=None):
             if SHIFT_FADER.search(plain_words(text, file.endswith(".html"))):
                 out.append(f"{file}: says Shift + Needle Drop moves the channel fader; since #729 the plain touch does, "
                            "and Shift seeks")
+            # A tag between them ("<b>Controller not found?</b>.") counts: tags become spaces in plain_words.
+            if re.search(r"\?\s*\.(?!\.)", plain_words(text, file.endswith(".html"))):
+                out.append(f'{file}: has "?." (a question mark then a full stop)')
             if OLD_CAPTURE_BUTTON in text:
                 out.append(f"{file}: names the button {OLD_CAPTURE_BUTTON}, which 1.1 replaced with Help add it\u2026 "
                            "and Controller not found?")

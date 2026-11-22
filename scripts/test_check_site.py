@@ -628,6 +628,12 @@ class CheckSiteTests(unittest.TestCase):
             "and Shift seeks",
         ])
 
+    def test_no_sentence_ends_in_a_question_mark_and_a_full_stop(self):
+        # #652: "or in the app with Help add it… or Controller not found?." A label ending in "?" ends the sentence.
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a> <p>Choose <b>Controller not found?</b>.</p>'
+                                                         '<p>Is it? Yes.</p>')})
+        self.assertEqual(check_site.problems(root), ['support/index.html: has "?." (a question mark then a full stop)'])
+
     def test_the_old_help_add_a_controller_button_is_named_nowhere(self):
         # #652's audit: 1.1 replaced Settings' "Help add a controller…" button with Help add it… (in the panel) and
         # Controller not found? (Settings › Controller). The capture window's own heading, without the ellipsis, stays.
