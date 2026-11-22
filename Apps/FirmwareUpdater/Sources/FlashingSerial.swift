@@ -105,7 +105,7 @@ actor FlashingSerial: BootloaderLine {
         guard ioctl(fd, Self.iossioSpeed, &speed) == 0 else { throw FlashError.lineLost }
     }
 
-    /// The whole time even when the task is cancelled (BootloaderLine.pause): not Task.sleep, which returns at once
+    /// The whole time even when the task is canceled (BootloaderLine.pause): not Task.sleep, which returns at once
     /// then and would cut the reset pulse to a millisecond.
     func pause(_ seconds: Double) async {
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in

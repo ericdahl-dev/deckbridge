@@ -9,7 +9,7 @@ public protocol BootloaderLine: Sendable {
     /// Whatever arrived within `timeout` seconds.
     func read(timeout: Double) async throws -> [UInt8]
     func setSpeed(_ baud: Int) async throws
-    /// Waits `seconds`, the whole time even in a cancelled task: the reset pulse that leaves the panel running is
+    /// Waits `seconds`, the whole time even in a canceled task: the reset pulse that leaves the panel running is
     /// timed with it, and cutting it short can leave the chip in its bootloader (embedded review, #687).
     func pause(_ seconds: Double) async
     /// Closes the port. The line is unusable after.
@@ -33,10 +33,10 @@ public enum FlashError: Error, Equatable {
     case notADeckPanel
     /// Another app holds the panel's cable: DeckBridge, sending over it.
     case portBusy
-    /// The owner cancelled; the panel was reset into its app.
-    case cancelled
-    /// The owner cancelled after writing began: the panel was reset, but what it boots may be half written.
-    case cancelledWhileWriting
+    /// The owner canceled; the panel was reset into its app.
+    case canceled
+    /// The owner canceled after writing began: the panel was reset, but what it boots may be half written.
+    case canceledWhileWriting
     /// The line itself failed: the cable came out, or the port went away.
     case lineLost
     /// The image to write isn't an ESP32-S3 app image that fits app0.
@@ -44,7 +44,7 @@ public enum FlashError: Error, Equatable {
 }
 
 /// The ESP32-S3's ROM serial bootloader on a deck panel, reached through the CrowPanel's auto-reset circuit (#687).
-/// Whatever happens (a failure, the owner cancelling), the panel is left running its app: both lines off.
+/// Whatever happens (a failure, the owner canceling), the panel is left running its app: both lines off.
 public actor Bootloader {
     let line: any BootloaderLine
     private var reader = SlipReader()

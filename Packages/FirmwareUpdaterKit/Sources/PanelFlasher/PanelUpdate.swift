@@ -70,7 +70,7 @@ public struct PanelUpdate: Sendable {
             await bootloader.release()
             await line.close()
             let reason = Self.reason(error), written = await bootloader.hasWritten
-            return report(.failed(reason == .cancelled && written ? .cancelledWhileWriting : reason))
+            return report(.failed(reason == .canceled && written ? .canceledWhileWriting : reason))
         }
         if case .onSerial(let build) = await finder.find().panel { return report(.done(build)) }
         report(.done(nil))
@@ -86,7 +86,7 @@ public struct PanelUpdate: Sendable {
 
     static func reason(_ error: any Error) -> FlashError {
         if let flash = error as? FlashError { return flash }
-        if error is CancellationError { return .cancelled }
+        if error is CancellationError { return .canceled }
         return .lineLost
     }
 }
@@ -116,8 +116,8 @@ extension PanelUpdate.Step {
         case .noBootloader, .refused, .noAnswer: return "The panel didn't answer. Unplug it, plug it back in, and try again."
         case .writeFailed(let address): return "Writing failed at 0x\(String(address, radix: 16, uppercase: true)). \(mayNotStart)"
         case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
-        case .cancelled: return "Cancelled. The panel was restarted."
-        case .cancelledWhileWriting: return "Cancelled while writing. \(mayNotStart)"
+        case .canceled: return "Canceled. The panel was restarted."
+        case .canceledWhileWriting: return "Canceled while writing. \(mayNotStart)"
         case .lineLost: return "The cable was lost. Plug the panel back in and try again."
         case .notAPanelImage: return "The firmware file isn't a deck panel image. Nothing was written."
         }

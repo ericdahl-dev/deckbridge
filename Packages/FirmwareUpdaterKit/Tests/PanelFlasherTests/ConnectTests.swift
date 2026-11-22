@@ -24,7 +24,7 @@ final class FlowBox: @unchecked Sendable { var task: Task<Void, Never>? }
 
 /// The owner cancels while the port is open (#687): the panel is reset into its app with both lines off, never left
 /// held in reset or in the bootloader.
-@Test func cancellingMidConnectLeavesThePanelRunningItsApp() async throws {
+@Test func cancelingMidConnectLeavesThePanelRunningItsApp() async throws {
     let rom = FakeROM()
     await rom.setAnswers(false)
     let box = TaskBox()

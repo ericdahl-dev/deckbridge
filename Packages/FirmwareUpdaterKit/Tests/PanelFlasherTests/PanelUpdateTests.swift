@@ -110,7 +110,7 @@ func anImageThatIsNotAPanelAppIsRefusedBeforeTheCableIsOpened(image: [UInt8]) as
 
 /// The owner cancels once writing has begun: app0 may be half written, so the owner is told the panel may not start,
 /// and it is still reset into whatever it boots.
-@Test func cancellingMidWriteSaysThePanelMayNotStart() async throws {
+@Test func cancelingMidWriteSaysThePanelMayNotStart() async throws {
     let rom = await deckPanel()
     let box = FlowBox()
     await rom.setAfterBlock { seq in if seq == 1 { box.task?.cancel() } }
@@ -119,7 +119,7 @@ func anImageThatIsNotAPanelAppIsRefusedBeforeTheCableIsOpened(image: [UInt8]) as
     let steps = Steps()
     box.task = Task { await update.run(app, on: "/dev/cu.panel", wipeWiFi: false) { steps.seen.append($0) } }
     _ = await box.task?.result
-    #expect(steps.withoutProgress.last == .failed(.cancelledWhileWriting))
+    #expect(steps.withoutProgress.last == .failed(.canceledWhileWriting))
     #expect(await rom.mode == .app)
     #expect(await rom.closed)
 }
