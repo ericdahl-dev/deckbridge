@@ -28,6 +28,9 @@ struct UnitCheckLogTests {
         #expect(result.identified?.version == "00.50")
         #expect(result.files.count == 2)
         #expect(result.refusal == nil)
+        // The read itself, for an update's plan this session (#693): the app area as saved.
+        #expect(result.read?.kind == .display)
+        #expect(result.read?.app.count == 0x7_8000)
         #expect(lines.lines == [
             "LC6000 display chip in update mode",
             "LC6000 display chip: firmware 00.50, CRC 0x3D498706",

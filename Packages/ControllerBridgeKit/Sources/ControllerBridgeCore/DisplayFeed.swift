@@ -152,10 +152,11 @@ final class DisplayFeed {
     /// A bundle at most this many bytes (#636), well under Wi-Fi's MTU, so one never goes out in IP fragments.
     static let bundleCeiling = 1200
 
-    /// The messages as bundles of at most `bundleCeiling` bytes each, in order. With text capped at `textCap`, no one
+    /// The messages as bundles of at most `bundleCeiling` bytes each with their seq, in order. With text capped at `textCap`, no one
     /// message comes near the ceiling, so it holds for every bundle.
     static func bundles(_ messages: [OSCMessage]) -> [[OSCMessage]] {
-        let header = 16, sizeField = 4
+        // The header, and the seq each bundle starts with when it's sent (#750).
+        let sizeField = 4, header = 16 + sizeField + seq(0).encoded().count
         var out: [[OSCMessage]] = [], current: [OSCMessage] = [], size = header
         for message in messages {
             let added = sizeField + message.encoded().count
@@ -171,6 +172,18 @@ final class DisplayFeed {
         return out
     }
 
+    /// The feed's sequence number (#750): first in every bundle, so a display can count the datagrams it never got. A
+    /// display that doesn't know the address ignores it (ADR 0011). An OSC int carries the UInt32's bit pattern.
+    static func seq(_ number: UInt32) -> OSCMessage { OSCMessage(prefix + "seq", [.int(Int32(bitPattern: number))]) }
+    /// The last bundle's number: 0 before the first. Internal for the wrap's test.
+    var lastSeq: UInt32 = 0
+
+    /// Sends one bundle, numbered.
+    private func send(_ bundle: [OSCMessage], to sender: any OSCSender) {
+        lastSeq &+= 1
+        sender.send(bundle: [Self.seq(lastSeq)] + bundle)
+    }
+
     /// The goodbye (#651): DeckBridge is quitting or the feed was turned off; a display shows its own idle look.
     static let goodbye = OSCMessage(prefix + "goodbye", [.int(1)])
     /// A datagram has gone out since the destination opened: there's a display to say goodbye to.
@@ -180,7 +193,7 @@ final class DisplayFeed {
     /// the destination opens again or the feed is turned on.
     func goodbye() {
         guard greeted, let sender else { return }
-        sender.send(bundle: [Self.goodbye])
+        send([Self.goodbye], to: sender)
         say("goodbye")
         greeted = false
         open = false
@@ -237,6 +250,8 @@ final class DisplayFeed {
     func resend(at now: Double) {
         sent = [:]
         open = true
+        // A display starts counting again here (#750): this bundle is 1, never a gap after the last destination's.
+        lastSeq = 0
         holdUntil = now + Self.holdSeconds
         holdSaid = false
         snapshotReason = "destination open"
@@ -286,7 +301,7 @@ final class DisplayFeed {
         // with a deck playing, each snapshot a burst of 20.
         if fastSent { fastDue = (fastDue.map { max($0, now - Self.fastInterval) } ?? now) + Self.fastInterval }
         let bundles = Self.bundles(changes)
-        for bundle in bundles { sender.send(bundle: bundle) }
+        for bundle in bundles { send(bundle, to: sender) }
         if !bundles.isEmpty { greeted = true }
         let count = changes.count
         if snapshot {
