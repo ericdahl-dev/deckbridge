@@ -42,11 +42,13 @@ public struct UpdateFlow: Sendable {
     public var canConfirm: Bool { phase == .ready && fresh && plan.map { !$0.sectors.isEmpty } == true }
     public var confirmTitle: String { "Write to the LC6000's \(name)?" }
     public var confirmButton: String { "Write to the \(name)" }
+    /// The risk first, in plain words (#762), and the word to type. No addresses: those are `confirmDetails`.
     public var confirmBody: String {
-        (plan?.text ?? "") + "\n\n" + "If this goes wrong, the unit may not start, and the worst case needs a hardware "
-            + "debug probe to recover it. Your backup stays on this Mac. Quit DeckBridge first, and keep the LC6000 "
-            + "powered and plugged in until it's done."
+        "If it goes wrong, the LC6000 may not start, and the worst case needs a hardware probe. Your backup stays on "
+            + "this Mac. Keep it on and plugged in until it's done.\n\nType \(Confirmation.word) to write."
     }
+    /// Exactly what is written where, behind the confirm's Details.
+    public var confirmDetails: String { plan?.text ?? "" }
 
     /// After a mismatch: the backup's bytes back in the same sectors.
     public var canRestore: Bool { if case .mismatch = phase { true } else { false } }
