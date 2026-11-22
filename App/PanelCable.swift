@@ -36,6 +36,8 @@ final class PanelCable: BytePort, @unchecked Sendable {
 
     // Main thread.
     private var enabled = false
+    /// Lending the port to the Firmware Updater (#710): while lent, the port isn't looked for.
+    private var handoff = CableHandoff()
     private var timer: Timer?
     private var generation = 0
 
@@ -44,6 +46,7 @@ final class PanelCable: BytePort, @unchecked Sendable {
     func setEnabled(_ on: Bool, flush: @escaping @Sendable () -> Void) {
         guard on != enabled else { return }
         enabled = on
+        handoff.switchChanged(on: on)
         generation += 1
         timer?.invalidate()
         timer = nil
@@ -64,6 +67,7 @@ final class PanelCable: BytePort, @unchecked Sendable {
 
     /// Opens the panel's port if it's there and not open, and lets it go if it was unplugged.
     private func look() {
+        guard handoff.mayLook else { return set(.lent) }
         let found = PanelPort.find(in: Self.ports())?.path
         io.async { [weak self] in
             guard let self else { return }
@@ -76,6 +80,26 @@ final class PanelCable: BytePort, @unchecked Sendable {
                 DispatchQueue.main.async { self.onOpen?() }
             }
         }
+    }
+
+    // MARK: Lending the port to the Firmware Updater (#710)
+
+    /// The updater asked for the port: let go of it, then `reply` (on the main queue) that it's free. Always through
+    /// `io`, after any open already queued there, so a look in flight can't open the port after the reply.
+    func lend(reply: @escaping @Sendable () -> Void) {
+        let actions = handoff.releaseAsked(holding: state == .open)
+        io.async { [weak self] in
+            guard let self else { return }
+            if actions.contains(.closePort) || self.fd >= 0 { self.close(then: .lent) } else { self.set(.lent) }
+            DispatchQueue.main.async(execute: reply)
+        }
+    }
+
+    /// The updater is done: take the port back if the switch is on. Its opening sends the full snapshot (onOpen).
+    func reclaim() {
+        let actions = handoff.doneAsked(cableOn: enabled)
+        if handoff.mayLook, state == .lent { set(.noPanel) }
+        if actions.contains(.lookAgain) { look() }
     }
 
     // MARK: On `io`
