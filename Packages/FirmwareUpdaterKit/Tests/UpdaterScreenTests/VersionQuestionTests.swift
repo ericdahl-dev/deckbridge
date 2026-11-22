@@ -83,4 +83,14 @@ struct VersionQuestionTests {
         _ = await rig.finder.find()
         #expect(rig.log.lines == ["deck panel: on USB 1A86:7522, serial port present, build 1d0683f, version 1.2.0"])
     }
+
+    @Test("The screen shows the version with the build; with no version, the build alone")
+    func screenWithVersion() async {
+        let rig = Rig()
+        Self.runningPanel(rig, answering: "deck panel: build 1d0683f, version 1.2.0")
+        #expect(await rig.screen().panel.detail == "Version 1.2.0, build 1d0683f")
+        let local = Rig()
+        Self.runningPanel(local, answering: "deck panel: build 1d0683f, version 1.2.0 local")
+        #expect(await local.screen().panel.detail == "Build 1d0683f")
+    }
 }

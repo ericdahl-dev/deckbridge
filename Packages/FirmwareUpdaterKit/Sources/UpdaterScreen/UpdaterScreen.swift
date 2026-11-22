@@ -35,7 +35,8 @@ public struct UpdaterScreen: Sendable, Equatable {
         case .driverMissing: panel = DeviceSection(status: "Deck panel found", detail: "The USB driver for its chip is missing")
         case .onSerial(let build?):
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
-            panel = DeviceSection(status: "Deck panel found", detail: "Build \(build.sha)\(development)")
+            let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"
+            panel = DeviceSection(status: "Deck panel found", detail: shown + development)
         case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
