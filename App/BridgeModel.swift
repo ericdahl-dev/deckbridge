@@ -389,6 +389,7 @@ final class BridgeModel {
         cable.onOpen = { feedProducer.send(.cableFeedReady) }
         let cableFeed = DisplayFeedQueue(CableFeedSender(cable))
         #if DEBUG
+        cable.trace = DebugTrace.shared.sink
         cableFeed.trace = DebugTrace.shared.sink
         #endif
         panelCable = cable
