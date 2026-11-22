@@ -94,7 +94,7 @@ public struct DeviceFinder: Sendable {
                     log.log("deck panel: on USB \(usbID), serial port busy (another app has it)")
                 } else {
                     found.panel = .onSerial(build: build)
-                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" + ($0.version.map { ", version \($0.description)" } ?? "") } ?? "build not read"))
                 }
             } else {
                 found.panel = .driverMissing

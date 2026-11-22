@@ -75,4 +75,12 @@ struct VersionQuestionTests {
         #expect(rig.serial.writes.isEmpty)
         #expect(screen.panel.detail == UpdaterScreen.portBusy)
     }
+
+    @Test("The log has the checked build and version in fixed words, never the panel's answer as printed")
+    func logLine() async {
+        let rig = Rig()
+        Self.runningPanel(rig, answering: "deck panel: build 1d0683f, version 1.2.0")
+        _ = await rig.finder.find()
+        #expect(rig.log.lines == ["deck panel: on USB 1A86:7522, serial port present, build 1d0683f, version 1.2.0"])
+    }
 }
