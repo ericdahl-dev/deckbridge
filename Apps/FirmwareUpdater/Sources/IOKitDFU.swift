@@ -26,7 +26,10 @@ enum IOKitDFU {
             var name = ""
             if let interface = try? IOUSBHostInterface(__ioService: service, options: [], queue: nil, interestHandler: nil) {
                 let index = interface.interfaceDescriptor.pointee.iInterface
-                name = (try? interface.__string(with: Int(index), languageID: 0x0409)) as String? ?? ""
+                // Raw first: the display chip's bootloader fails IOUSBHost's string read ("Failed to get descriptor") but
+                // answers a full 255-byte GET_DESCRIPTOR (cos, on the owner's unit). The top panel chip answers both.
+                name = rawString(index: index, interface: service)
+                    ?? (try? interface.__string(with: Int(index), languageID: 0x0409)) as String? ?? ""
                 interface.destroy()
             }
             var location: UInt32 = 0
@@ -37,6 +40,27 @@ enum IOKitDFU {
             found.append(Found(device: DFUDevice(path: String(format: "%08X", location), altNames: [name]), service: service))
         }
         return found
+    }
+
+    /// String descriptor `index` (US English) by a raw GET_DESCRIPTOR of 255 bytes to the interface's device. A read:
+    /// no DFU request, nothing sent to the chip's flash. Nil when it fails or isn't a string descriptor.
+    private static func rawString(index: UInt8, interface service: io_service_t) -> String? {
+        guard index != 0 else { return nil }
+        var parent: io_registry_entry_t = 0
+        guard IORegistryEntryGetParentEntry(service, kIOServicePlane, &parent) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(parent) }
+        guard let device = try? IOUSBHostDevice(__ioService: parent, options: [], queue: nil, interestHandler: nil) else {
+            return nil
+        }
+        defer { device.destroy() }
+        let request = IOUSBDeviceRequest(bmRequestType: 0x80, bRequest: 6, wValue: 0x0300 | UInt16(index), wIndex: 0x0409,
+                                         wLength: StringDescriptor.requestLength)
+        let data = NSMutableData(length: Int(StringDescriptor.requestLength))!
+        var transferred = 0
+        guard (try? device.__send(request, data: data, bytesTransferred: &transferred, completionTimeout: 5)) != nil else {
+            return nil
+        }
+        return StringDescriptor.text(Array(Data(referencing: data).prefix(transferred)))
     }
 }
 
