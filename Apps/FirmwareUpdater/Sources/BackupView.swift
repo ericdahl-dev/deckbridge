@@ -55,7 +55,7 @@ final class BackupModel {
 
     static var known: KnownFirmware {
         let numbers = (try? Catalog.builtIn().knownNumbers) ?? KnownNumbers.none
-        return KnownFirmware(display: numbers.display, topPanel: numbers.topPanel)
+        return KnownFirmware(display: numbers.display, topPanel: numbers.topPanel, displayOurs: numbers.displayOurs)
     }
 
     static func stamp() -> String {
