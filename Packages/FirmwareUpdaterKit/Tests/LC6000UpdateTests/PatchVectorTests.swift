@@ -37,8 +37,9 @@ struct PatchVectorTests {
     }
 
     /// The image a vector describes, as tools/lc6000-firmware/test_vectors.py builds it.
-    static func element(_ v: Vector) -> [UInt8] {
-        let size = Int(v.size.dropFirst(2), radix: 16)!
+    /// `size`: the vector's own, or another (a whole app area).
+    static func element(_ v: Vector, size: Int? = nil) -> [UInt8] {
+        let size = size ?? Int(v.size.dropFirst(2), radix: 16)!
         let fill = hex(v.fill)
         var body = (0..<size).map { fill[$0 % fill.count] }
         for plant in v.plant ?? [] {
