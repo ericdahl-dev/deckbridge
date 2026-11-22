@@ -27,31 +27,42 @@ let lc6000Ports = ["LC6000 PRIME Controller", "LC6000 PRIME WD"]
 
 @Suite("Unit check: the display chip's update-mode step")
 struct UpdateModeStepTests {
-    @Test("The owner typed UPDATE: the kit's one message, sent once, to the WD port only")
+    static let confirmed = UpdateModeStep.Confirmed(clicked: UpdateModeStep.confirmButton)!
+
+    @Test("The owner confirmed: the kit's one message, sent once, to the WD port only")
     func sentOnUpdate() async throws {
         let midi = FakeMIDISend(ports: ["IAC Driver Bus 1"] + lc6000Ports)
-        let outcome = await UpdateModeStep(midi: midi, apps: FakeApps(running: [])).enter(typed: "UPDATE")
+        let outcome = await UpdateModeStep(midi: midi, apps: FakeApps(running: [])).enter(confirmed: Self.confirmed)
         #expect(outcome == .sent)
         #expect(midi.sent.count == 1)
         #expect(midi.sent.first?.port == "LC6000 PRIME WD")
         #expect(midi.sent.first?.bytes == (try kitUpdateModeMessage()))
     }
 
-    @Test("Anything but UPDATE typed: nothing is sent", arguments: ["", "update", "UPDATE ", "yes", "UPDATE\n"])
-    func notSentOtherwise(typed: String) async {
-        let midi = FakeMIDISend(ports: lc6000Ports)
-        let outcome = await UpdateModeStep(midi: midi, apps: FakeApps(running: [])).enter(typed: typed)
-        #expect(outcome == .refused("You didn't type UPDATE, so nothing was sent."))
-        #expect(midi.sent.isEmpty)
+    @Test("Only the confirm's own button confirms: Cancel or any other button gives no go-ahead, so nothing is sent")
+    func onlyTheConfirmButton() {
+        #expect(UpdateModeStep.Confirmed(clicked: UpdateModeStep.confirmButton) != nil)
+        for other in ["Cancel", "", "OK", "Write to the display chip"] {
+            #expect(UpdateModeStep.Confirmed(clicked: other) == nil)
+        }
+    }
+
+    /// The owner's decision (#762, 2026-11-22): no typed word here any more (it guards the write); a click, then a confirm
+    /// that says what it does.
+    @Test("The confirm says it restarts the chip into update mode, writes nothing, and a power cycle ends it")
+    func confirmText() {
+        #expect(UpdateModeStep.confirmTitle == "Restart the display chip in update mode?")
+        #expect(UpdateModeStep.confirmBody == "This restarts the display chip into update mode. Nothing is written. A power cycle ends it.")
+        #expect(UpdateModeStep.confirmButton == "Restart in update mode")
     }
 
     @Test("No WD port, or two: nothing is sent, with a plain reason")
     func needsExactlyOneWDPort() async {
         let none = FakeMIDISend(ports: ["LC6000 PRIME Controller"])
-        #expect(await UpdateModeStep(midi: none, apps: FakeApps(running: [])).enter(typed: "UPDATE")
+        #expect(await UpdateModeStep(midi: none, apps: FakeApps(running: [])).enter(confirmed: Self.confirmed)
             == .refused("The LC6000's display port isn't there. Is the LC6000 on, on a direct cable? Nothing was sent."))
         let two = FakeMIDISend(ports: lc6000Ports + ["LC6000 PRIME WD #2"])
-        #expect(await UpdateModeStep(midi: two, apps: FakeApps(running: [])).enter(typed: "UPDATE")
+        #expect(await UpdateModeStep(midi: two, apps: FakeApps(running: [])).enter(confirmed: Self.confirmed)
             == .refused("There are two LC6000 display ports. Connect one LC6000 only. Nothing was sent."))
         #expect(none.sent.isEmpty && two.sent.isEmpty)
     }
@@ -59,7 +70,7 @@ struct UpdateModeStepTests {
     @Test("DeckBridge running: nothing is sent")
     func notWithDeckBridge() async {
         let midi = FakeMIDISend(ports: lc6000Ports)
-        let outcome = await UpdateModeStep(midi: midi, apps: FakeApps(running: ["dev.ericdahl.ControllerBridge"])).enter(typed: "UPDATE")
+        let outcome = await UpdateModeStep(midi: midi, apps: FakeApps(running: ["dev.ericdahl.ControllerBridge"])).enter(confirmed: Self.confirmed)
         #expect(outcome == .refused("DeckBridge is running. Quit it first: it talks to the LC6000."))
         #expect(midi.sent.isEmpty)
     }

@@ -5,13 +5,25 @@ public protocol MIDISend: Sendable {
     func send(_ bytes: [UInt8], to port: String) async -> Bool
 }
 
-/// The display chip's step into update mode (#692): one message on its WD port, only when the owner typed UPDATE.
+/// The display chip's step into update mode (#692): one message on its WD port, only after the owner's click and confirm
+/// (#762: the typed UPDATE moved to the write).
 /// A port of tools/lc6000-firmware/enter-update-mode.swift. It writes nothing to flash, but the chip stays in update
 /// mode until it is flashed or power-cycled.
 public struct UpdateModeStep: Sendable {
     /// What the screen says once the step is sent. A power cycle ends update mode: the owner saw it (2026-11-22).
     public static let sentText = "Sent. The display chip restarts in update mode: give it a few seconds, then back it up. "
         + "A power cycle ends update mode, and the chip starts its own firmware again."
+
+    public static let confirmTitle = "Restart the display chip in update mode?"
+    public static let confirmBody = "This restarts the display chip into update mode. Nothing is written. A power cycle ends it."
+    public static let confirmButton = "Restart in update mode"
+
+    /// The owner's go-ahead: only the confirm's own button makes one.
+    public struct Confirmed: Sendable, Equatable {
+        public init?(clicked button: String) {
+            guard button == UpdateModeStep.confirmButton else { return nil }
+        }
+    }
 
     public enum Outcome: Sendable, Hashable {
         case sent
@@ -31,8 +43,7 @@ public struct UpdateModeStep: Sendable {
     static let portHint = "LC6000 PRIME WD"
 
     /// Sends the message once, or nothing. Never retried.
-    public func enter(typed: String) async -> Outcome {
-        guard typed == "UPDATE" else { return .refused("You didn't type UPDATE, so nothing was sent.") }
+    public func enter(confirmed: Confirmed) async -> Outcome {
         if let stop = await Preflight(apps: apps).stop() { return .refused(stop) }
         let ports = await midi.destinations().filter { $0.contains(Self.portHint) }
         guard let port = ports.first else {

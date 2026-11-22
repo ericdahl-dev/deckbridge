@@ -9,15 +9,16 @@ import UnitCheck
 final class BackupModel {
     private(set) var running = false
     private(set) var result: String?
-    var typed = ""
+    /// The update-mode step's confirm is showing (#762: a click and a confirm, no typed word).
+    var confirmingStep = false
     private(set) var stepResult: String?
     /// The update this session's backup allows (#693); nil until a backup is saved.
     private(set) var update: UpdateModel?
 
-    /// The display chip's step into update mode: only on the owner's typed UPDATE, once.
-    func enterUpdateMode() async {
-        let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(typed: typed)
-        typed = ""
+    /// The display chip's step into update mode: only from the confirm's own button, once.
+    func enterUpdateMode(clicked button: String) async {
+        guard let confirmed = UpdateModeStep.Confirmed(clicked: button) else { return }
+        let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(confirmed: confirmed)
         switch outcome {
         case .sent: stepResult = UpdateModeStep.sentText
         case .refused(let reason): stepResult = reason
@@ -92,13 +93,10 @@ struct BackupView: View {
             Text("Back up a chip").font(.headline)
             Text("Put one chip in update mode. Top panel chip: power the LC6000 off, then hold BACK + FWD + VINYL while you power it on.")
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware. Type UPDATE to send it.")
+            Text("Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware.")
                 .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                TextField("Type UPDATE", text: $model.typed).frame(maxWidth: 140)
-                Button("Send the update-mode message") { Task { await model.enterUpdateMode() } }
-                    .disabled(model.typed != "UPDATE" || model.running)
-            }
+            Button("Restart the display chip in update mode…") { model.confirmingStep = true }
+                .disabled(model.running)
             if let stepResult = model.stepResult { Text(stepResult).fixedSize(horizontal: false, vertical: true) }
             Text("Then quit DeckBridge and pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.")
                 .fixedSize(horizontal: false, vertical: true)
@@ -112,5 +110,12 @@ struct BackupView: View {
             if let update = model.update { UpdateView(model: update) }
         }
         .padding(.top, 4)
+        // Return never fires it: Cancel is the default.
+        .alert(UpdateModeStep.confirmTitle, isPresented: $model.confirmingStep) {
+            Button(UpdateModeStep.confirmButton) { Task { await model.enterUpdateMode(clicked: UpdateModeStep.confirmButton) } }
+            Button("Cancel", role: .cancel) {}.keyboardShortcut(.defaultAction)
+        } message: {
+            Text(UpdateModeStep.confirmBody)
+        }
     }
 }
