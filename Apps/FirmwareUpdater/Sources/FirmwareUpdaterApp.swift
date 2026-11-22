@@ -12,6 +12,8 @@ struct FirmwareUpdaterApp: App {
                 .frame(minWidth: 480, minHeight: 360)
                 .task {
                     await model.refresh()
+                    FileLog.shared.log(model.screen.firstLookLine)
+                    if SmokeLaunch.isOn { SmokeLaunch.finish() }
                     await model.watch()
                 }
         }
