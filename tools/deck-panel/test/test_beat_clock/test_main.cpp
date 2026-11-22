@@ -123,8 +123,8 @@ void test_beats_after_a_gap_start_over() {
 
 
 // 8 beats in time at 128 BPM from 1000 ms: the last (beat 4) at 4281.
-static BeatClock locked() {
-    BeatClock clock;
+static BeatClock locked(uint32_t lead_ms = 0) {
+    BeatClock clock(lead_ms);
     int beat = 1;
     for (int k = 0; k < 8; ++k) {
         clock.edge(beat, static_cast<uint32_t>(1000 + k * 468.75 + 0.5));
@@ -210,6 +210,51 @@ void test_a_clock_bpm_after_a_stop_doesnt_restart_it() {
     TEST_ASSERT_EQUAL(4, clock.beat_at(6000));
 }
 
+// #718: a box lights `lead` ms before its beat is due, so it lands with the LC6000 instead of the path's delay behind.
+void test_a_lead_lights_the_next_beat_that_much_early() {
+    BeatClock clock(50);
+    clock.edge(1, 1000);
+    clock.edge(2, 1469);
+    TEST_ASSERT_EQUAL(2, clock.beat_at(1887));
+    TEST_ASSERT_EQUAL(3, clock.beat_at(1888));  // due at 1938, less 50
+}
+
+// #718: the lead is longer than the time since an edge just heard; that beat still shows, from its message until the
+// lead brings the next, and the next holds through its own message: no box skipped or lit twice.
+void test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge() {
+    BeatClock clock(50);
+    clock.edge(1, 1000);
+    clock.edge(2, 1469);
+    for (uint32_t t = 1469; t < 1888; ++t) TEST_ASSERT_EQUAL(2, clock.beat_at(t));
+    for (uint32_t t = 1888; t < 1938; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
+    clock.edge(3, 1938);
+    for (uint32_t t = 1938; t < 2357; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
+    TEST_ASSERT_EQUAL(4, clock.beat_at(2357));
+}
+
+// #718: the lead is time, not part of a beat: after a tempo change the next box lights the same 50 ms early.
+void test_a_lead_holds_through_a_tempo_change() {
+    BeatClock clock = locked(50);  // 128 BPM; the last edge, beat 4, at 4281
+    clock.set_tempo(140);          // 428.6 ms: due at 4709.6, lit at 4659.6
+    TEST_ASSERT_UINT32_WITHIN(2, 4660, first_shows(clock, 1, 4281, 5000));
+}
+
+// #718: the lead shows nothing a stop could take back beyond what predicting allows: never two past the last edge, the
+// beat heard once stopped, and with no beat or no tempo, as without a lead.
+void test_a_lead_never_shows_more_than_predicting_allows() {
+    BeatClock none(50);
+    TEST_ASSERT_EQUAL(0, none.beat_at(1000));
+    BeatClock one(50);
+    one.edge(3, 1000);
+    TEST_ASSERT_EQUAL(3, one.beat_at(5000));      // one edge: no tempo, nothing ahead
+    BeatClock clock = locked(50);                 // the last edge, beat 4, at 4281
+    TEST_ASSERT_EQUAL(1, clock.beat_at(4720));    // 1, lit early (due 4750)
+    TEST_ASSERT_EQUAL(1, clock.beat_at(9000));    // and never 2
+    clock.stop();
+    TEST_ASSERT_EQUAL(4, clock.beat_at(4730));    // stopped: the beat heard
+    TEST_ASSERT_EQUAL(4, clock.beat_at(9000));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -230,5 +275,9 @@ int main(int, char**) {
     RUN_TEST(test_clock_bpm_0_leaves_the_beat_length_to_the_edges);
     RUN_TEST(test_the_clock_bpm_just_after_the_first_edge_times_it);
     RUN_TEST(test_a_clock_bpm_after_a_stop_doesnt_restart_it);
+    RUN_TEST(test_a_lead_lights_the_next_beat_that_much_early);
+    RUN_TEST(test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge);
+    RUN_TEST(test_a_lead_holds_through_a_tempo_change);
+    RUN_TEST(test_a_lead_never_shows_more_than_predicting_allows);
     return UNITY_END();
 }

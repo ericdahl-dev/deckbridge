@@ -5,6 +5,10 @@
 
 #include <cstdint>
 
+#ifndef DECK_PANEL_BEAT_LEAD_MS
+#define DECK_PANEL_BEAT_LEAD_MS 50
+#endif
+
 #ifndef DECK_PANEL_PREDICT_BEATS
 #define DECK_PANEL_PREDICT_BEATS 1
 #endif
@@ -13,6 +17,13 @@ namespace deck_core {
 
 class BeatClock {
   public:
+    /// `lead_ms`: each beat shows this long before it's due (#718), so the box lands with the LC6000, not the feed's
+    /// delay behind it. 0: on time.
+    explicit BeatClock(uint32_t lead_ms = 0) : lead_ms_(lead_ms) {}
+    /// The deck view's lead (#718): the feed's path (Syndicate, DeckBridge, Wi-Fi) and the panel's read-to-glass, about
+    /// 50 ms on the owner's videos of 2026-11-21. The coordinator tunes it against the LC6000's jog display at 120 fps;
+    /// -DDECK_PANEL_BEAT_LEAD_MS=<ms> builds another.
+    static constexpr uint32_t kLeadMs = DECK_PANEL_BEAT_LEAD_MS;
     /// How many beats past the last edge heard the clock shows when they're due. 1: the next beat lights on time,
     /// and if the master stops, at most one beat shows that didn't happen. 0: never past the last edge, as before
     /// #660. The owner chose 1 after seeing both (2026-11-21); -DDECK_PANEL_PREDICT_BEATS=0 builds the other.
@@ -48,6 +59,7 @@ class BeatClock {
   private:
     void snap(int beat, uint32_t at_ms);
 
+    uint32_t lead_ms_;
     int beat_ = 0;              ///< the last beat heard
     uint32_t edge_ms_ = 0;      ///< when it's taken to have started: its arrival, corrected by the lock
     float period_ms_ = 0;       ///< a beat's length; 0 until two edges in a row give it
@@ -56,5 +68,8 @@ class BeatClock {
     float tempo_ms_ = 0;        ///< a beat's length from the master clock's BPM; 0 for none
     bool stopped_ = false;      ///< stop() since the last edge: nothing ahead until beats come again
 };
+
+// A lead of a beat or more would skip each beat just heard (300 BPM is 200 ms); a negative -D wraps to a huge one.
+static_assert(BeatClock::kLeadMs < BeatClock::kShortestBeatMs / 2, "DECK_PANEL_BEAT_LEAD_MS: 0 to 99 ms (#718)");
 
 }  // namespace deck_core
