@@ -152,4 +152,20 @@ struct LEDPhaseTests {
         #expect(flow.phase == .done)
         #expect(!flow.hasPendingSends)
     }
+
+    @Test("Unplugged mid-test (#353): the test ends with the answers so far, nothing more goes out, and it says why")
+    func unpluggedMidTest() {
+        var flow = Self.captured()
+        flow.startLEDs(scope: .full, at: 10)
+        _ = Self.drain(&flow, from: 10)
+        flow.answerLED(.lit(true), at: 11)
+        _ = flow.takeAnnouncement()
+        flow.disconnected(at: 11.05)  // the next probe queued, not yet sent
+        #expect(flow.phase == .done)
+        #expect(!flow.hasPendingSends)  // its lights went off with its power
+        #expect(flow.ledAnswerCount == 1)
+        #expect(flow.takeAnnouncement() == "LED test ended: the controller was unplugged. 1 answers.")
+        #expect(flow.takeAnnouncement() == nil)
+        #expect(!flow.canStartLEDs)
+    }
 }

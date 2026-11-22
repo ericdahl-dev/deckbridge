@@ -153,7 +153,15 @@ public struct CaptureFlow: Sendable {
     }
 
     /// The controller being captured went away (#229).
+    /// During the LED test, the test ends there with the answers so far (#353): the lights went off with its power.
     public mutating func disconnected(at time: Double) {
+        if phase == .leds {
+            sender.dropPending()
+            phase = .done
+            announcedDone = true
+            connectionNote = "LED test ended: the controller was unplugged. \(ledAnswerCount) answers."
+            return
+        }
         guard phase == .steps, !isDisconnected else { return }
         isDisconnected = true
         connectionNote = "Controller disconnected. Plug it back in to continue, or end the capture."
