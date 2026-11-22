@@ -266,6 +266,17 @@ void test_after_a_stop_a_quick_resume_takes_the_bpms_length_not_the_pause() {
     TEST_ASSERT_UINT32_WITHIN(3, 5969, first_shows(clock, 3, 5550, 7000));  // due 6019, less 50
 }
 
+// The same without a BPM (agent1's second case): after the stop, the edges give the length again from the first beat
+// back, never from the pause.
+void test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length() {
+    BeatClock clock = locked();  // 128 BPM from the edges; the last, beat 4, at 4281
+    clock.stop();
+    clock.edge(1, 5081);
+    clock.edge(2, 5550);
+    clock.edge(3, 6019);
+    TEST_ASSERT_UINT32_WITHIN(3, 6488, first_shows(clock, 4, 6019, 7500));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -291,5 +302,6 @@ int main(int, char**) {
     RUN_TEST(test_a_lead_holds_through_a_tempo_change);
     RUN_TEST(test_a_lead_never_shows_more_than_predicting_allows);
     RUN_TEST(test_after_a_stop_a_quick_resume_takes_the_bpms_length_not_the_pause);
+    RUN_TEST(test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length);
     return UNITY_END();
 }
