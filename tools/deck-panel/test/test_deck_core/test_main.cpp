@@ -921,17 +921,19 @@ void test_the_waiting_texts_come_fitted_to_the_fonts() {
 }
 
 
-// #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives.
-void test_the_next_beat_box_lights_when_due_before_its_message() {
+// #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives. #718:
+// the build's lead early, 50 ms unless the build sets DECK_PANEL_BEAT_LEAD_MS.
+void test_the_next_beat_box_lights_the_lead_before_its_beat_is_due() {
+    TEST_ASSERT_EQUAL(50, deck_core::BeatClock::kLeadMs);
     deck_core::DeckCore core;
     ScreenStub screen;
     feed(core, int_message(prefix + "deck", 1), 1000);
     feed(core, int_message(prefix + "beat", 1), 1000);
     feed(core, int_message(prefix + "beat", 2), 1469);
-    core.render(screen, 1937);
+    core.render(screen, 1887);
     TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
-    core.render(screen, 1938);
-    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, lit
+    core.render(screen, 1888);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, due at 1938, lit 50 ms early
     TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[1]);
 }
 
@@ -1070,7 +1072,7 @@ int main(int, char**) {
     RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
     RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);
     RUN_TEST(test_every_field_of_the_feed_has_its_row);
-    RUN_TEST(test_the_next_beat_box_lights_when_due_before_its_message);
+    RUN_TEST(test_the_next_beat_box_lights_the_lead_before_its_beat_is_due);
     RUN_TEST(test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge);
     RUN_TEST(test_the_master_stopping_stops_the_beat_at_once);
     RUN_TEST(test_a_deck_that_is_not_the_master_stopping_leaves_the_beat);

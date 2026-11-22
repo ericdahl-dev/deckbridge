@@ -80,7 +80,7 @@ private:
     bool shown_waiting_ = true;
     DeckView shown_view_;
     int shown_beat_ = 0;  ///< the clock's beat the screen was last told
-    BeatClock clock_;
+    BeatClock clock_{BeatClock::kLeadMs};
     /// What the deck page was last told, the face its objects hold; drawn_ once it has been told once.
     Face shown_face_;
     bool drawn_ = false;
