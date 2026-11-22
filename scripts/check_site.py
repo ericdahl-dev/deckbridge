@@ -251,7 +251,7 @@ FLASHING = ["bootloader", "dfu-util", "dfu mode", "flashing", "flash the", "flas
 
 
 # What 1.1 brings (#647), named on each product page, worded as the CHANGELOG (#648) and the What to Test do.
-NEW_IN_1_1 = ["jog display", "transpose", "exact colors", "key display", "shift + needle drop", "display feed"]
+NEW_IN_1_1 = ["jog display", "transpose", "exact colors", "key display", "needle drop", "display feed"]
 NEW_IN_1_1_FILES = ["index.html", "index.md", "llms.txt"]
 
 
@@ -425,6 +425,10 @@ PLANNED_MENTION = re.compile(r"\bDeckBridge (\d+\.\d+)(?!\.?\d)")
 # The capture's button before 1.1 (#652's audit): 1.1 replaced it with Help add it… and Controller not found?.
 OLD_CAPTURE_BUTTON = "Help add a controller\u2026"
 
+# The channel fader is the plain Needle Drop touch since #729 (before 1.1.0), and Shift seeks: never "Shift + Needle Drop"
+# moving it, in a sentence, a heading or "Shift + Needle Drop on the channel fader".
+SHIFT_FADER = re.compile(r"shift \+ needle drop[^.<]{0,40}channel fader", re.IGNORECASE)
+
 
 TEASER_ART = "jog-art.png"
 
@@ -588,6 +592,9 @@ def problems(root, app_prompts=None, release=None):
                 for planned in sorted(set(PLANNED_MENTION.findall(text))):
                     if version_tuple(planned) > shipped:
                         out.append(f"{file}: says DeckBridge {planned}, a version that hasn't shipped (the app is {app_version})")
+            if SHIFT_FADER.search(plain_words(text, file.endswith(".html"))):
+                out.append(f"{file}: says Shift + Needle Drop moves the channel fader; since #729 the plain touch does, "
+                           "and Shift seeks")
             if OLD_CAPTURE_BUTTON in text:
                 out.append(f"{file}: names the button {OLD_CAPTURE_BUTTON}, which 1.1 replaced with Help add it\u2026 "
                            "and Controller not found?")

@@ -607,6 +607,17 @@ class CheckSiteTests(unittest.TestCase):
             "support/index.html: says DeckBridge 1.2, a version that hasn't shipped (the app is 1.0.1)",
         ])
 
+    def test_the_channel_fader_is_the_plain_needle_drop_touch(self):
+        # #729 (merged before 1.1.0): a plain touch on the Needle Drop strip moves the fader, and Shift seeks. The site
+        # still said Shift + Needle Drop moved it.
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a> <p>Shift + Needle Drop moves the '
+                                                         "deck\u2019s channel fader.</p><p>Needle Drop moves the "
+                                                         "deck\u2019s channel fader. With Shift, seeks.</p>")})
+        self.assertEqual(check_site.problems(root), [
+            "support/index.html: says Shift + Needle Drop moves the channel fader; since #729 the plain touch does, "
+            "and Shift seeks",
+        ])
+
     def test_the_old_help_add_a_controller_button_is_named_nowhere(self):
         # #652's audit: 1.1 replaced Settings' "Help add a controller…" button with Help add it… (in the panel) and
         # Controller not found? (Settings › Controller). The capture window's own heading, without the ellipsis, stays.
