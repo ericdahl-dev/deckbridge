@@ -4,7 +4,7 @@
 // The platter never moves it (the user's pick for v1.1, reversing #306): a seek on a paused deck moves the deck's
 // BarRamp, which it follows.
 
-public struct JogMarker: Equatable, Sendable {
+public struct JogNeedle: Equatable, Sendable {
     private enum Mode: Equatable, Sendable {
         /// The clock hand: `base` turns at `since`, running a quarter turn per beat at `bpm`, but never past the beat.
         case clock(base: Double, since: Double, bpm: Double)
