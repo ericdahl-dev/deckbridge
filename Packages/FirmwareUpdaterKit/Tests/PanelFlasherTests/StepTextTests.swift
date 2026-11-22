@@ -21,12 +21,21 @@ func eachStepReadsPlainly(step: PanelUpdate.Step, text: String) {
     (.wrongBoard("chip id 5"), "This board isn't a deck panel (chip id 5). Nothing was written."),
     (.notADeckPanel, "This board doesn't have the deck panel's layout. Nothing was written."),
     (.noBootloader, "The panel didn't answer. Unplug it, plug it back in, and try again."),
-    (.writeFailed(address: 0x10400), "Writing failed at 0x10400. The panel may not start: try again before unplugging it."),
-    (.verifyFailed(address: 0x10000), "The written firmware didn't check out. The panel may not start: try again before unplugging it."),
+    (.writeFailed(address: 0x10400), "Writing stopped partway. The panel may not start: try again before you unplug it."),
+    (.verifyFailed(address: 0x10000), "The written firmware didn't check out. The panel may not start: try again before you unplug it."),
     (.canceled, "Canceled. The panel was restarted."),
     (.lineLost, "The cable was lost. Plug the panel back in and try again."),
     (.notAPanelImage, "The firmware file isn't a deck panel image. Nothing was written."),
 ])
 func eachFailureSaysWhatHappenedAndWhatToDo(error: FlashError, text: String) {
     #expect(PanelUpdate.Step.failed(error).text == text)
+}
+
+/// No hex address in what the owner reads (#763): an address goes to the log only.
+@Test(arguments: [
+    FlashError.portBusy, .wrongBoard("chip id 5"), .notADeckPanel, .noBootloader, .refused(op: 0x02, reason: 0x05), .noAnswer(op: 0x03),
+    .writeFailed(address: 0x10400), .verifyFailed(address: 0x10000), .canceled, .lineLost, .notAPanelImage,
+])
+func noFailureTextHasHex(error: FlashError) {
+    #expect(!PanelUpdate.Step.failed(error).text.contains("0x"))
 }
