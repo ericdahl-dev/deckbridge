@@ -47,6 +47,21 @@ final class StubFlasher: PanelFlashing, @unchecked Sendable {
     }
 }
 
+/// A flasher that writes until it is canceled, then says so as PanelUpdate does.
+final class WaitingFlasher: PanelFlashing, @unchecked Sendable {
+    private let state = Mutex((runs: 0, writing: false))
+    var started: Int { state.withLock { $0.runs } }
+    var writing: Bool { state.withLock { $0.writing } }
+
+    func flash(report: @escaping @Sendable (PanelUpdate.Step) -> Void) async {
+        state.withLock { $0.runs += 1 }
+        report(.writing(0.1))
+        state.withLock { $0.writing = true }
+        while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
+        report(.failed(.canceledWhileWriting))
+    }
+}
+
 /// Updating the panel over its cable from the app (#687), with DeckBridge asked for the port first (#710).
 @Suite("Updater: updating the deck panel over its cable")
 @MainActor
@@ -84,5 +99,63 @@ struct PanelUpdateFlowTests {
         #expect(deckBridge.posted == [.release, .done])
         #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
         #expect(updater.screen.panel.detail == "Build 2b7e9c1")
+    }
+
+    @Test("A failure: its text shows, the port still goes back once, and the next update can start")
+    func failure() async {
+        let deckBridge = StubDeckBridge(answers: true)
+        let flasher = StubFlasher([.connecting, .failed(.verifyFailed(address: 0x10000))])
+        let updater = Self.updater(deckBridge, flasher)
+        await updater.updatePanel()
+        #expect(updater.screen.update == "The written firmware didn't check out. The panel may not start: try again before unplugging it.")
+        #expect(deckBridge.posted == [.release, .done])
+        await updater.updatePanel()
+        #expect(flasher.started == 2)
+    }
+
+    @Test("Cancel while writing: the flasher is stopped, says so, and the port goes back")
+    func cancel() async {
+        let deckBridge = StubDeckBridge(answers: true)
+        let flasher = WaitingFlasher()
+        let waiting = Updater(finder: Rig().finder, changes: AsyncStream { $0.finish() }, borrow: deckBridge.borrow,
+                              flasher: flasher)
+        let run = Task { await waiting.updatePanel() }
+        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(waiting.updating)
+        waiting.cancelUpdate()
+        await run.value
+        #expect(waiting.screen.update == "Canceled while writing. The panel may not start: try again before unplugging it.")
+        #expect(deckBridge.posted == [.release, .done])
+        #expect(!waiting.updating)
+    }
+
+    @Test("An update asked for while one runs doesn't start a second")
+    func oneAtATime() async {
+        let flasher = WaitingFlasher()
+        let only = Updater(finder: Rig().finder, changes: AsyncStream { $0.finish() },
+                           borrow: StubDeckBridge(answers: true).borrow, flasher: flasher)
+        let run = Task { await only.updatePanel() }
+        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
+        await only.updatePanel()
+        only.cancelUpdate()
+        await run.value
+        #expect(flasher.started == 1)
+    }
+
+    @Test("No look while an update runs: the panel's reset is a USB change, and a look would open its port")
+    func noLookDuringUpdate() async {
+        let rig = Rig()
+        let usb = SlowUSB()
+        let finder = DeviceFinder(usb: usb, midi: rig.midi, serial: rig.serial, log: rig.log)
+        let flasher = WaitingFlasher()
+        let updater = Updater(finder: finder, changes: AsyncStream { $0.finish() },
+                              borrow: StubDeckBridge(answers: true).borrow, flasher: flasher)
+        let run = Task { await updater.updatePanel() }
+        while !flasher.writing { try? await Task.sleep(for: .milliseconds(5)) }
+        await updater.refresh()
+        #expect(usb.reads == 0)
+        updater.cancelUpdate()
+        await run.value
+        #expect(usb.reads == 1)   // the one look after the update
     }
 }

@@ -57,15 +57,22 @@ public final class Updater {
     private let flasher: (any PanelFlashing)?
     /// What the update over the cable says now; nil before the first one.
     private var updateText: String?
+    /// An update over the cable is running: one at a time, and no looks meanwhile.
+    public private(set) var updating = false
+    private var flashing: Task<Void, Never>?
+
+    /// Stops the update: the flasher resets the panel into its app and says what that leaves.
+    public func cancelUpdate() { flashing?.cancel() }
 
     /// Updates the panel over its cable (#687). DeckBridge is asked for the port first (#710). With no answer (it isn't
     /// running, or it's from before #710) the port is tried anyway; only a busy port then says to free it by hand.
     public func updatePanel() async {
-        guard let flasher else { return }
+        guard let flasher, !updating else { return }
+        updating = true
         let lend = borrow?()
         let outcome = await lend?.borrow() ?? .noAnswer
         let (steps, step) = AsyncStream<PanelUpdate.Step>.makeStream()
-        Task.detached {
+        flashing = Task.detached {
             await flasher.flash { step.yield($0) }
             step.finish()
         }
@@ -78,11 +85,16 @@ public final class Updater {
             show()
         }
         lend?.giveBack()
+        flashing = nil
+        updating = false
         // The panel restarted into its new build: look again so the section shows it.
         await refresh()
     }
 
     public func refresh() async {
+        // During an update the panel restarts (a USB change), and a look would open the port the flasher holds. The
+        // update looks once when it's done.
+        guard !updating else { return }
         guard !looking else {
             lookAgain = true
             return
