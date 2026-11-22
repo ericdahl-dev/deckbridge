@@ -60,9 +60,10 @@ struct JogQuantizeTests {
         #expect(Self.addresses(rig) == ["/Syndicate/Deck/1/PhaseBend"])
     }
 
-    @Test("The needle strip on a paused deck: quantize off for the seeks, back when the strip is let go")
+    @Test("Shift + the needle strip on a paused deck: quantize off for the seeks, back when the strip is let go")
     func needleStrip() throws {
         let rig = try Self.paused()
+        rig.coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)   // Shift: seek (#729)
         rig.coordinator.midi(.noteOn(channel: 0, note: 70, velocity: 127), source: Rig.lc6000.id)
         ContinuousTests.strip(rig, 64, 0)
         #expect(Self.addresses(rig) == ["/Syndicate/Deck/1/Quantize", "/Syndicate/Deck/1/WaveformSeek"])
@@ -72,10 +73,11 @@ struct JogQuantizeTests {
         #expect(rig.osc.sent == [Self.quantizeGlobal])
     }
 
-    @Test("The needle strip on a playing deck stays quantized (a seek in time with the grid)")
+    @Test("Shift + the needle strip on a playing deck stays quantized (a seek in time with the grid)")
     func needlePlaying() throws {
         let rig = try Self.paused()
         ContinuousTests.feedback(rig, "Playing", [.int(1)])
+        rig.coordinator.midi(.noteOn(channel: 0, note: 26, velocity: 127), source: Rig.lc6000.id)   // Shift: seek (#729)
         rig.coordinator.midi(.noteOn(channel: 0, note: 70, velocity: 127), source: Rig.lc6000.id)
         rig.osc.sent.removeAll()
         ContinuousTests.strip(rig, 64, 0)

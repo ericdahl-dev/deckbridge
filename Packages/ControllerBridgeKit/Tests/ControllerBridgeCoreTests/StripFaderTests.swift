@@ -2,9 +2,10 @@ import Foundation
 @testable import ControllerBridgeCore
 import Testing
 
-/// Shift + Needle Drop moves the deck's channel fader in Syndicate (#609). The LC6000 sends the same strip CCs (64/65)
-/// and touch note (70) with Shift held as without; Shift is note 26.
-@Suite("Shift + Needle Drop strip fader")
+/// The Needle Drop strip moves the deck's channel fader in Syndicate (#609), on a plain touch since #729; Shift + the
+/// strip seeks. The LC6000 sends the same strip CCs (64/65) and touch note (70) with Shift held as without; Shift is
+/// note 26.
+@Suite("Needle Drop strip fader")
 struct StripFaderTests {
     typealias C = ContinuousTests
 
@@ -33,11 +34,10 @@ struct StripFaderTests {
 
     static func seeks(_ rig: Rig) -> [OSCMessage] { rig.osc.sent.filter { $0.address.hasSuffix("/WaveformSeek") } }
 
-    @Test("Shift held at touch-down: a swipe of half the strip moves the fader half its range from Syndicate's level, and seeks nothing")
+    @Test("A plain touch: a swipe of half the strip moves the fader half its range from Syndicate's level, and seeks nothing")
     func halfSwipe() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 8192)
@@ -46,10 +46,11 @@ struct StripFaderTests {
         #expect(Self.seeks(rig).isEmpty)
     }
 
-    @Test("Without Shift the strip still seeks, and moves no fader")
-    func withoutShiftSeeks() throws {
+    @Test("Shift + the strip seeks (needle drop), and moves no fader")
+    func withShiftSeeks() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
+        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 8192)
@@ -61,7 +62,6 @@ struct StripFaderTests {
     func noTravel() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 4000)
         Self.at(rig, 4000)
@@ -74,7 +74,6 @@ struct StripFaderTests {
     func clamped() throws {
         let rig = try C.started()
         Self.volume(rig, 0.75)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 8192)    // +0.5 from 0.75: past the top
@@ -87,27 +86,27 @@ struct StripFaderTests {
         #expect(abs((Self.sentVolumes(rig).last ?? -1) - 0.25) < 0.001)
     }
 
-    @Test("The mode is fixed at touch-down: Shift let go mid-touch stays a fader move, with no track jump under the finger")
-    func shiftLetGo() throws {
+    @Test("The layer is fixed at touch-down: Shift pressed mid-touch stays a fader move, with no track jump under the finger")
+    func shiftPressedMidFaderTouch() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
-        Self.shift(rig, false)
+        Self.shift(rig, true)
         Self.at(rig, 4096)
         Self.touch(rig, false)
         #expect(Self.sentVolumes(rig).count == 1)
         #expect(Self.seeks(rig).isEmpty)
     }
 
-    @Test("The mode is fixed at touch-down: Shift pressed mid-touch leaves the touch a seek, and moves no fader")
-    func shiftPressedMidTouch() throws {
+    @Test("The layer is fixed at touch-down: Shift let go mid-touch leaves the touch a seek, and moves no fader")
+    func shiftLetGoMidSeek() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
+        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
-        Self.shift(rig, true)
+        Self.shift(rig, false)
         Self.at(rig, 4096)
         #expect(Self.sentVolumes(rig).isEmpty)
         #expect(Self.seeks(rig).count == 2)
@@ -116,7 +115,6 @@ struct StripFaderTests {
     @Test("With no Volume from Syndicate the touch does nothing: no fader move, no seek")
     func unknownLevel() throws {
         let rig = try C.started()
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 8192)
@@ -129,7 +127,6 @@ struct StripFaderTests {
         let rig = try C.started()
         // Known once (a Resend), then the Volume box goes off: nothing more comes back.
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 4096)    // to 0.5
@@ -147,7 +144,6 @@ struct StripFaderTests {
         Self.volume(rig, channel: 1, 0.25)
         Self.volume(rig, channel: 2, 0.5)
         rig.coordinator.setDeck(2, controller: 0)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 4096)
@@ -160,7 +156,6 @@ struct StripFaderTests {
     func echoesIgnored() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         Self.at(rig, 2048)        // to 0.375
@@ -178,10 +173,9 @@ struct StripFaderTests {
 
     static let jump = #"{ "needle": { "shift_fader_mode": "jump" } }"#
 
-    @Test("Jump: touching the strip's midpoint with Shift sets the fader to half, with no travel and no level from Syndicate")
+    @Test("Jump: touching the strip's midpoint sets the fader to half, with no travel and no level from Syndicate")
     func jumpMidpoint() throws {
         let rig = try C.started(Self.jump)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 8192)
         #expect(Self.sentVolumes(rig).count == 1 && abs((Self.sentVolumes(rig).first ?? 0) - 0.5) < 0.001, "sent \(Self.sentVolumes(rig))")
@@ -214,7 +208,6 @@ struct StripFaderTests {
     func settingNextTouch() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         rig.coordinator.apply(.setStripFader(StripFaderSetting(mode: .jump)))
@@ -254,37 +247,36 @@ struct StripFaderTests {
         #expect(StripFaderSetting().shown(for: nil) == nil)
     }
 
-    @Test("A fader touch ends with everything released (sleep, unplug): the next plain touch seeks and moves no fader")
+    @Test("A fader touch ends with everything released (sleep, unplug): the next Shift touch seeks and moves no fader")
     func releasedEndsTouch() throws {
         let rig = try C.started()
         Self.volume(rig, 0.25)
-        Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
         rig.coordinator.willSleep()   // no touch-up ever comes
-        Self.touch(rig, true)
-        Self.at(rig, 0)
-        Self.at(rig, 8192)
-        #expect(Self.sentVolumes(rig).isEmpty)
-        #expect(!Self.seeks(rig).isEmpty)
-    }
-
-    @Test("A lost touch-up doesn't keep the strip a fader: each touch-down picks the mode afresh")
-    func lostTouchUp() throws {
-        let rig = try C.started()
-        Self.volume(rig, 0.25)
         Self.shift(rig, true)
         Self.touch(rig, true)
         Self.at(rig, 0)
-        Self.shift(rig, false)
-        Self.touch(rig, true)         // the note-off went missing: a new touch-down, without Shift
+        Self.at(rig, 8192)
+        #expect(Self.sentVolumes(rig).isEmpty)
+        #expect(!Self.seeks(rig).isEmpty)
+    }
+
+    @Test("A lost touch-up doesn't keep the strip a fader: each touch-down picks the layer afresh")
+    func lostTouchUp() throws {
+        let rig = try C.started()
+        Self.volume(rig, 0.25)
+        Self.touch(rig, true)
+        Self.at(rig, 0)
+        Self.shift(rig, true)
+        Self.touch(rig, true)         // the note-off went missing: a new touch-down, with Shift
         Self.at(rig, 0)
         Self.at(rig, 8192)
         #expect(Self.sentVolumes(rig).isEmpty)
         #expect(!Self.seeks(rig).isEmpty)
     }
 
-    @Test("On the unit's layer 2 (its own channel), Shift + the strip moves channel 2 from channel 2's level; channel 1 gets nothing")
+    @Test("On the unit's layer 2 (its own channel), the strip moves channel 2 from channel 2's level; channel 1 gets nothing")
     func unitLayer() throws {
         let rig = try LayersTests.layered()
         Self.volume(rig, channel: 1, 0.25)
@@ -293,12 +285,37 @@ struct StripFaderTests {
         func cc(_ controller: UInt8, _ value: UInt8) {
             rig.coordinator.midi(.controlChange(channel: ch2, controller: controller, value: value), source: Rig.lc6000.id)
         }
-        rig.coordinator.midi(.noteOn(channel: ch2, note: 26, velocity: 127), source: Rig.lc6000.id)   // Shift
         rig.coordinator.midi(.noteOn(channel: ch2, note: 70, velocity: 127), source: Rig.lc6000.id)   // touch
         cc(64, 0); cc(65, 0)
         cc(64, 32); cc(65, 0)    // 4096: a quarter of the strip
         let sent = Self.sentVolumes(rig, channel: 2)
         #expect(abs((sent.last ?? 0) - 0.75) < 0.001, "sent \(sent)")
         #expect(Self.sentVolumes(rig, channel: 1).isEmpty)
+    }
+
+    /// A touch with or without Shift, then half the strip: whether it moved the fader, and whether it seeked.
+    static func slide(_ rig: Rig, shift: Bool) -> (faded: Bool, seeked: Bool) {
+        rig.osc.sent.removeAll()
+        if shift { Self.shift(rig, true) }
+        Self.touch(rig, true)
+        Self.at(rig, 0)
+        Self.at(rig, 8192)
+        Self.touch(rig, false)
+        if shift { Self.shift(rig, false) }
+        return (!Self.sentVolumes(rig).isEmpty, !Self.seeks(rig).isEmpty)
+    }
+
+    @Test("The fader off (the profile's or Settings'): the strip seeks with or without Shift, so needle drop is never lost")
+    func offSeeksBothWays() throws {
+        let profileOff = try C.started(#"{ "needle": { "shift_fader": false } }"#)
+        let settingOff = try C.started()
+        settingOff.coordinator.apply(.setStripFader(StripFaderSetting(enabled: false)))
+        for rig in [profileOff, settingOff] {
+            Self.volume(rig, 0.25)
+            for shift in [false, true] {
+                let slid = Self.slide(rig, shift: shift)
+                #expect(!slid.faded && slid.seeked, "shift \(shift)")
+            }
+        }
     }
 }

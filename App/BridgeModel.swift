@@ -438,7 +438,7 @@ final class BridgeModel {
         pipe.producer.send(.setDeckColors(followSyndicate: settings.followSyndicateDeckColors, custom: settings.customDeckColors))
         pipe.producer.send(.setRingColors(settings.ringColors))
         pipe.producer.send(.setColorMessages(settings.colorMessages))
-        // Shift + Needle Drop's fader (#609): the DJ's choice, else the profile's.
+        // Needle Drop's fader (#609; the plain layer since #729): the DJ's choice, else the profile's.
         pipe.producer.send(.setStripFader(settings.stripFader))
         pipe.producer.send(.setLightBrightness(LightBrightness.snapped(settings.lightBrightness)))
         // Profiles chosen by hand (#200): a device only they name connects now.
