@@ -30,9 +30,9 @@ struct JogSimulatorState: Sendable {
                 sim.apply(.uploadStarted(slot: Int(slot), deck: content.deck, bytes: bytes, at: now))
             case .shown(let slot): sim.apply(.shown(slot: Int(slot)))
             case .failed: sim.apply(.failed)
-            // The unit's needle is the front deck's, which deckMarker already brings; the simulator draws every deck's.
-            case .marker: break
-            case .deckMarker(let deck, let pitchBend):
+            // The unit's needle is the front deck's, which deckNeedle already brings; the simulator draws every deck's.
+            case .needle: break
+            case .deckNeedle(let deck, let pitchBend):
                 var limiter = needleLimiters[deck] ?? RedrawLimiter<Int>(interval: 1.0 / 30)
                 if let value = limiter.offer(pitchBend, at: now.timeIntervalSinceReferenceDate) { sim.apply(.marker(deck: deck, pitchBend: value)) }
                 needleLimiters[deck] = limiter

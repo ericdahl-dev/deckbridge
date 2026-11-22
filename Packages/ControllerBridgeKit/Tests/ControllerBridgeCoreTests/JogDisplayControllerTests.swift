@@ -153,7 +153,7 @@ struct JogDisplayControllerDriverTests {
         clock.now = 0.25
         controller.tick(entries)
         #expect(port.wd.contains([0xE0, 0x00, 0x10]))   // deck 1: 2048
-        #expect(events.list.contains(.deckMarker(deck: 2, pitchBend: 10240)))   // deck 2: 0.5 + 1/8
+        #expect(events.list.contains(.deckNeedle(deck: 2, pitchBend: 10240)))   // deck 2: 0.5 + 1/8
         #expect(!port.wd.contains([0xE0, 0x00, 0x50]))   // deck 2's isn't sent to the unit
     }
 

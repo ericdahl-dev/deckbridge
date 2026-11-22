@@ -30,11 +30,11 @@ struct JogDisplayPreviewTests {
     @Test("With no port, the marker and play light are reported on change")
     func markerAndLight() {
         let (driver, take) = Self.previewing()
-        driver.marker(4096)
-        driver.marker(4096)
+        driver.needle(4096)
+        driver.needle(4096)
         driver.playLight(true)
         driver.playLight(true)
-        #expect(take() == [.marker(pitchBend: 4096), .playLight(true)])
+        #expect(take() == [.needle(pitchBend: 4096), .playLight(true)])
     }
 }
 
@@ -64,7 +64,7 @@ struct JogDisplayPreviewCoordinatorTests {
         #expect(port.wd == [])
         let shownDecks = events.compactMap { if case .uploadStarted(_, let content, _) = $0 { return content.deck }; return nil }
         #expect(shownDecks.last == 2)
-        #expect(events.contains { if case .marker = $0 { return true }; return false })
+        #expect(events.contains { if case .needle = $0 { return true }; return false })
         #expect(events.contains(.playLight(true)))
         #expect(!events.contains(.connected))
     }

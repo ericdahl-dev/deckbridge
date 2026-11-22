@@ -188,8 +188,8 @@ final class JogDisplayController {
         if live {
             for index in entries.indices where entries[index].facts.playing {
                 let needle = needle(index, at: clock.now)
-                driver.deckMarker(deck: entries[index].facts.deck, needle)
-                if index == front { driver.marker(needle) }
+                driver.deckNeedle(deck: entries[index].facts.deck, needle)
+                if index == front { driver.needle(needle) }
             }
             let period = 1 / Self.liveRate
             let next = (nextLiveDue ?? clock.now) + period

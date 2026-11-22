@@ -166,13 +166,13 @@ struct JogDisplayEventTests {
         let bytes = upload.body.reduce(0) { $0 + $1.count }
         for _ in 0..<upload.expectedAcks { driver.reply(JogDisplayDriverTests.accepted) }
         driver.reply(JogDisplayDriverTests.committed)
-        driver.marker(2048)
+        driver.needle(2048)
         driver.playLight(true)
         #expect(events == [
             .connected,
             .uploadStarted(slot: 1, content: JogDisplayContent(deck: 1, color: [255, 0, 0]), bytes: bytes),
             .shown(slot: 1),
-            .marker(pitchBend: 2048),
+            .needle(pitchBend: 2048),
             .playLight(true),
         ])
     }

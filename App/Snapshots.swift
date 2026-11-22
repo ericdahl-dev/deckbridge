@@ -293,8 +293,8 @@ enum Snapshots {
         jog.apply(.deckPlaying(deck: 1, playing: true), at: at)
         // Each deck's own needle, the master on beat 2 for every ring (#165): deck 1 a little behind the beat, deck 2 paused.
         jog.apply(.masterBeat(2), at: at)
-        jog.apply(.deckMarker(deck: 1, pitchBend: 3_600), at: at)
-        jog.apply(.deckMarker(deck: 2, pitchBend: 12_000), at: at)
+        jog.apply(.deckNeedle(deck: 1, pitchBend: 3_600), at: at)
+        jog.apply(.deckNeedle(deck: 2, pitchBend: 12_000), at: at)
         // Decks 3 and 4 from Syndicate only: previewed, not on the unit (#221).
         jog.apply(.preview(JogDisplayContent(deck: 3, color: [0, 255, 255], title: "Sunrise", artist: "Ward", key: "C", bpm: 122,
                                              playerType: "track")), at: at)

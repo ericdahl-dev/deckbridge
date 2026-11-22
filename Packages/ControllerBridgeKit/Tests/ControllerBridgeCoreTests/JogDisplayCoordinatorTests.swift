@@ -425,7 +425,7 @@ struct JogNeedleEventTests {
 
     static func needles(_ events: Events) -> [Int: Int] {
         var out: [Int: Int] = [:]
-        for case let .deckMarker(deck, pitchBend) in events.list { out[deck] = pitchBend }
+        for case let .deckNeedle(deck, pitchBend) in events.list { out[deck] = pitchBend }
         return out
     }
 
