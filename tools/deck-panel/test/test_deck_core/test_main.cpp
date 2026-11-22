@@ -355,7 +355,9 @@ void test_each_shared_example_shows_its_deck_state() {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(deck_core::kNoTrack, f.title, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.elapsed, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.bpm, name);
-            TEST_ASSERT_EQUAL_MESSAGE(deck_core::kPhaseHidden, f.phase_px, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_bar_w, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_tick, name);
+            TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x262626, f.phase_track_color, name);
         } else {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(title.c_str(), f.title, name);
         }
@@ -838,7 +840,7 @@ void test_the_first_deck_is_every_part_then_only_what_changed() {
     ScreenStub screen;
     feed(core, int_message(prefix + "deck", 1), 100);
     core.render(screen, 100);
-    TEST_ASSERT_EQUAL(28, screen.last().changes.count());
+    TEST_ASSERT_EQUAL(static_cast<int>(deck_core::Part::count), screen.last().changes.count());
     feed(core, int_message(prefix + "playing", 1), 110);
     core.render(screen, 110);
     TEST_ASSERT_EQUAL(2, screen.last().changes.count());  // the play lamp's box and its text

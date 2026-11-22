@@ -13,7 +13,7 @@ namespace deck_core {
 /// The deck screen's colors, 0xRRGGBB.
 namespace palette {
 constexpr uint32_t kWhite = 0xFFFFFF, kBlack = 0x000000;
-constexpr uint32_t kGray = 0xA0A0A0;   ///< names, the artist, the phase bar's center
+constexpr uint32_t kGray = 0xA0A0A0;   ///< names, the artist
 constexpr uint32_t kDim = 0x5A5A5A;    ///< an unlit lamp's text
 constexpr uint32_t kTrack = 0x262626;  ///< bars, unlit blocks and lamps
 constexpr uint32_t kProgress = 0xE0E0E0, kWarning = 0xFF3B30, kLevel = 0x30D158;
@@ -22,8 +22,6 @@ constexpr uint32_t kLamp[] = {0x30D158, 0xFF9F0A, 0x0A84FF, 0xFFD60A, 0x64D2FF};
 }  // namespace palette
 
 constexpr int kLamps = 5;
-/// phase_px while the phase is unknown: no marker.
-constexpr int32_t kPhaseHidden = -1;
 
 /// What the deck screen shows. Texts are UTF-8, fitted to the fonts (font_fallback); "" draws nothing. The number texts' sizes fit any long their format
 /// can print, as GCC's -Wformat-truncation checks under -Werror (CI's Linux build), though real values are short.
@@ -32,7 +30,6 @@ struct Face {
     uint32_t deck_color = palette::kWhite;  ///< the deck number's, 0xRRGGBB
     int32_t progress_px = 0;  ///< the bar's fill, 0 to layout::kWidth
     uint32_t progress_color = palette::kProgress;  ///< the fill: kWarning in the track's last seconds
-    int32_t phase_px = kPhaseHidden;  ///< the marker's left edge, 0 to layout::kPhaseTravel; kPhaseHidden if unknown
     /// The phase bar (#721, the jog display's rule, #462): its track, the bar from the center (left edge and width
     /// from the bar's left, 0 wide for none) and the locked tick (1 shown).
     uint32_t phase_track_color = palette::kTrack;
@@ -58,9 +55,9 @@ struct Face {
 /// Every field of Face, once: the parts below, what changed() compares and the check that none is left out all come
 /// from this list. A new field goes in Face and here; one left out of here fails to compile.
 #define DECK_FACE_FIELDS(ONE, MANY)                                                                                  \
-    ONE(deck_color) ONE(progress_px) ONE(progress_color) ONE(phase_px) ONE(phase_track_color) ONE(phase_bar_x) ONE(phase_bar_w) ONE(phase_tick) ONE(level_px) MANY(beat_color, 4)            \
-    MANY(lamp_color, kLamps) MANY(lamp_text_color, kLamps) ONE(deck) ONE(title) ONE(artist) ONE(key) ONE(bpm)       \
-    ONE(tempo) ONE(elapsed) ONE(remaining) ONE(loop_label)
+    ONE(deck_color) ONE(progress_px) ONE(progress_color) ONE(phase_track_color) ONE(phase_bar_x) ONE(phase_bar_w)   \
+    ONE(phase_tick) ONE(level_px) MANY(beat_color, 4) MANY(lamp_color, kLamps) MANY(lamp_text_color, kLamps)        \
+    ONE(deck) ONE(title) ONE(artist) ONE(key) ONE(bpm) ONE(tempo) ONE(elapsed) ONE(remaining) ONE(loop_label)
 
 /// A part of the screen that redraws on its own: one per field, one per element of an array field.
 enum class Part : uint8_t {

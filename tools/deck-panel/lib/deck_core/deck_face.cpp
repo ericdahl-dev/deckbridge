@@ -129,8 +129,6 @@ Face face(const DeckView& view) {
     char length[24] = "";
     loop_text(length, view.loop_length);
     if (length[0]) std::snprintf(f.loop_label, sizeof f.loop_label, "LOOP %s", length);
-    // Below 0 is unknown (-1): no marker, never one parked in the middle as if in phase.
-    if (view.phase >= 0) f.phase_px = pixels(view.phase, layout::kPhaseTravel);
     // The phase bar (#721, the jog display's rule, #462). Locked is exactly 0.5: DeckBridge holds it there.
     if (view.phase == 0.5f) {
         f.phase_track_color = f.deck_color;

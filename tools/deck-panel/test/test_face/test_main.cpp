@@ -44,7 +44,9 @@ void test_an_empty_deck_shows_no_track_loaded_and_nothing_else() {
     for (const char* text : {f.artist, f.key, f.bpm, f.tempo, f.elapsed, f.remaining})
         TEST_ASSERT_EQUAL_STRING("", text);
     TEST_ASSERT_EQUAL_STRING("LOOP", f.loop_label);
-    TEST_ASSERT_EQUAL(deck_core::kPhaseHidden, f.phase_px);
+    TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+    TEST_ASSERT_EQUAL(0, f.phase_tick);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, f.phase_track_color);
     TEST_ASSERT_EQUAL_HEX32(0xE0E0E0, f.progress_color);
     for (uint32_t c : f.beat_color) TEST_ASSERT_EQUAL_HEX32(0x262626, c);
     for (uint32_t c : f.lamp_color) TEST_ASSERT_EQUAL_HEX32(0x262626, c);
@@ -203,22 +205,6 @@ void test_texts_come_fitted_to_the_fonts() {
     TEST_ASSERT_EQUAL_STRING("? Star", f.artist);
 }
 
-// Phase -1 is unknown (the deck stopped, or no offset since it loaded): no marker, never one parked in the middle.
-void test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar() {
-    DeckView v = loaded_deck();
-    Face f = deck_core::face(v);
-    // The 10 px marker's left edge on the 704 px bar: 0-694 px, 347 in phase.
-    TEST_ASSERT_EQUAL(347, f.phase_px);
-    v.phase = 0.2f;
-    TEST_ASSERT_EQUAL(139, deck_core::face(v).phase_px);  // 138.8
-    v.phase = 1.3f;
-    TEST_ASSERT_EQUAL(694, deck_core::face(v).phase_px);
-    v.phase = -1;
-    TEST_ASSERT_EQUAL(-1, deck_core::face(v).phase_px);
-    v.phase = -0.5f;  // any value below 0 is unknown
-    TEST_ASSERT_EQUAL(-1, deck_core::face(v).phase_px);
-}
-
 // #721, the jog display's phase rule (#462) at panel size. No phase (-1, or any value below 0: the deck stopped, or no
 // offset since it loaded): the plain dark bar, no bar from the center and no tick, never anything that reads as locked.
 void test_no_phase_is_the_plain_dark_bar() {
@@ -340,7 +326,6 @@ int main(int, char**) {
     RUN_TEST(test_the_lamps_light_in_their_colors);
     RUN_TEST(test_the_loop_lamp_shows_whole_beats_or_fractions);
     RUN_TEST(test_texts_come_fitted_to_the_fonts);
-    RUN_TEST(test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar);
     RUN_TEST(test_no_phase_is_the_plain_dark_bar);
     RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
     RUN_TEST(test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track);
