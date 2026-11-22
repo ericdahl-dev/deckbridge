@@ -447,15 +447,23 @@ void setup() {
     const bool rx_buffered = Serial.setRxBufferSize(kSerialRxBytes) == kSerialRxBytes;
     // The cable feed's speed (#667). The ESP32's ROM prints its own boot text at 115200 before this: expected.
     const size_t internal_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    // The driver mallocs its RX ring with no caps, and anything of CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL (4 KB) or more
+    // goes to PSRAM: the owner's panel showed it there (1052 B internal taken, #754). The drain reads the ring in the
+    // gap before the draw, where a PSRAM read can evict the bounce copy's preload, so begin() alone runs with the limit
+    // raised, and it's set back at once.
+    heap_caps_malloc_extmem_enable(2 * kSerialRxBytes);
     Serial.begin(921600);
+    heap_caps_malloc_extmem_enable(CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL);
     const size_t internal_after = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     if (!tx_buffered) Serial.println("deck panel: no serial TX buffer; prints may hold a frame");
     if (!rx_buffered) Serial.println("deck panel: no serial RX buffer; the cable feed may drop frames");
     if (!Serial.setRxFIFOFull(kSerialRxFifoFull)) Serial.println("deck panel: serial RX FIFO threshold not set");
-    // Where the driver put its rings: over kSerialRxBytes of internal RAM taken means the RX ring is internal; much
-    // less, PSRAM, which the drain then reads in the gap before the draw (firmware review; to read once on the panel).
-    Serial.printf("deck panel: serial driver took %u B of internal RAM (RX ring %u B)\n",
-                  unsigned(internal_before - internal_after), unsigned(kSerialRxBytes));
+    // Where the driver put its rings: over kSerialRxBytes of internal RAM taken means the RX ring is internal; less,
+    // PSRAM (firmware review; checked on the panel).
+    const size_t taken = internal_before - internal_after;
+    Serial.printf("deck panel: serial driver took %u B of internal RAM (RX ring %u B)\n", unsigned(taken),
+                  unsigned(kSerialRxBytes));
+    if (taken < kSerialRxBytes) Serial.println("deck panel: serial RX ring isn't in internal RAM");
     char boot[96];
     build_info::boot_line(kBuild, boot, sizeof boot);
     Serial.println(boot);
