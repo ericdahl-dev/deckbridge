@@ -152,10 +152,11 @@ final class DisplayFeed {
     /// A bundle at most this many bytes (#636), well under Wi-Fi's MTU, so one never goes out in IP fragments.
     static let bundleCeiling = 1200
 
-    /// The messages as bundles of at most `bundleCeiling` bytes each, in order. With text capped at `textCap`, no one
+    /// The messages as bundles of at most `bundleCeiling` bytes each with their seq, in order. With text capped at `textCap`, no one
     /// message comes near the ceiling, so it holds for every bundle.
     static func bundles(_ messages: [OSCMessage]) -> [[OSCMessage]] {
-        let header = 16, sizeField = 4
+        // The header, and the seq each bundle starts with when it's sent (#750).
+        let sizeField = 4, header = 16 + sizeField + seq(0).encoded().count
         var out: [[OSCMessage]] = [], current: [OSCMessage] = [], size = header
         for message in messages {
             let added = sizeField + message.encoded().count

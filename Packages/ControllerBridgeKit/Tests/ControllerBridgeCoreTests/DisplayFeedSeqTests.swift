@@ -43,4 +43,14 @@ struct DisplayFeedSeqTests {
         DisplayFeedCoordinatorTests.turnOn(rig, elsewhere)
         #expect(feed.seqs.dropFirst(moved).first == 1)
     }
+
+    @Test("Numbered, a bundle is still at most 1200 bytes: the split leaves room for the seq")
+    func ceiling() {
+        // Many small messages, so the split fills bundles to within a message of the ceiling.
+        let messages = (0..<400).map { OSCMessage("/DeckBridge/Display/title", [.string(String(repeating: "x", count: $0 % 23))]) }
+        let bundles = DisplayFeed.bundles(messages)
+        #expect(bundles.count > 1)
+        #expect(bundles.allSatisfy { OSCPacket.bundle([DisplayFeed.seq(.max)] + $0).count <= DisplayFeed.bundleCeiling })
+        #expect(bundles.flatMap { $0 } == messages)
+    }
 }
