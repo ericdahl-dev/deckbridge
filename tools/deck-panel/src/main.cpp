@@ -20,11 +20,13 @@
 
 #include "board_pins.h"
 #include "build_info.h"
+#include "cable_question.h"
 #include "display_driver.h"
 #include "feed_flags.h"
 #include "frame_clock.h"
 #include "panel_mcu.h"
 #include "perf_log.h"
+#include "serial_feed.h"
 #include "touch.h"
 
 #ifdef DECK_PANEL_TEST_SCREEN
@@ -52,23 +54,44 @@ namespace {
 
 // The firmware the updater reads (#695): on the boot line, on the waiting screen, and on request over serial.
 const build_info::Build kBuild{DECK_PANEL_VERSION, DECK_PANEL_SHA, DECK_PANEL_RELEASE != 0};
-build_info::Question g_question;
+
+// The USB cable (#667): DeckBridge's feed as SLIP frames and the updater's "version" question share its bytes. Serial
+// is read only through g_cable: frames go to the loop's drain, and text outside frames to the question, answered on the
+// cable. The serial driver's RX ring (setup) is the queue.
+struct SerialBytes : serial_feed::Bytes {
+    size_t read(uint8_t* into, size_t room) override { return Serial.read(into, room); }  // never waits (timeout 0)
+};
+void write_line(const char* line) { Serial.println(line); }
+uint32_t millis32() { return static_cast<uint32_t>(millis()); }
+SerialBytes g_serial_bytes;
+cable_question::CableQuestion g_cable_question{kBuild, write_line};
+serial_feed::SerialFeed g_cable{g_serial_bytes, &g_cable_question, millis32};
 
 // The updater asks without a reboot, so it needn't wait for a boot line; opening the port doesn't reset it (#667).
+// Reads the cable's text up to the next whole frame, which stays for the drain (the test screen has no feed, so it
+// drops frames to keep reading), then answers a question heard here or in the frame's drain.
 void answer_version_questions() {
-    while (Serial.available() > 0) {
-        if (!g_question.feed(static_cast<char>(Serial.read()))) continue;
-        char line[96];
-        build_info::answer_line(kBuild, line, sizeof line);
-        Serial.println(line);
-    }
+#ifdef DECK_PANEL_TEST_SCREEN
+    while (g_cable.next_size() > 0) g_cable.skip();
+#else
+    g_cable.next_size();
+#endif
+    g_cable_question.answer();
 }
 
-// Serial's TX ring buffer: a print lands in it and the UART drains it in the background (115200 baud, about 11.5 B a
+// Serial's TX ring buffer: a print lands in it and the UART drains it in the background (921600 baud, about 92 B a
 // millisecond), so no print waits for the wire unless the buffer is full. IDF's TX ring doesn't split an item and
 // takes a write in chunks of up to half its size, each with a header, so it holds less than its size: 2 KB keeps the
 // perf line (under 640 B), the health line and a few more with room.
 constexpr size_t kSerialTxBytes = 2048;
+// Serial's RX ring: the cable feed's queue (#667) between the loop's drains. A full snapshot is one bundle of about 700 B,
+// a little more SLIP-escaped, and 921600 baud brings about 92 B a millisecond: 4 KB holds a few snapshots and over
+// 40 ms of a full-rate line, past any one frame's work.
+constexpr size_t kSerialRxBytes = 4096;
+// The UART's FIFO hands bytes to the RX ring at this fill (default 120 of its 128). Its interrupt is on core 1 with
+// the panel's, behind a bounce copy of up to about 1 ms (PANEL_DRAW_AT_US), and 921600 baud brings about 92 B a ms:
+// at 16 the FIFO has 112 B, about 1.2 ms, of room left when the interrupt is due (firmware review).
+constexpr uint8_t kSerialRxFifoFull = 16;
 // The chores end this long before the next latch, so the frame's wait starts before it.
 constexpr uint32_t kGuardUs = 3000;
 
@@ -110,6 +133,28 @@ std::atomic<uint32_t> g_feed_joins{0};
 feed_drain::Drain g_drain;
 FeedUdp g_udp;
 #endif
+// The cable's drain, both builds: read on the loop task in the read step, as the core is only ever fed there.
+feed_drain::Drain g_cable_drain{deck_core::Source::cable};
+#if !FEED_RX_TASK && defined(PANEL_PERF_LOG)
+// The cable, stamped for the frame ledger (#662) as FeedUdp stamps Wi-Fi in this build: at the drain's look and read.
+// Both sources are measured the same way, at the loop's read; the time in the UART ring or lwIP's mailbox isn't.
+struct StampedCable : feed_drain::Socket {
+    size_t next_size() override {
+        const size_t size = g_cable.next_size();
+        if (size > 0) perf_log::feed_seen(now_us());
+        return size;
+    }
+    size_t read(uint8_t* into, size_t room) override {
+        const size_t got = g_cable.read(into, room);
+        if (got > 0) perf_log::feed_read(now_us());
+        return got;
+    }
+    void skip() override { g_cable.skip(); }
+};
+StampedCable g_cable_socket;
+#else
+feed_drain::Socket& g_cable_socket = g_cable;
+#endif
 DeckScreen g_screen;
 wifi_setup::HoldReset g_hold;
 uint32_t g_too_big = 0;
@@ -140,8 +185,7 @@ uint64_t clock_us() { return static_cast<uint64_t>(esp_timer_get_time()); }
 /// Waits on the socket (select, FeedUdp::wait) for up to FEED_RX_WAIT_MS, 5 ms: woken by lwIP when a datagram lands,
 /// so it's stamped (at pump()'s find, its clock) microseconds after arrival, and with none, 200 wakes a second, not
 /// #713's 1000 looks. Off Wi-Fi the socket is shut and wait() sleeps the same 5 ms: no spin. The wait is bounded, never
-/// forever, for two reasons: poll() must see a join to reopen the socket, and the USB cable's feed (#711) is pumped
-/// here too, and Serial isn't an lwIP descriptor, so select() can't wake on it. FEED_RX_DELAY_TICKS=N (feed_flags.h)
+/// forever: poll() must see a join to reopen the socket. (The USB cable's feed, #667, is the loop's, not this task's.) FEED_RX_DELAY_TICKS=N (feed_flags.h)
 /// is #713's look-then-sleep instead, for the A/B builds.
 void receive_loop(void*) {
     for (;;) {
@@ -156,9 +200,7 @@ void receive_loop(void*) {
         // wait() returns at once forever and the task watchdog fires (#713's firmware review).
         if (g_udp.next_size() > 0) vTaskDelay(1);
 #endif
-        // #711, the USB cable: pump its reader here, after each wake, into the same intake (one producer, this task):
-        //   g_intake.pump(g_cable, clock_us, deck_core::Source::cable);
-        // It runs at least every FEED_RX_WAIT_MS, since nothing above waits longer; it must not block either.
+        // The USB cable (#667) isn't read here: the loop's read step drains it (g_cable_drain), in both builds.
     }
 }
 
@@ -171,10 +213,10 @@ void receive_begin() {
 unsigned receive_stack_free() {
     return g_receive_task ? unsigned(uxTaskGetStackHighWaterMark(g_receive_task) * sizeof(StackType_t)) : 0u;
 }
-uint32_t feed_too_big() { return g_intake.too_big(); }
+uint32_t feed_too_big() { return g_intake.too_big() + g_cable_drain.too_big(); }
 #else
 unsigned receive_stack_free() { return 0; }
-uint32_t feed_too_big() { return g_drain.too_big(); }
+uint32_t feed_too_big() { return g_drain.too_big() + g_cable_drain.too_big(); }
 #endif
 // Datagrams that never came, from DeckBridge's bundle numbers (#750): lwIP's drops and the intake's alike, per source.
 uint32_t feed_dropped() { return g_core.lost(); }
@@ -273,6 +315,8 @@ class PanelBoard : public frame_clock::Board {
     void read_feed() override {
         MARK(read);
 #ifndef DECK_PANEL_TEST_SCREEN
+        // One budget for the read step (feed_drain::kBudgetMs), shared by Wi-Fi's drain and the cable's.
+        const uint32_t read_start = millis32();
         // At the frame's start, the vsync after the latch, in the gap before the draw (PANEL_DRAW_AT_US): the feed
         // that came since the last frame. With the receive task, what it queued, each datagram at its arrival (#664),
         // never more than 16 and no socket call; by default, the socket itself, drained here (feed_drain).
@@ -303,8 +347,11 @@ class PanelBoard : public frame_clock::Board {
 #endif
 #else
         // FEED_RX_TASK=0: main's drain, verbatim, on the raw socket now; FeedUdp stamps the ledger (feed_udp.cpp).
-        g_read = g_drain.run(g_udp, g_core, millis(), [] { return static_cast<uint32_t>(millis()); });
+        g_read = g_drain.run(g_udp, g_core, millis(), millis32, read_start);
 #endif
+        // The USB cable (#667), both builds: its frames from Serial's RX ring, in what's left of the step's budget
+        // (always one). g_read counts both sources, as the perf line's datagrams.
+        g_read += g_cable_drain.run(g_cable_socket, g_core, millis(), millis32, read_start);
 #endif
     }
 
@@ -397,8 +444,23 @@ PanelBoard g_board;
 void setup() {
     // Before begin(): the buffer can't be set after.
     const bool tx_buffered = Serial.setTxBufferSize(kSerialTxBytes) == kSerialTxBytes;
-    Serial.begin(115200);
+    const bool rx_buffered = Serial.setRxBufferSize(kSerialRxBytes) == kSerialRxBytes;
+    // The cable feed's speed (#667). The ESP32's ROM prints its own boot text at 115200 before this: expected.
+    const size_t internal_before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    // IDF's UART driver allocates its rings with heap_caps_malloc(MALLOC_CAP_DEFAULT), which searches PSRAM first, so
+    // the 4 KB RX ring is in PSRAM (the owner's panel: 1052 B internal taken, #754). The malloc threshold doesn't reach
+    // it; CONFIG_UART_ISR_IN_IRAM would (custom_sdkconfig), if the perf build's copy margin shows the cable hurts.
+    Serial.begin(921600);
+    const size_t internal_after = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     if (!tx_buffered) Serial.println("deck panel: no serial TX buffer; prints may hold a frame");
+    if (!rx_buffered) Serial.println("deck panel: no serial RX buffer; the cable feed may drop frames");
+    if (!Serial.setRxFIFOFull(kSerialRxFifoFull)) Serial.println("deck panel: serial RX FIFO threshold not set");
+    // Where the driver put its rings: over kSerialRxBytes of internal RAM taken means the RX ring is internal; less,
+    // PSRAM (firmware review; checked on the panel).
+    const size_t taken = internal_before - internal_after;
+    Serial.printf("deck panel: serial driver took %u B of internal RAM (RX ring %u B)\n", unsigned(taken),
+                  unsigned(kSerialRxBytes));
+    if (taken < kSerialRxBytes) Serial.println("deck panel: serial RX ring isn't in internal RAM");
     char boot[96];
     build_info::boot_line(kBuild, boot, sizeof boot);
     Serial.println(boot);
