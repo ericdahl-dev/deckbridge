@@ -80,6 +80,8 @@ final class BridgeModel {
     /// The deck panel's USB cable (#667) and the queue its frames go out on.
     private var panelCable: PanelCable?
     private var cableFeedQueue: DisplayFeedQueue?
+    /// Lends the cable's port to the Firmware Updater when it asks (#710).
+    private var cableHandoff: CableHandoffSignals?
     private let storage = UserDefaultsStorage()
     /// What Settings shows and changes (#19). Saved in user defaults.
     /// The running profile's deck layers (#79): empty for a controller without them.
@@ -390,6 +392,8 @@ final class BridgeModel {
         cableFeed.trace = DebugTrace.shared.sink
         #endif
         panelCable = cable
+        // The Firmware Updater asks for the panel's port and says when it's done (#710): signals on this Mac only.
+        cableHandoff = CableHandoffSignals(cable: cable)
         cableFeedQueue = cableFeed
         producer = pipe.producer
         applier = SettingsApplier(

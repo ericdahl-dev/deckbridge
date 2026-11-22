@@ -33,6 +33,8 @@ targets:
         product: UpdaterScreen
       - package: FirmwareUpdaterKit
         product: FirmwareModel
+      - package: FirmwareUpdaterKit
+        product: PortHandoff
     info:
       path: Sources/Info.plist
       properties:
