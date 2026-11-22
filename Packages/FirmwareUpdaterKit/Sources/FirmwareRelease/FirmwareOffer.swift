@@ -1,4 +1,5 @@
 import FirmwareCatalog
+import Foundation
 
 /// What the updater's screen says about the deck panel firmware it offers (#704): from the newest release, or built
 /// into the app, and when a release wasn't used, why, in plain words.
@@ -34,5 +35,15 @@ public struct FirmwareOffer: Sendable, Equatable {
         case .dropsBuiltIn: return "The newest release leaves out firmware this app carries" + builtIn
         case .unknownFormat: return "The newest release needs a newer version of this app" + builtIn
         }
+    }
+}
+
+extension FirmwareOffer {
+    /// What the app offers on launch (#704): the newest release from this project's GitHub, over `http`, checked
+    /// against the app's trusted keys, else the firmware built into the app, and why.
+    public static func fetch(http: any HTTPClient, over builtIn: Catalog, cache: URL,
+                             trusting keys: [TrustedKey] = ReleaseKeys.trusted) async -> FirmwareOffer {
+        FirmwareOffer(await ReleaseFetcher(feed: GitHubReleaseFeed(http: http), trusting: keys, cache: cache)
+            .fetch(over: builtIn))
     }
 }

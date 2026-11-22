@@ -1,4 +1,7 @@
 import DeviceFinder
+import FirmwareCatalog
+import FirmwareRelease
+import Foundation
 import SwiftUI
 import UpdaterScreen
 
@@ -16,6 +19,8 @@ struct FirmwareUpdaterApp: App {
                     if SmokeLaunch.isOn { SmokeLaunch.finish() }
                     await model.watch()
                 }
+                // Beside the devices, not after them: watch() runs until the app quits.
+                .task { await model.loadFirmware() }
         }
         .windowResizability(.contentSize)
     }
@@ -27,7 +32,21 @@ enum Live {
     static let usbChanges = IOKitUSBChanges()
     static func updater() -> Updater {
         Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
-                changes: usbChanges.changes, log: FileLog.shared)
+                changes: usbChanges.changes, log: FileLog.shared, firmware: firmwareOffer)
+    }
+
+    /// The firmware on offer (#704): this project's newest GitHub release if it checks out against the app's keys, else
+    /// the firmware built into the app, and why. One fetch per launch; a checked release is kept in Application Support.
+    @Sendable static func firmwareOffer() async -> FirmwareLine {
+        guard let builtIn = try? Catalog.builtIn() else {
+            return FirmwareLine(source: "The firmware built into this app can't be read", reason: nil)
+        }
+        let support = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                    appropriateFor: nil, create: true))
+            ?? FileManager.default.temporaryDirectory
+        let cache = support.appending(path: "dev.ericdahl.FirmwareUpdater/Releases")
+        let offer = await FirmwareOffer.fetch(http: URLSessionHTTP(), over: builtIn, cache: cache)
+        return FirmwareLine(source: offer.source, reason: offer.reason)
     }
 }
 
@@ -38,6 +57,7 @@ struct UpdaterView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
+            FirmwareRow(line: model.firmware)
             SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
             if model.screen.lc6000.warning == nil { BackupView(model: backup) }
             HStack {
@@ -91,5 +111,24 @@ struct GuideView: View {
             Link("Open WCH's driver download page", destination: guide.link)
         }
         .padding(.top, 4)
+    }
+}
+
+/// The firmware on offer (#704), on its own row: where it comes from and, if the newest release wasn't used, why.
+struct FirmwareRow: View {
+    let line: FirmwareLine?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let line {
+                Text(line.source)
+                if let reason = line.reason { Text(reason).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking for newer firmware…").foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
