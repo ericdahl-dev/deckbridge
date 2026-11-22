@@ -38,7 +38,7 @@ public actor GitHubReleaseFeed: ReleaseFeed {
     /// The newest release's manifest: GitHub redirects it to the release's own download URL, which names its tag.
     static let latestURL = URL(string: "https://github.com/ericdahl-dev/deckbridge/releases/latest/download/manifest.json")!
     /// Every request's headers, and only these: no Authorization, no cookies.
-    static let headers = ["User-Agent": "DeckBridge-Firmware-Updater", "Accept": "application/vnd.github+json"]
+    static let headers = ["User-Agent": "DeckBridge-Firmware-Updater"]
 
     /// Where an asset's download URL must be: this repo's releases on github.com.
     static let downloadPrefix = "/ericdahl-dev/deckbridge/releases/download/"

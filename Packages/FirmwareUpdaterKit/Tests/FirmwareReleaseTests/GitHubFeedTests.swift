@@ -56,9 +56,9 @@ func publishedGitHub() -> FakeGitHub {
     #expect(github.asked.map(\.url) == [latestURL, downloads + "manifest.json", stored + "manifest.json?sig=x",
                                         downloads + "manifest.sig", stored + "manifest.sig?sig=x"])
     #expect(!github.asked.contains { $0.url.contains("api.github.com") })
-    // No token, no cookie, nothing about the user: a generic client name and what it accepts, the same on every request.
+    // No token, no cookie, nothing about the user: a generic client name, the same on every request.
     for request in github.asked {
-        #expect(request.headers == ["User-Agent": "DeckBridge-Firmware-Updater", "Accept": "application/vnd.github+json"])
+        #expect(request.headers == ["User-Agent": "DeckBridge-Firmware-Updater"])
     }
     #expect(github.asked.count == 5)  // the release, then each asset's download URL and its redirect
 }
