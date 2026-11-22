@@ -171,6 +171,18 @@ final class DisplayFeed {
         return out
     }
 
+    /// The feed's sequence number (#750): first in every bundle, so a display can count the datagrams it never got. A
+    /// display that doesn't know the address ignores it (ADR 0011). An OSC int carries the UInt32's bit pattern.
+    static func seq(_ number: UInt32) -> OSCMessage { OSCMessage(prefix + "seq", [.int(Int32(bitPattern: number))]) }
+    /// The last bundle's number: 0 before the first.
+    private var seq: UInt32 = 0
+
+    /// Sends one bundle, numbered.
+    private func send(_ bundle: [OSCMessage], to sender: any OSCSender) {
+        seq &+= 1
+        sender.send(bundle: [Self.seq(seq)] + bundle)
+    }
+
     /// The goodbye (#651): DeckBridge is quitting or the feed was turned off; a display shows its own idle look.
     static let goodbye = OSCMessage(prefix + "goodbye", [.int(1)])
     /// A datagram has gone out since the destination opened: there's a display to say goodbye to.
@@ -180,7 +192,7 @@ final class DisplayFeed {
     /// the destination opens again or the feed is turned on.
     func goodbye() {
         guard greeted, let sender else { return }
-        sender.send(bundle: [Self.goodbye])
+        send([Self.goodbye], to: sender)
         say("goodbye")
         greeted = false
         open = false
@@ -286,7 +298,7 @@ final class DisplayFeed {
         // with a deck playing, each snapshot a burst of 20.
         if fastSent { fastDue = (fastDue.map { max($0, now - Self.fastInterval) } ?? now) + Self.fastInterval }
         let bundles = Self.bundles(changes)
-        for bundle in bundles { sender.send(bundle: bundle) }
+        for bundle in bundles { send(bundle, to: sender) }
         if !bundles.isEmpty { greeted = true }
         let count = changes.count
         if snapshot {
