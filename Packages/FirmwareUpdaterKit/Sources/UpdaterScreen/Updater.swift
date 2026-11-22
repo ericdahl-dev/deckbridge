@@ -27,6 +27,7 @@ public final class Updater {
     private let finder: DeviceFinder
     private let changes: AsyncStream<Void>
     private let clock: any UpdaterClock
+    private let log: (any LogSink)?
     /// How long the panel may be on USB with no serial port before its driver is called missing (#700's owner run):
     /// WCH's driver extension makes the port about 6 s after the USB device appears.
     public static let portWait = 10.0
@@ -36,10 +37,13 @@ public final class Updater {
     public private(set) var pendingLook: Task<Void, Never>?
 
     /// `changes` yields when a USB device arrives or leaves, or a serial port appears.
-    public init(finder: DeviceFinder, changes: AsyncStream<Void>, clock: any UpdaterClock = SystemClock()) {
+    /// `log`: the finder's log, for the line when the wait for the port is up.
+    public init(finder: DeviceFinder, changes: AsyncStream<Void>, clock: any UpdaterClock = SystemClock(),
+                log: (any LogSink)? = nil) {
         self.finder = finder
         self.changes = changes
         self.clock = clock
+        self.log = log
     }
 
     public func refresh() async {
@@ -92,6 +96,10 @@ public final class Updater {
             await clock.sleep(for: Self.portWait)
             guard !Task.isCancelled else { return }
             await self.refresh()
+            // Still no port: the log says so as the screen does, once.
+            if case .driverMissing = self.found.panel {
+                self.log?.log("deck panel: on USB \(DeviceFinder.panelUSBID), no serial port after 10 s (driver missing)")
+            }
         }
     }
 }

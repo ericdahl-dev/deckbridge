@@ -163,4 +163,19 @@ struct UpdaterTests {
         await updater.refresh()
         #expect(updater.screen.panel.detail == "Waiting for its port")
     }
+
+    @Test("The log matches the screen: no serial port yet while waiting, and after 10 s, driver missing, once")
+    func logMatchesTheScreen() async {
+        let rig = Rig()
+        rig.usb.plugged = [Self.noDriver]
+        let clock = FakeClock()
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, clock: clock, log: rig.log)
+        await updater.refresh()
+        #expect(rig.log.lines == ["deck panel: on USB 1A86:7522, no serial port yet"])
+        clock.pass()
+        await updater.pendingLook?.value
+        #expect(rig.log.lines == ["deck panel: on USB 1A86:7522, no serial port yet",
+                                  "deck panel: on USB 1A86:7522, no serial port yet",
+                                  "deck panel: on USB 1A86:7522, no serial port after 10 s (driver missing)"])
+    }
 }
