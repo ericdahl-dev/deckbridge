@@ -107,6 +107,16 @@ void test_a_window_with_no_feed_frames_says_so() {
     TEST_ASSERT_TRUE(perf_line::format(w).find("1 too big 2 dropped, no feed frames,") != std::string::npos);
 }
 
+// No receive task (the default since #713): lwIP drops datagrams past its mailbox without counting them, so the line
+// says the drops aren't counted rather than a 0 that would read as none.
+void test_drops_not_counted_say_so() {
+    perf_line::Window w = window();
+    w.drops_counted = false;
+    const std::string line = perf_line::format(w);
+    TEST_ASSERT_TRUE(line.find("feed 900 datagrams 1 too big n/a dropped,") != std::string::npos);
+    TEST_ASSERT_TRUE(line.find("2 dropped") == std::string::npos);
+}
+
 // The frame clock's report (#663): frames run on a latch, those whose draw ran past the next one, the latches that
 // went by with no frame, and the waits no latch ended (a stopped panel).
 void test_the_frame_clock_counts_follow_the_feed_lag() {
@@ -237,5 +247,6 @@ int main() {
     RUN_TEST(test_the_copy_line_lists_the_late_copies_it_kept);
     RUN_TEST(test_the_copy_line_counts_copies_while_serial_drains);
     RUN_TEST(test_the_widest_line_fits_the_serial_buffer);
+    RUN_TEST(test_drops_not_counted_say_so);
     return UNITY_END();
 }

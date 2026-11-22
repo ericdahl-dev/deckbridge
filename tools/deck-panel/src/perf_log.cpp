@@ -8,6 +8,7 @@
 #include <lvgl.h>
 
 #include "display_driver.h"
+#include "feed_flags.h"
 #include "frame_ledger.h"
 #include "perf_line.h"
 
@@ -115,6 +116,7 @@ void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bo
     w.datagrams = g_datagrams;
     w.too_big = g_too_big - g_too_big_at_start;
     w.dropped = g_dropped - g_dropped_at_start;
+    w.drops_counted = FEED_RX_TASK != 0;  // with no task, lwIP drops past its mailbox unseen (#713)
     w.internal_free = static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     w.scan = display_take_scan();
     w.copy_budget_us = display_copy_budget_us();
