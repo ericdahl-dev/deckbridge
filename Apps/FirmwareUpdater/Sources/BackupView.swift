@@ -13,6 +13,8 @@ final class BackupModel {
     private(set) var stepResult: String?
     /// The update this session's backup allows (#693); nil until a backup is saved.
     private(set) var update: UpdateModel?
+    /// Block B's install (#751): display chip only, and only when this app carries block B.
+    private(set) var blockB: BlockBModel?
 
     /// The display chip's step into update mode: only on the owner's typed UPDATE, once.
     func enterUpdateMode() async {
@@ -46,11 +48,19 @@ final class BackupModel {
             result = report.refusal ?? "The chip in update mode couldn't be opened. Nothing was read."
             return
         }
+        let stamp = Self.stamp()
         let report = await UnitCheck(known: Self.known, log: FileLog.shared)
-            .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: Self.stamp())
+            .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: stamp)
         update = report.read.map { UpdateModel(read: $0) }
         // With a read, the update's view of it: a chip already running this app's patch is said to (#748).
         result = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
+        blockB = nil
+        if let read = report.read, read.kind == .display {
+            let (model, problem) = await BlockBModel.make(app: read.app, reader: DFUReader(transport: ReadOnlyTransport(usb)),
+                                                          folder: folder, stamp: stamp)
+            blockB = model
+            if let problem { result = (result.map { $0 + "\n" } ?? "") + problem }
+        }
     }
 
     static var known: KnownFirmware {
@@ -110,6 +120,7 @@ struct BackupView: View {
             }
             if let result = model.result { Text(result).fixedSize(horizontal: false, vertical: true) }
             if let update = model.update { UpdateView(model: update) }
+            if let blockB = model.blockB { BlockBView(model: blockB) }
         }
         .padding(.top, 4)
     }
