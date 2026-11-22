@@ -26,7 +26,11 @@ final class StubDeckBridge: HandoffChannel, @unchecked Sendable {
         if signal == .release, answers { for listener in heard { listener.yield(.released) } }
     }
 
-    func borrow() -> PortBorrow { PortBorrow(channel: self, sleep: { _ in }) }
+    /// The wait for an answer: none when it won't come, and long enough that an answer always wins when it will.
+    func borrow() -> PortBorrow {
+        let answers = answers
+        return PortBorrow(channel: self, sleep: { _ in if answers { try? await Task.sleep(for: .seconds(10)) } })
+    }
 }
 
 /// The flasher (#687) as the updater sees it: it reports these steps, as PanelUpdate would.
@@ -67,5 +71,18 @@ struct PanelUpdateFlowTests {
         let updater = Self.updater(StubDeckBridge(answers: false), StubFlasher([.connecting, .restarting, Self.updated]))
         await updater.updatePanel()
         #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+    }
+
+    @Test("DeckBridge lets go: the update runs, the port goes back to it once, and a fresh look shows the new build")
+    func lent() async {
+        let rig = Rig()
+        UpdaterScreenTests.panel(rig, printing: ["deck panel: boot, build 2b7e9c1"])
+        let deckBridge = StubDeckBridge(answers: true)
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, borrow: deckBridge.borrow,
+                              flasher: StubFlasher([.connecting, .writing(0.5), .restarting, Self.updated]))
+        await updater.updatePanel()
+        #expect(deckBridge.posted == [.release, .done])
+        #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+        #expect(updater.screen.panel.detail == "Build 2b7e9c1")
     }
 }

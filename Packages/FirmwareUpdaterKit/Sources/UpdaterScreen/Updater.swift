@@ -78,6 +78,8 @@ public final class Updater {
             show()
         }
         lend?.giveBack()
+        // The panel restarted into its new build: look again so the section shows it.
+        await refresh()
     }
 
     public func refresh() async {
