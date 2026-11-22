@@ -78,4 +78,26 @@ struct JogDisplayBeatTimingTests {
         at(3.00)
         #expect(Slots.shows(port) == [4, 1, 2])
     }
+
+    /// Deck 1 (playing, drawn) as the master or not, the master beat 1 and 2 heard, then deck 1 pauses at 1.80.
+    static func pausedAfterTwoBeats(master: Bool) throws -> DrawnDisplayHandshakeTests.Port {
+        let (rig, port) = try Live.playing()
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Sync", [.int(master ? 1 : 0)]))
+        Self.clock(rig, 1, at: 1.00)
+        Self.clock(rig, 2, at: 1.47)
+        Self.tick(rig, until: 1.80)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Playing", [.int(0)]))
+        Self.tick(rig, until: 2.50)
+        return port
+    }
+
+    @Test("The master deck stops: so did the master clock, so no beat goes ahead of a message")
+    func masterStopsTheClock() throws {
+        #expect(Self.beats(try Self.pausedAfterTwoBeats(master: true)) == [1, 2])
+    }
+
+    @Test("Another deck's pause says nothing about the master clock: the next beat still goes when due")
+    func otherDeckPauseKeepsTheClock() throws {
+        #expect(Self.beats(try Self.pausedAfterTwoBeats(master: false)) == [1, 2, 3])
+    }
 }

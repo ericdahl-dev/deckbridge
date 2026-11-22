@@ -273,7 +273,12 @@ final class JogDisplayController {
     func observe(_ entries: [Entry]) {
         for (index, entry) in entries.enumerated() {
             let facts = entry.facts
-            if lastPlaying[index] == true, !facts.playing { needles[index]?.freeze(at: clock.now) }
+            if lastPlaying[index] == true, !facts.playing {
+                needles[index]?.freeze(at: clock.now)
+                // The master deck stopped: so did the master clock, at once (#720, as the panel's #660). Another
+                // deck's pause says nothing about it.
+                if facts.master { beatClock.stop() }
+            }
             lastPlaying[index] = facts.playing
             if let ramp = facts.barRamp, ramp != lastRamp[index] {
                 lastRamp[index] = ramp
