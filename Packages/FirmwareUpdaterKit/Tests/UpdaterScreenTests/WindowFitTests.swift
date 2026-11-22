@@ -31,4 +31,25 @@ struct WindowFitTests {
         let size = WindowFit.size(content: CGSize(width: 2000, height: 300), titleBar: 28, visible: Self.laptop)
         #expect(size == CGSize(width: 1470, height: 328))
     }
+
+    @Test("A size set by hand is never shrunk when the content is smaller")
+    func handSetKept() {
+        let size = WindowFit.size(content: CGSize(width: 420, height: 300), titleBar: 28, visible: Self.laptop,
+                                  handSet: CGSize(width: 800, height: 700))
+        #expect(size == CGSize(width: 800, height: 700))
+    }
+
+    @Test("New text taller than a size set by hand: the window still grows to fit it")
+    func growsPastHandSet() {
+        let size = WindowFit.size(content: CGSize(width: 420, height: 800), titleBar: 28, visible: Self.laptop,
+                                  handSet: CGSize(width: 800, height: 700))
+        #expect(size == CGSize(width: 800, height: 828))
+    }
+
+    @Test("A size set by hand on a bigger screen stops at this screen's visible frame")
+    func handSetClamped() {
+        let size = WindowFit.size(content: CGSize(width: 420, height: 300), titleBar: 28, visible: Self.laptop,
+                                  handSet: CGSize(width: 2400, height: 1300))
+        #expect(size == CGSize(width: 1470, height: 860))
+    }
 }
