@@ -77,12 +77,20 @@ public final class Updater {
         return clock.now - since < Self.portWait
     }
 
-    /// Starts the wait for the port when the panel first shows on USB without one, with a look at its end.
+    /// Starts the wait for the port when the panel first shows on USB without one, with a look at its end. A port, or
+    /// the panel unplugged, ends the wait and calls the look off; the next plug waits again.
     private func watchForPort() {
-        guard case .driverMissing = found.panel, noPortSince == nil else { return }
+        guard case .driverMissing = found.panel else {
+            noPortSince = nil
+            pendingLook?.cancel()
+            pendingLook = nil
+            return
+        }
+        guard noPortSince == nil else { return }
         noPortSince = clock.now
         pendingLook = Task { [clock] in
             await clock.sleep(for: Self.portWait)
+            guard !Task.isCancelled else { return }
             await self.refresh()
         }
     }
