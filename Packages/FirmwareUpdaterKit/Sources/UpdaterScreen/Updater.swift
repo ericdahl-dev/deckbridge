@@ -1,6 +1,8 @@
 import DeviceFinder
 import Foundation
 import Observation
+import PanelFlasher
+import PortHandoff
 
 /// The time, and a wait: the real one in the app, a fake in tests.
 public protocol UpdaterClock: Sendable {
@@ -44,6 +46,10 @@ public final class Updater {
     private let changes: AsyncStream<Void>
     private let clock: any UpdaterClock
     private let log: (any LogSink)?
+    /// Asks DeckBridge for the panel's port when it holds it for the cable feed (#710); nil never asks.
+    private let borrow: (@Sendable () -> PortBorrow)?
+    /// DeckBridge held the port and didn't answer when asked for it, in the last look.
+    private var deckBridgeSilent = false
     /// How long the panel may be on USB with no serial port before its driver is called missing (#700's owner run):
     /// WCH's driver extension makes the port about 6 s after the USB device appears.
     public static let portWait = 10.0
@@ -54,16 +60,88 @@ public final class Updater {
 
     /// `changes` yields when a USB device arrives or leaves, or a serial port appears.
     /// `log`: the finder's log, for the line when the wait for the port is up.
+    /// `borrow`: a new borrow of the panel's port from DeckBridge, used when a look finds the port busy, and by an
+    /// update over the cable (#710). `flasher`: puts the catalog's newest image on the panel over its cable (#687);
+    /// nil, the app offers no update.
     public init(finder: DeviceFinder, changes: AsyncStream<Void>, clock: any UpdaterClock = SystemClock(),
-                log: (any LogSink)? = nil, firmware: (@Sendable () async -> FirmwareLine)? = nil) {
+                log: (any LogSink)? = nil, borrow: (@Sendable () -> PortBorrow)? = nil,
+                firmware: (@Sendable () async -> FirmwareLine)? = nil, flasher: (any PanelFlashing)? = nil) {
         self.finder = finder
         self.fetchFirmware = firmware
         self.changes = changes
         self.clock = clock
         self.log = log
+        self.borrow = borrow
+        self.flasher = flasher
+    }
+
+    private let flasher: (any PanelFlashing)?
+    /// What the update over the cable says now; nil before the first one.
+    private var updateText: String?
+    /// An update over the cable is running: one at a time, and no looks meanwhile.
+    public private(set) var updating = false
+    private var flashing: Task<Void, Never>?
+
+    /// The update offered for the panel's build, when the panel told it and the catalog has one newer.
+    private var offer: PanelUpdateOffer? {
+        guard let flasher, case .onSerial(let build?) = found.panel else { return nil }
+        return flasher.offer(for: build)
+    }
+
+    /// The update can still be stopped: only before the first erase. The panel has one app slot (until #690), so a
+    /// stop once it's being written would leave it unable to start (#744's live run).
+    public private(set) var canCancel = false
+
+    /// The repair offered for a panel whose port is there but whose build can't be read (#744): it may not be starting,
+    /// or it may run firmware from before #702. The ROM bootloader is there either way.
+    private var repair: PanelUpdateOffer? {
+        guard let flasher, case .onSerial(nil) = found.panel, let version = flasher.repairVersion() else { return nil }
+        return PanelUpdateOffer(version: version, note: nil)
+    }
+
+    /// Repairs the panel: the catalog's image, written the same way as an update (after the owner confirms).
+    public func repairPanel() async { await updatePanel() }
+
+    /// Stops the update before it writes: the flasher resets the panel into its app. Once writing has begun, nothing.
+    public func cancelUpdate() {
+        guard canCancel else { return }
+        flashing?.cancel()
+    }
+
+    /// Updates the panel over its cable (#687). DeckBridge is asked for the port first (#710). With no answer (it isn't
+    /// running, or it's from before #710) the port is tried anyway; only a busy port then says to free it by hand.
+    public func updatePanel() async {
+        guard let flasher, !updating else { return }
+        updating = true
+        canCancel = true
+        let lend = borrow?()
+        let outcome = await lend?.borrow() ?? .noAnswer
+        let (steps, step) = AsyncStream<PanelUpdate.Step>.makeStream()
+        flashing = Task.detached {
+            await flasher.flash { step.yield($0) }
+            step.finish()
+        }
+        for await next in steps {
+            if case .writing = next { canCancel = false }
+            if case .failed(.portBusy) = next, let text = UpdaterScreen.handoff(outcome) {
+                updateText = text
+            } else {
+                updateText = next.text
+            }
+            show()
+        }
+        lend?.giveBack()
+        flashing = nil
+        canCancel = false
+        updating = false
+        // The panel restarted into its new build: look again so the section shows it.
+        await refresh()
     }
 
     public func refresh() async {
+        // During an update the panel restarts (a USB change), and a look would open the port the flasher holds. The
+        // update looks once when it's done.
+        guard !updating else { return }
         guard !looking else {
             lookAgain = true
             return
@@ -72,6 +150,7 @@ public final class Updater {
         repeat {
             lookAgain = false
             found = await finder.find()
+            await lookPastDeckBridge()
             watchForPort()
             show()
         } while lookAgain
@@ -96,7 +175,23 @@ public final class Updater {
     }
 
     private func show() {
-        screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort)
+        screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort,
+                               deckBridgeSilent: deckBridgeSilent, update: updateText, panelUpdate: offer, panelRepair: repair,
+                               writing: updating && !canCancel)
+    }
+
+    /// The panel's port busy: DeckBridge holds it for the cable feed. Ask for it, look while it's lent, give it back.
+    /// With no answer nothing is forced; the screen says how to free it.
+    private func lookPastDeckBridge() async {
+        deckBridgeSilent = false
+        guard case .portBusy = found.panel, let borrow = borrow?() else { return }
+        switch await borrow.borrow() {
+        case .lent:
+            found = await finder.find()
+            borrow.giveBack()
+        case .noAnswer:
+            deckBridgeSilent = true
+        }
     }
 
     /// The panel is on USB with no port, and the wait isn't up: it may still be coming.

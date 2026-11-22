@@ -1,6 +1,6 @@
 // Asking DeckBridge for the deck panel's port (#710), over DistributedNotificationCenter: names only, inside this user's
 // session on this Mac. Not unit-tested: the rules are FirmwareUpdaterKit's PortBorrow. The update step (#687) borrows
-// with it and gives the port back when it's done.
+// with it and gives the port back when it's done, and so does a look that finds the port busy.
 import Foundation
 import PortHandoff
 

@@ -24,6 +24,7 @@ public struct FirmwareOffer: Sendable, Equatable {
         let builtIn = ", so the firmware built into this app is offered."
         switch refusal {
         case .unreachable: return "GitHub couldn't be reached" + builtIn
+        case .noFirmwareRelease: return "No signed firmware release is published yet" + builtIn
         case .unknownKey: return "The newest release is signed with a key this app doesn't trust yet" + builtIn
         case .badSignature: return "The newest release's signature doesn't check out" + builtIn
         case .unreadableManifest: return "The newest release's manifest can't be read" + builtIn

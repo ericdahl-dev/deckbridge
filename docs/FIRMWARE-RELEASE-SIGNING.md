@@ -52,6 +52,13 @@ swift run firmware-release new-key --id backup --out /Volumes/<USB stick>/backup
    **A block change ships only with a deck panel release.** The app takes the newest release only when its panel
    version is newer, so to ship new blocks, bump `tools/deck-panel/VERSION` too. One release stream keeps the app's
    "latest" release honest.
+
+   **Every published release carries the current `manifest.json` and `manifest.sig`.** The updater reads GitHub's
+   newest published release (`/releases/latest/download/manifest.json`), whatever kind it is. A release without a
+   manifest published after a firmware release hides that firmware: the updater says no signed firmware release is
+   published. So don't publish an app-only GitHub release. If one is ever needed, attach the current firmware
+   release's files to it, or create it with `gh release create --latest=false` so the firmware release stays
+   "latest". Today only this workflow creates releases (`release.yml` ships the app through TestFlight, not GitHub).
 3. On your Mac:
 
 ```sh

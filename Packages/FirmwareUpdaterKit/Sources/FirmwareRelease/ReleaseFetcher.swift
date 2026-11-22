@@ -36,6 +36,8 @@ public enum Refusal: Error, Sendable, Equatable {
     case notNewer
     /// The feed couldn't be reached, or a file couldn't be fetched.
     case unreachable
+    /// The newest release carries no signed firmware manifest (an app release): nothing went wrong, there's none yet.
+    case noFirmwareRelease
     /// Signed and intact, but not a catalog the app accepts (an LC6000 entry that isn't a patch description, say).
     case notACatalog(CatalogError)
     /// Signed and intact, but its catalog isn't in the shape the app reads.
@@ -86,7 +88,10 @@ public struct ReleaseFetcher: Sendable {
     }
 
     private func fetched(over builtIn: Catalog) async throws -> (Catalog, FirmwareVersion?) {
-        let published = try await reach { try await feed.latest() }
+        let published: PublishedRelease
+        do { published = try await feed.latest() }
+        catch FeedError.nothingPublished { throw Refusal.noFirmwareRelease }
+        catch { throw Refusal.unreachable }
         // Nothing in the manifest is used before its signature checks out, except the name of the key to check it with.
         guard let claimed = try? JSONDecoder().decode(KeyName.self, from: published.manifest).key else {
             throw Refusal.unreadableManifest

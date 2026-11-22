@@ -1,0 +1,191 @@
+import CryptoKit
+import Foundation
+@testable import PanelFlasher
+
+/// A deck panel's ESP32-S3 behind the CrowPanel's auto-reset circuit, as the flasher sees it over the cable (#687).
+/// The circuit (two transistors, as on Espressif's devkits): EN is low only when RTS is on and DTR off; IO0 is low only
+/// when DTR is on and RTS off. When EN rises, the chip boots into its ROM bootloader if IO0 is low, else into its app.
+/// Its own SLIP decoding, written apart from the flasher's.
+actor FakeROM: BootloaderLine {
+    enum Mode: Equatable { case app, reset, download }
+
+    private(set) var mode: Mode = .app
+    private(set) var dtr = false, rts = false
+    private(set) var resets = 0
+    /// How many times the chip came out of reset into its app.
+    private(set) var appBoots = 0
+    /// The speeds the Mac's line and the chip's UART run at; frames between them only get through when they match.
+    private(set) var lineSpeed = 115_200, romSpeed = 115_200
+    private(set) var received: [(op: UInt8, data: [UInt8], checksum: UInt32)] = []
+    private var pending: [UInt8] = []
+    private var incoming: [UInt8] = []
+    /// Whether the chip answers at all (false: no ESP32 on the line, or a board without the auto-reset circuit).
+    var answers = true
+    /// Called after each reset into the ROM, to cancel a test's task mid-connect.
+    var afterReset: (@Sendable () -> Void)?
+
+    func setAfterReset(_ f: @escaping @Sendable () -> Void) { afterReset = f }
+    /// Called after each FLASH_DATA block the chip takes, with its sequence number.
+    var afterBlock: (@Sendable (UInt32) -> Void)?
+    /// A noisy line: every read that has nothing else brings a stray frame (an old SYNC answer).
+    var chatter = false
+    func setChatter(_ on: Bool) { chatter = on }
+    /// How long the chip takes to answer GET_SECURITY_INFO, in real time.
+    var securityInfoDelay: Duration = .zero
+    func setSecurityInfoDelay(_ d: Duration) { securityInfoDelay = d }
+    private var later: [(at: ContinuousClock.Instant, bytes: [UInt8])] = []
+    func setAfterBlock(_ f: @escaping @Sendable (UInt32) -> Void) { afterBlock = f }
+    func setAnswers(_ on: Bool) { answers = on }
+    /// GET_SECURITY_INFO's chip id: 9 is an ESP32-S3 (esptool targets/esp32s3.py IMAGE_CHIP_ID). Nil: a ROM without
+    /// the command (the original ESP32), which refuses it as an invalid message.
+    var chipID: UInt32? = 9
+    func setChipID(_ id: UInt32?) { chipID = id }
+    /// An ESP32-S2's ROM: GET_SECURITY_INFO answers with 12 bytes, no chip id.
+    var isS2 = false
+    func setS2() { isS2 = true }
+    /// GET_SECURITY_INFO's flags word and flash_crypt_cnt.
+    var securityFlags: UInt32 = 0, cryptCount: UInt8 = 0
+    func setSecurity(flags: UInt32, cryptCount: UInt8) { securityFlags = flags; self.cryptCount = cryptCount }
+    /// The chip's 16 MB flash, all erased (FF) to start; only what is written is kept.
+    private(set) var flash: [UInt32: UInt8] = [:]
+    func flashBytes(at address: UInt32, count: Int) -> [UInt8] { (0..<count).map { flash[address + UInt32($0)] ?? 0xFF } }
+    func setFlash(_ bytes: [UInt8], at address: UInt32) { for (i, b) in bytes.enumerated() { flash[address + UInt32(i)] = b } }
+    private var attached = false, flashSize: UInt32 = 0
+    /// Every FLASH_BEGIN's offset and erase size: the regions the flasher erased and wrote.
+    private(set) var begun: [(offset: UInt32, size: UInt32)] = []
+    private var writing: (offset: UInt32, blocks: UInt32, blockSize: UInt32, next: UInt32)?
+    /// A FLASH_DATA sequence number the chip refuses every time (a failed write).
+    var failingBlock: UInt32?
+    func setFailingBlock(_ seq: UInt32?) { failingBlock = seq }
+
+    func setLines(dtr: Bool, rts: Bool) async throws {
+        let wasLow = enLow
+        self.dtr = dtr
+        self.rts = rts
+        if enLow { mode = .reset } else if wasLow {
+            mode = io0Low ? .download : .app
+            if mode == .download { resets += 1; afterReset?() } else { appBoots += 1 }
+        }
+    }
+
+    private var enLow: Bool { rts && !dtr }
+    private var io0Low: Bool { dtr && !rts }
+
+    struct Unplugged: Error {}
+    /// The cable pulled out: every write fails from now on.
+    var unplugged = false
+    func unplug() { unplugged = true }
+
+    func write(_ bytes: [UInt8]) async throws {
+        if unplugged { throw Unplugged() }
+        incoming += bytes
+        while let start = incoming.firstIndex(of: 0xC0), let end = incoming[(start + 1)...].firstIndex(of: 0xC0) {
+            var frame: [UInt8] = []
+            var i = start + 1
+            while i < end {
+                if incoming[i] == 0xDB { frame.append(incoming[i + 1] == 0xDC ? 0xC0 : 0xDB); i += 2 } else { frame.append(incoming[i]); i += 1 }
+            }
+            incoming.removeSubrange(start...end)
+            if frame.count >= 8 { handle(frame) }
+        }
+    }
+
+    private func handle(_ frame: [UInt8]) {
+        guard lineSpeed == romSpeed else { return }  // garbled at the chip
+        let op = frame[1]
+        let checksum = UInt32(frame[4]) | UInt32(frame[5]) << 8 | UInt32(frame[6]) << 16 | UInt32(frame[7]) << 24
+        received.append((op, Array(frame[8...]), checksum))
+        guard answers, mode == .download else { return }
+        if op == 0x08 {
+            // The ROM answers SYNC eight times, with a non-zero value.
+            for _ in 0..<8 { reply(op: op, value: 0x2012_0707, data: []) }
+        } else if op == 0x0F {
+            // CHANGE_BAUDRATE: new speed, 0 (the ROM's form); answered at the old speed, then the UART moves.
+            reply(op: op, value: 0, data: [])
+            romSpeed = Int(UInt32(frame[8]) | UInt32(frame[9]) << 8 | UInt32(frame[10]) << 16 | UInt32(frame[11]) << 24)
+        } else if op == 0x0D {
+            attached = true  // SPI_ATTACH: the ROM's flash pins
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x0B {
+            flashSize = word(frame, 12)  // SPI_SET_PARAMS: fl_id, total size, …
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x02 {
+            // FLASH_BEGIN: erase size, blocks, block size, offset, encrypted. The ROM erases up front.
+            let erase = word(frame, 8), offset = word(frame, 20)
+            guard attached, flashSize == 16 * 1024 * 1024, word(frame, 24) == 0 else { return reply(op: op, value: 0, data: [], status: 1, reason: 0x08) }
+            for a in offset..<(offset + erase) { flash[a] = nil }
+            writing = (offset, word(frame, 12), word(frame, 16), 0)
+            begun.append((offset, erase))
+            reply(op: op, value: 0, data: [])
+        } else if op == 0x03 {
+            // FLASH_DATA: length, sequence, 0, 0, then the block; the checksum is 0xEF xor every block byte.
+            let length = word(frame, 8), seq = word(frame, 12)
+            let block = Array(frame[24...])
+            let sum = block.reduce(UInt8(0xEF)) { $0 ^ $1 }
+            guard var w = writing, seq == w.next, Int(length) == block.count, length == w.blockSize,
+                  checksum == UInt32(sum), seq != failingBlock else { return reply(op: op, value: 0, data: [], status: 1, reason: 0x07) }
+            for (i, b) in block.enumerated() { flash[w.offset + seq * w.blockSize + UInt32(i)] = b == 0xFF ? nil : b }
+            w.next += 1
+            writing = w
+            reply(op: op, value: 0, data: [])
+            afterBlock?(seq)
+        } else if op == 0x13 {
+            // SPI_FLASH_MD5: address, size, 0, 0; the ROM answers with the MD5 as 32 lowercase hex characters.
+            let bytes = flashBytes(at: word(frame, 8), count: Int(word(frame, 12)))
+            let hex = Insecure.MD5.hash(data: Data(bytes)).map { String(format: "%02x", $0) }.joined()
+            reply(op: op, value: 0, data: Array(hex.utf8))
+        } else if op == 0x14 {
+            // flags, flash_crypt_cnt, 7 key purposes, chip id, api version (esptool get_security_info, "<IBBBBBBBBII").
+            if let id = chipID {
+                let before = pending
+                pending = []
+                let head = le(securityFlags) + [cryptCount] + [UInt8](repeating: 0, count: 7)
+                reply(op: op, value: 0, data: isS2 ? head : head + le(id) + le(0))
+                later.append((ContinuousClock.now + securityInfoDelay, pending))
+                pending = before
+            } else {
+                reply(op: op, value: 0, data: [], status: 1, reason: 0x05)
+            }
+        }
+    }
+
+    /// A ROM reply: data, status 00 00, then the two reserved bytes.
+    private func reply(op: UInt8, value: UInt32, data: [UInt8], status: UInt8 = 0, reason: UInt8 = 0) {
+        let body = data + [status, reason, 0, 0]
+        var frame: [UInt8] = [0x01, op, UInt8(body.count & 0xFF), UInt8(body.count >> 8)]
+        frame += (0..<4).map { UInt8(truncatingIfNeeded: value >> (8 * UInt32($0))) } + body
+        pending.append(0xC0)
+        for b in frame {
+            if b == 0xC0 { pending += [0xDB, 0xDC] } else if b == 0xDB { pending += [0xDB, 0xDD] } else { pending.append(b) }
+        }
+        pending.append(0xC0)
+    }
+
+    private func word(_ frame: [UInt8], _ at: Int) -> UInt32 {
+        UInt32(frame[at]) | UInt32(frame[at + 1]) << 8 | UInt32(frame[at + 2]) << 16 | UInt32(frame[at + 3]) << 24
+    }
+
+    private func le(_ v: UInt32) -> [UInt8] { (0..<4).map { UInt8(truncatingIfNeeded: v >> (8 * UInt32($0))) } }
+
+    func read(timeout: Double) async throws -> [UInt8] {
+        let now = ContinuousClock.now
+        for item in later where item.at <= now { pending += item.bytes }
+        later.removeAll { $0.at <= now }
+        if pending.isEmpty && chatter { reply(op: 0x08, value: 0x2012_0707, data: []) }
+        let out = pending
+        pending = []
+        return out
+    }
+
+    func setSpeed(_ baud: Int) async throws { lineSpeed = baud }
+    /// Every pause the flasher asked for, with the lines as they stood.
+    private(set) var pauses: [(seconds: Double, dtr: Bool, rts: Bool)] = []
+    func pause(_ seconds: Double) async {
+        pauses.append((seconds, dtr, rts))
+        await Task.yield()
+    }
+    private(set) var closed = false
+    func close() async { closed = true }
+
+    var ops: [UInt8] { received.map(\.op) }
+}

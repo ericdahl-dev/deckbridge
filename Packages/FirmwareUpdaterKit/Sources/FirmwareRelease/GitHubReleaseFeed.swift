@@ -22,20 +22,23 @@ public protocol HTTPClient: Sendable {
 /// Why the GitHub feed gave nothing. ReleaseFetcher treats any of them as unreachable.
 public enum FeedError: Error, Equatable {
     case http(Int)
-    case notARelease
+    /// A file the release doesn't have, or one asked for before `latest()` found the release.
     case missingAsset(String)
-    /// A draft or a pre-release: never fetched.
-    case notPublished
     /// A URL the feed won't ask: not this repo's download URL, or a redirect off GitHub's asset hosts.
     case refusedURL(String)
+    /// No release is published, or the newest has no manifest.json and manifest.sig: no signed firmware release yet.
+    case nothingPublished
 }
 
-/// This project's newest published GitHub release (#704), read over GitHub's public, unauthenticated endpoints. It sends
-/// a generic client name and nothing about the user, and holds no token.
+/// This project's newest published GitHub release (#704), over github.com's plain download links: no API, so no
+/// 60-an-hour limit shared by the whole network. It sends a generic client name and nothing about the user, and holds
+/// no token. Drafts and pre-releases are never fetched: GitHub's latest link only resolves the newest published,
+/// non-draft, non-prerelease release (GitHub's docs).
 public actor GitHubReleaseFeed: ReleaseFeed {
-    static let latestURL = URL(string: "https://api.github.com/repos/ericdahl-dev/deckbridge/releases/latest")!
+    /// The newest release's manifest: GitHub redirects it to the release's own download URL, which names its tag.
+    static let latestURL = URL(string: "https://github.com/ericdahl-dev/deckbridge/releases/latest/download/manifest.json")!
     /// Every request's headers, and only these: no Authorization, no cookies.
-    static let headers = ["User-Agent": "DeckBridge-Firmware-Updater", "Accept": "application/vnd.github+json"]
+    static let headers = ["User-Agent": "DeckBridge-Firmware-Updater"]
 
     /// Where an asset's download URL must be: this repo's releases on github.com.
     static let downloadPrefix = "/ericdahl-dev/deckbridge/releases/download/"
@@ -43,34 +46,52 @@ public actor GitHubReleaseFeed: ReleaseFeed {
     static let assetHosts: Set<String> = ["objects.githubusercontent.com", "release-assets.githubusercontent.com"]
 
     let http: any HTTPClient
-    /// The release `latest()` read: each asset's download URL as given, by name; checked when it's fetched.
-    private var assets: [String: String] = [:]
+    /// The newest release's tag, from GitHub's first hop: every file comes from this one release.
+    private var tag: String?
 
     public init(http: any HTTPClient) { self.http = http }
 
     public func latest() async throws -> PublishedRelease {
         let answer = try await http.get(Self.latestURL, headers: Self.headers)
-        guard answer.status == 200 else { throw FeedError.http(answer.status) }
-        guard let release = try? JSONDecoder().decode(Release.self, from: answer.body) else { throw FeedError.notARelease }
-        // GitHub's "latest" is never a draft or a pre-release; if it ever were, nothing of it is fetched.
-        guard !release.draft, !release.prerelease else { throw FeedError.notPublished }
-        assets = [:]
-        for asset in release.assets { assets[asset.name] = asset.browser_download_url }
-        return PublishedRelease(manifest: try await file("manifest.json"), signature: try await file("manifest.sig"))
+        // 404: nothing is published, or the newest release has no manifest.
+        if answer.status == 404 { throw FeedError.nothingPublished }
+        guard (300..<400).contains(answer.status), let location = answer.location else { throw FeedError.http(answer.status) }
+        guard let url = URL(string: location), let tag = Self.tag(ofManifest: url) else { throw FeedError.refusedURL(location) }
+        self.tag = tag
+        let manifest = try await file("manifest.json")
+        let signature: Data
+        do { signature = try await file("manifest.sig") }
+        catch FeedError.missingAsset { throw FeedError.nothingPublished }
+        return PublishedRelease(manifest: manifest, signature: signature)
     }
 
-    /// One asset of the release `latest()` read: from its download URL on github.com, then, if GitHub redirects, from
-    /// the one asset host it names. Any other URL, or a second redirect, is refused before it is asked.
+    /// One file of the release `latest()` found, by its asset name: from this repo's download URL for that tag on
+    /// github.com, then, if GitHub redirects, from the one asset host it names. Any other URL, or a second redirect, is
+    /// refused before it is asked.
     public func file(_ name: String) async throws -> Data {
-        guard let given = assets[name] else { throw FeedError.missingAsset(name) }
+        guard let tag else { throw FeedError.missingAsset(name) }
+        // One flat asset name: nothing that would reach another path.
+        guard !name.isEmpty, name != ".", name != "..", !name.contains("/") else { throw FeedError.refusedURL(name) }
+        let given = "https://github.com" + Self.downloadPrefix + tag + "/" + name
         guard let url = URL(string: given), Self.isDownload(url) else { throw FeedError.refusedURL(given) }
         let first = try await http.get(url, headers: Self.headers)
         if first.status == 200 { return first.body }
+        // github.com's 404: the release has no such file. (A 404 from the asset host is a failed download.)
+        if first.status == 404 { throw FeedError.missingAsset(name) }
         guard (300..<400).contains(first.status), let location = first.location else { throw FeedError.http(first.status) }
         guard let stored = URL(string: location), Self.isAssetHost(stored) else { throw FeedError.refusedURL(location) }
         let second = try await http.get(stored, headers: Self.headers)
         guard second.status == 200 else { throw FeedError.http(second.status) }
         return second.body
+    }
+
+    /// The tag in https://github.com/ericdahl-dev/deckbridge/releases/download/<tag>/manifest.json, or nil for any
+    /// other URL. The tag is one plain path part.
+    static func tag(ofManifest url: URL) -> String? {
+        guard isDownload(url) else { return nil }
+        let parts = url.path(percentEncoded: false).dropFirst(downloadPrefix.count).split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[1] == "manifest.json", !parts[0].isEmpty else { return nil }
+        return String(parts[0])
     }
 
     /// https://github.com/ericdahl-dev/deckbridge/releases/download/…, with no "." or ".." parts.
@@ -82,15 +103,5 @@ public actor GitHubReleaseFeed: ReleaseFeed {
 
     static func isAssetHost(_ url: URL) -> Bool {
         url.scheme == "https" && assetHosts.contains(url.host() ?? "") && url.port == nil && url.user() == nil
-    }
-
-    private struct Release: Decodable {
-        struct Asset: Decodable {
-            let name: String
-            let browser_download_url: String
-        }
-        let draft: Bool
-        let prerelease: Bool
-        let assets: [Asset]
     }
 }

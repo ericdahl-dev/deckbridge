@@ -82,11 +82,16 @@ Denon's updater at hand. Note what the panel runs now (build and Wi-Fi network).
      "Restarting the deck panel…", then "Updated: the panel now runs … (build …)".
 2. Check the panel.
    - **See:** it starts, its screen shows the new build, and it joins the same Wi-Fi network as before (Wi-Fi kept).
-3. Cancel, once at each step: while connecting, while writing, while restarting.
-   - **See:** before writing: "Canceled. The panel was restarted.", and the panel runs its old firmware. While
-     writing: "Canceled while writing. The panel may not start: try again before unplugging it." Then flash again;
-     the panel must end up working.
-4. With DeckBridge sending over the cable, start the update.
+3. Cancel while connecting.
+   - **See:** "Canceled. The panel was restarted.", and the panel runs its old firmware.
+4. Start again, and once it says "Writing the new firmware", try to cancel.
+   - **See:** Cancel is grayed out, with "The panel can't be stopped while it's written: it has one app slot, so
+     stopping now would leave it unable to start." The update runs to "Updated", and the panel starts.
+5. Repair: with a panel whose build isn't read (port present, "Build not read"), press "Repair the panel".
+   - **See:** a confirm: "This panel didn't tell its build: it may not be starting, or it may run older firmware.
+     Repair writes … to it. Wi-Fi is kept." After "Repair: write …", the same steps as an update, and the panel
+     starts with the catalog's build. "Not now" writes nothing.
+6. With DeckBridge sending over the cable, start the update.
    - **See:** "DeckBridge is using the panel's cable. Turn off "Send over the USB cable" in DeckBridge, then try
      again." Nothing written.
 

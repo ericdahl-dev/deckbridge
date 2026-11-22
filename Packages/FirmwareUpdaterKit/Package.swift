@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "FirmwareCatalog", targets: ["FirmwareCatalog"]),
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
+        .library(name: "PanelFlasher", targets: ["PanelFlasher"]),
         .library(name: "UnitCheck", targets: ["UnitCheck"]),
         .library(name: "LC6000Update", targets: ["LC6000Update"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
@@ -36,12 +37,16 @@ let package = Package(
         // lines. It only looks: nothing here can send to a device. The real ports are the app's adapters.
         .target(name: "DeviceFinder", dependencies: ["FirmwareModel"]),
         // The app's two sections, deck panel and LC6000, as plain values: what the owner reads (#685).
-        .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel", "PortHandoff"]),
+        .target(name: "UpdaterScreen", dependencies: ["DeviceFinder", "FirmwareModel", "PortHandoff", "PanelFlasher", "FirmwareCatalog"]),
         // Borrowing the deck panel's USB port from DeckBridge for an update (#710): ask, wait for its answer, give it
         // back. Signals between the two apps on this Mac only; the app's adapter carries them. Never opens a port.
         .target(name: "PortHandoff"),
         .testTarget(name: "PortHandoffTests", dependencies: ["PortHandoff"]),
-        .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel", "PortHandoff"]),
+        .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel", "PortHandoff", "PanelFlasher", "FirmwareCatalog"]),
+                // Flashing a deck panel over its USB cable (#687): the ESP32-S3 ROM's serial bootloader protocol, spoken over a
+        // line the app opens. Tested against a fake bootloader; the real port is the app's adapter.
+        .target(name: "PanelFlasher", dependencies: ["DeviceFinder", "FirmwareModel"]),
+        .testTarget(name: "PanelFlasherTests", dependencies: ["PanelFlasher", "DeviceFinder", "FirmwareModel"]),
         // The LC6000 unit check and backup (#692): reads a chip in ST's update mode (DFU) and writes nothing to it. A
         // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
         .target(name: "UnitCheck", dependencies: ["FirmwareModel", "DeviceFinder"]),
