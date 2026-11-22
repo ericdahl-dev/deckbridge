@@ -158,4 +158,35 @@ struct JogDisplayBeatTimingTests {
         Self.tick(rig, until: 2.50)
         #expect(Self.beats(port) == [1, 2, 3, 2])
     }
+
+    @Test("The once-a-second heartbeat resends the beat on screen, a predicted one too: never another value, so no flicker")
+    func heartbeatResendsTheBeatShown() throws {
+        // The driver's own clock too (Handshake's), so its heartbeat comes due as in the app.
+        let (rig, port, driverClock) = try DrawnDisplayHandshakeTests.rig(.custom)
+        rig.coordinator.jogDisplayReply(DrawnDisplayHandshakeTests.answer)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Playing", [.int(1)]))
+        port.wd.removeAll()
+        // 128 BPM from 1.00 s with the default 60 ms lead; each beat's message 15 ms after it's due.
+        var heard = 0
+        while rig.clock.now < 6.0 - 1e-9 {
+            let now = ((rig.clock.now + 0.01) * 100).rounded() / 100
+            rig.clock.now = now
+            driverClock.now = now
+            let due = Int(((now - 1.0 - 0.015) / 0.46875).rounded(.down))
+            if now >= 1.015, due >= heard { Live.clock(rig, due % 4 + 1); heard = due + 1 }
+            rig.coordinator.tick()
+        }
+        let drawn = DrawnDisplayHandshakeTests.drawn(port)
+        var heartbeats = 0, shown: UInt8? = 0   // the handshake's full state: beat 0, none lit
+        for (index, message) in drawn.enumerated() where message[9] == 0x08 {
+            let afterBegin = drawn[..<index].last { $0[9] == 0x01 || $0[9] == 0x08 }?[9] == 0x01
+            if afterBegin {
+                heartbeats += 1
+                #expect(message[10] == shown, "a heartbeat at op \(index) sent \(message[10]), the screen showed \(String(describing: shown))")
+            } else {
+                shown = message[10]
+            }
+        }
+        #expect(heartbeats >= 4)
+    }
 }
