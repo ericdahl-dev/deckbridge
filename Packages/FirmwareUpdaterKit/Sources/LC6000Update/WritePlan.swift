@@ -14,17 +14,35 @@ public struct WritePlan: Sendable, Equatable {
     /// How many bytes differ from the backup.
     public let changedBytes: Int
     private let backup: [UInt8]
+    /// The area the plan covers, `backup` starting at its address: the app area, or block B's above it (#751).
+    private let area: UInt32
+    private let blockB: Bool
 
     /// `backup` and `patched`: the chip's app area, as the unit check reads it and as the patch makes it.
     public init(chip: ChipKind, backup: [UInt8], patched: [UInt8]) {
-        precondition(backup.count == patched.count && backup.count == chip.app.length)
+        precondition(backup.count == chip.app.length)
+        self.init(chip: chip, area: chip.app.address, backup: backup, patched: patched, blockB: false)
+    }
+
+    /// Block B on the display chip (#751): `backup` is 0x08080000-0x080FFFFF as read; B goes at its start and erased
+    /// flash after it, so an old, longer B leaves nothing behind. Only the sectors that change are written.
+    public static func blockB(_ b: BlockB, backup: [UInt8]) -> WritePlan {
+        precondition(backup.count == BlockB.limit)
+        let target = b.bytes + [UInt8](repeating: 0xFF, count: BlockB.limit - b.bytes.count)
+        return WritePlan(chip: .display, area: BlockB.address, backup: backup, patched: target, blockB: true)
+    }
+
+    private init(chip: ChipKind, area: UInt32, backup: [UInt8], patched: [UInt8], blockB: Bool) {
+        precondition(backup.count == patched.count)
         self.chip = chip
         self.backup = backup
+        self.area = area
+        self.blockB = blockB
         var sectors: [Sector] = [], changed = 0
         for (start, length) in chip.flashSectors {
-            // Below the app area (the start-up code, the settings) is never written.
-            guard start >= chip.app.address else { continue }
-            let from = Int(start - chip.app.address), to = from + length
+            // Below the area (the start-up code, the settings; for block B, Denon's image too) is never written.
+            guard start >= area else { continue }
+            let from = Int(start - area), to = from + length
             guard to <= patched.count else { continue }
             let differ = zip(backup[from..<to], patched[from..<to]).filter { $0 != $1 }.count
             guard differ > 0 else { continue }
@@ -35,20 +53,22 @@ public struct WritePlan: Sendable, Equatable {
         changedBytes = changed
     }
 
-    private init(chip: ChipKind, sectors: [Sector], changedBytes: Int, backup: [UInt8]) {
+    private init(chip: ChipKind, sectors: [Sector], changedBytes: Int, backup: [UInt8], area: UInt32, blockB: Bool) {
         self.chip = chip
         self.sectors = sectors
         self.changedBytes = changedBytes
         self.backup = backup
+        self.area = area
+        self.blockB = blockB
     }
 
     /// The same sectors with the backup's bytes: what the restore button writes.
     public var restore: WritePlan {
         let sectors = sectors.map { sector in
-            let from = Int(sector.address - chip.app.address)
+            let from = Int(sector.address - area)
             return Sector(address: sector.address, bytes: Array(backup[from..<(from + sector.bytes.count)]))
         }
-        return WritePlan(chip: chip, sectors: sectors, changedBytes: changedBytes, backup: backup)
+        return WritePlan(chip: chip, sectors: sectors, changedBytes: changedBytes, backup: backup, area: area, blockB: blockB)
     }
 
     /// Exactly what is written where, for the confirm.
@@ -58,6 +78,10 @@ public struct WritePlan: Sendable, Equatable {
         let list = ranges.count > 1 ? ranges.dropLast().joined(separator: ", ") + " and " + ranges.last! : ranges.joined()
         let count = sectors.count == 1 ? "1 flash sector is" : "\(sectors.count) flash sectors are"
         let bytes = changedBytes == 1 ? "1 byte differs" : "\(changedBytes) bytes differ"
+        if blockB {
+            return "\(name): \(count) erased and written with block B, \(list). \(bytes) from your backup. "
+                + "Nothing below \(Self.hex(area)), Denon's image and our hook, is touched."
+        }
         return "\(name): \(count) erased and written with the patched image, \(list). \(bytes) from your backup. "
             + "Every other sector is untouched."
     }
