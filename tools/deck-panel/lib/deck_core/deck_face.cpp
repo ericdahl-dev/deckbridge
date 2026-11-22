@@ -65,6 +65,27 @@ float clamp01(float x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 /// `fraction`, clamped to 0-1, of `span`, in whole pixels, half away from zero.
 int32_t pixels(float fraction, int span) { return static_cast<int32_t>(std::lround(clamp01(fraction) * span)); }
 
+/// The phase bar's center, its half width (#721).
+constexpr int32_t kPhaseHalf = layout::kWidth / 2;
+
+/// `color` at 35% over the dark track, each channel rounded: the phase bar's track off phase (#462's dim).
+uint32_t dimmed(uint32_t color) {
+    uint32_t out = 0;
+    for (int shift = 16; shift >= 0; shift -= 8) {
+        const float c = 0.35f * static_cast<float>(color >> shift & 0xFF) + 0.65f * static_cast<float>(palette::kTrack >> shift & 0xFF);
+        out |= static_cast<uint32_t>(std::lround(c)) << shift;
+    }
+    return out;
+}
+
+/// The bar's length for an offset of `beats` (0 to 0.5) off phase: #462's curve, zoomed near 0, so a hundredth of a
+/// beat is a third of the half bar and half a beat all of it; at least 1 px.
+int32_t phase_bar_length(float beats) {
+    const auto g = [](float p) { return p / (p + 0.02f); };
+    const long length = std::lround(static_cast<float>(kPhaseHalf) * g(beats) / g(0.5f));
+    return static_cast<int32_t>(length < 1 ? 1 : length > kPhaseHalf ? kPhaseHalf : length);
+}
+
 }  // namespace
 
 Face face(const DeckView& view) {
@@ -108,8 +129,17 @@ Face face(const DeckView& view) {
     char length[24] = "";
     loop_text(length, view.loop_length);
     if (length[0]) std::snprintf(f.loop_label, sizeof f.loop_label, "LOOP %s", length);
-    // Below 0 is unknown (-1): no marker, never one parked in the middle as if in phase.
-    if (view.phase >= 0) f.phase_px = pixels(view.phase, layout::kPhaseTravel);
+    // The phase bar (#721, the jog display's rule, #462). Locked is exactly 0.5: DeckBridge holds it there.
+    if (view.phase == 0.5f) {
+        f.phase_track_color = f.deck_color;
+        f.phase_tick = 1;
+    } else if (view.phase >= 0) {
+        f.phase_track_color = dimmed(f.deck_color);
+        const float off = view.phase - 0.5f;  // beats: below 0 behind
+        const int32_t length = phase_bar_length(off < 0 ? -off : off);
+        f.phase_bar_w = length;
+        f.phase_bar_x = off < 0 ? kPhaseHalf - length : kPhaseHalf;
+    }
     f.level_px = pixels(view.level, layout::kMeterH);
     return f;
 }

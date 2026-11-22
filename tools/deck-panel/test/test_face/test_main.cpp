@@ -44,7 +44,9 @@ void test_an_empty_deck_shows_no_track_loaded_and_nothing_else() {
     for (const char* text : {f.artist, f.key, f.bpm, f.tempo, f.elapsed, f.remaining})
         TEST_ASSERT_EQUAL_STRING("", text);
     TEST_ASSERT_EQUAL_STRING("LOOP", f.loop_label);
-    TEST_ASSERT_EQUAL(deck_core::kPhaseHidden, f.phase_px);
+    TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+    TEST_ASSERT_EQUAL(0, f.phase_tick);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, f.phase_track_color);
     TEST_ASSERT_EQUAL_HEX32(0xE0E0E0, f.progress_color);
     for (uint32_t c : f.beat_color) TEST_ASSERT_EQUAL_HEX32(0x262626, c);
     for (uint32_t c : f.lamp_color) TEST_ASSERT_EQUAL_HEX32(0x262626, c);
@@ -203,20 +205,61 @@ void test_texts_come_fitted_to_the_fonts() {
     TEST_ASSERT_EQUAL_STRING("? Star", f.artist);
 }
 
-// Phase -1 is unknown (the deck stopped, or no offset since it loaded): no marker, never one parked in the middle.
-void test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar() {
+// #721, the jog display's phase rule (#462) at panel size. No phase (-1, or any value below 0: the deck stopped, or no
+// offset since it loaded): the plain dark bar, no bar from the center and no tick, never anything that reads as locked.
+void test_no_phase_is_the_plain_dark_bar() {
     DeckView v = loaded_deck();
+    for (float phase : {-1.0f, -0.5f}) {
+        v.phase = phase;
+        const Face f = deck_core::face(v);
+        TEST_ASSERT_EQUAL_HEX32(0x262626, f.phase_track_color);
+        TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+        TEST_ASSERT_EQUAL(0, f.phase_tick);
+    }
+}
+
+// #721: locked is exactly 0.5 (DeckBridge's DrawnPhase holds it there within #462's 0.002 of a beat): the whole bar in
+// the deck color and the tick at its center, no bar from the center.
+void test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick() {
+    const Face f = deck_core::face(loaded_deck());  // red, phase 0.5
+    TEST_ASSERT_EQUAL_HEX32(0xFF0000, f.phase_track_color);
+    TEST_ASSERT_EQUAL(1, f.phase_tick);
+    TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+}
+
+// #721: off phase the track dims to 35% of the deck color over the dark track (red: 0.35 x 0xFF + 0.65 x 0x26 = 0x72,
+// 0.65 x 0x26 = 0x19), no tick, and a bar grows from the center (352) toward the error: behind left, ahead right. The
+// length is #462's curve on the 352 px half: 352 x g(0.01)/g(0.5), g(p) = p/(p + 0.02), = 122 px for 0.01 of a beat.
+void test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track() {
+    DeckView v = loaded_deck();
+    v.phase = 0.49f;  // 0.01 of a beat behind
     Face f = deck_core::face(v);
-    // The 10 px marker's left edge on the 704 px bar: 0-694 px, 347 in phase.
-    TEST_ASSERT_EQUAL(347, f.phase_px);
-    v.phase = 0.2f;
-    TEST_ASSERT_EQUAL(139, deck_core::face(v).phase_px);  // 138.8
-    v.phase = 1.3f;
-    TEST_ASSERT_EQUAL(694, deck_core::face(v).phase_px);
-    v.phase = -1;
-    TEST_ASSERT_EQUAL(-1, deck_core::face(v).phase_px);
-    v.phase = -0.5f;  // any value below 0 is unknown
-    TEST_ASSERT_EQUAL(-1, deck_core::face(v).phase_px);
+    TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    TEST_ASSERT_EQUAL(0, f.phase_tick);
+    TEST_ASSERT_EQUAL(230, f.phase_bar_x);
+    TEST_ASSERT_EQUAL(122, f.phase_bar_w);
+    v.phase = 0.51f;  // ahead
+    f = deck_core::face(v);
+    TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    TEST_ASSERT_EQUAL(352, f.phase_bar_x);
+    TEST_ASSERT_EQUAL(122, f.phase_bar_w);
+}
+
+// #721: half a beat off, either way, is the whole half bar (the feed's phase wraps there: 0 and 1 are both half a beat),
+// and past the end it stays on the bar. The lock's boundary is the feed's: the smallest step off 0.5 (1/16384 of a
+// beat, #462's unit) is off phase, a 1 px bar, never locked.
+void test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked() {
+    DeckView v = loaded_deck();
+    struct { float phase; int x, w; } cases[] = {{0.0f, 0, 352}, {1.0f, 352, 352}, {1.3f, 352, 352},
+                                                 {0.5f + 1.0f / 16384, 352, 1}, {0.5f - 1.0f / 16384, 351, 1}};
+    for (const auto& c : cases) {
+        v.phase = c.phase;
+        const Face f = deck_core::face(v);
+        TEST_ASSERT_EQUAL(c.x, f.phase_bar_x);
+        TEST_ASSERT_EQUAL(c.w, f.phase_bar_w);
+        TEST_ASSERT_EQUAL(0, f.phase_tick);
+        TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    }
 }
 
 // The meter is 310 px tall, from the key row to the lamps' bottom.
@@ -283,7 +326,10 @@ int main(int, char**) {
     RUN_TEST(test_the_lamps_light_in_their_colors);
     RUN_TEST(test_the_loop_lamp_shows_whole_beats_or_fractions);
     RUN_TEST(test_texts_come_fitted_to_the_fonts);
-    RUN_TEST(test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar);
+    RUN_TEST(test_no_phase_is_the_plain_dark_bar);
+    RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
+    RUN_TEST(test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track);
+    RUN_TEST(test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
