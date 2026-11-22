@@ -34,14 +34,30 @@ final class FakeSerial: PanelSerial, @unchecked Sendable {
         let text: String
     }
     var writes: [Write] = []
+    /// The panel console's line buffer (owner run, #726): bytes written at the wrong speed land there as junk, so the
+    /// next line it reads is "<junk>version" and isn't the question, unless that line starts with a newline.
+    private var junk: Set<String> = []
+
+    /// Whether the panel, talking at `baud`, reads `text` as the question "version".
+    private func heardQuestion(_ text: String, on port: String, at baud: Int) -> Bool {
+        let speed = oldAnswers[port] != nil ? 115_200 : answers[port] != nil ? 921_600 : nil
+        guard let speed else { return false }
+        guard baud == speed else {
+            junk.insert(port)
+            return false
+        }
+        let buffered = (junk.remove(port) != nil ? "\u{FFFD}" : "") + text
+        return buffered.split(separator: "\n", omittingEmptySubsequences: false).dropLast().contains("version")
+    }
     func listen(on port: String, baud: Int, for seconds: Double, asking question: String?) async -> Listened {
         opened.append(port)
         bauds.append(baud)
         if busy.contains(port) { return .busy }
         if let question { writes.append(Write(port: port, baud: baud, text: question)) }
+        let asked = question.map { heardQuestion($0, on: port, at: baud) } ?? false
         switch baud {
-        case 921_600: return .lines((lines[port] ?? []) + (question == "version\n" ? answers[port] ?? [] : []))
-        case 115_200: return .lines((oldLines[port] ?? []) + (question == "version\n" ? oldAnswers[port] ?? [] : []))
+        case 921_600: return .lines((lines[port] ?? []) + (asked ? answers[port] ?? [] : []))
+        case 115_200: return .lines((oldLines[port] ?? []) + (asked ? oldAnswers[port] ?? [] : []))
         default: return .lines([])
         }
     }

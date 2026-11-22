@@ -49,7 +49,9 @@ public struct DeviceFinder: Sendable {
     static let answerLine = "deck panel: build "
     /// The version question (#695, #702): a whole line, answered without a reboot. Asked once at each speed: today's
     /// firmware answers at 115200, a panel with #711's wiring at 921600 (cos, checked on a #702 panel).
-    public static let versionQuestion = "version\n"
+    /// It starts with a newline: a question at the panel's other speed lands in its console's line buffer as junk, and
+    /// without one the next question reads "<junk>version" and goes unanswered (the owner run, #726).
+    public static let versionQuestion = "\nversion\n"
     public static let dirty = "-dirty"
 
     let usb: any USBDevices
