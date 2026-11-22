@@ -417,8 +417,13 @@ def check_capture_prompts(root, app_prompts):
 
 
 # A DeckBridge version on the site (#v1.1): "Version 1.0.1", "version 1.0.1 is on TestFlight", "DeckBridge 1.0.1". Three
-# parts only, so a planned "DeckBridge 1.2" is free, and not in parentheses, so "Syndicate's mapping (version 0.3.7)" is.
+# parts, and not in parentheses, so "Syndicate's mapping (version 0.3.7)" is free. A two-part "DeckBridge 1.2" is
+# PLANNED_MENTION's: allowed only once the app has reached it (#652's audit: "from DeckBridge 1.2" for a 1.0.2 feature).
 VERSION_MENTION = re.compile(r"(?:\b[Vv]ersion|\bDeckBridge) (\d+\.\d+\.\d+)(?![\d.]|\s*\))")
+PLANNED_MENTION = re.compile(r"\bDeckBridge (\d+\.\d+)(?!\.?\d)")
+
+# The capture's button before 1.1 (#652's audit): 1.1 replaced it with Help add it… and Controller not found?.
+OLD_CAPTURE_BUTTON = "Help add a controller\u2026"
 
 
 TEASER_ART = "jog-art.png"
@@ -580,6 +585,12 @@ def problems(root, app_prompts=None, release=None):
                         out.append(f"{file}: says coming in v{coming}, but the app is {app_version}")
                 for mentioned in sorted(set(VERSION_MENTION.findall(text)) - {app_version}):
                     out.append(f"{file}: says DeckBridge {mentioned}, but the app's softwareVersion is {app_version}")
+                for planned in sorted(set(PLANNED_MENTION.findall(text))):
+                    if version_tuple(planned) > shipped:
+                        out.append(f"{file}: says DeckBridge {planned}, a version that hasn't shipped (the app is {app_version})")
+            if OLD_CAPTURE_BUTTON in text:
+                out.append(f"{file}: names the button {OLD_CAPTURE_BUTTON}, which 1.1 replaced with Help add it\u2026 "
+                           "and Controller not found?")
             if file.endswith(".html"):
                 out += check_page(root, file, text)
         if file == CAPTURE_PAGE_JS and app_version:

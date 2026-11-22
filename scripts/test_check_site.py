@@ -567,9 +567,10 @@ class CheckSiteTests(unittest.TestCase):
             found = [line for line in lines if line.startswith(row)]
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)
+
     def test_every_deckbridge_version_on_the_site_is_the_apps(self):
         root = self.site({
-            "support/index.html": page(body='<a href="../">Home</a> <p>Version 1.0.1 on TestFlight. DeckBridge 1.2 adds capture.</p>'),
+            "support/index.html": page(body='<a href="../">Home</a> <p>Version 1.0.1 on TestFlight. DeckBridge 1.0 added capture.</p>'),
             "llms.txt": GOOD["llms.txt"] + "- Status: version 1.0.1 is on TestFlight. Syndicate's mapping (version 0.3.7).\n",
         })
         self.assertEqual(check_site.problems(root), [])
@@ -595,6 +596,25 @@ class CheckSiteTests(unittest.TestCase):
         self.assertEqual(check_site.problems(root), [
             "llms.txt: says coming in v1.0.1, but the app is 1.0.1",
             "support/index.html: says coming in v1.0, but the app is 1.0.1",
+        ])
+
+    def test_no_feature_is_said_to_come_from_a_version_that_hasnt_shipped(self):
+        # #652's audit: help-add-a-controller shipped in 1.0.2, but the site said "from DeckBridge 1.2". A two-part
+        # DeckBridge version newer than the app is a promise; one the app has reached is fine.
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a> <p>Yes, from DeckBridge 1.2. '
+                                                         'And DeckBridge 1.0 did it too.</p>')})
+        self.assertEqual(check_site.problems(root), [
+            "support/index.html: says DeckBridge 1.2, a version that hasn't shipped (the app is 1.0.1)",
+        ])
+
+    def test_the_old_help_add_a_controller_button_is_named_nowhere(self):
+        # #652's audit: 1.1 replaced Settings' "Help add a controller…" button with Help add it… (in the panel) and
+        # Controller not found? (Settings › Controller). The capture window's own heading, without the ellipsis, stays.
+        root = self.site({"support/index.html": page(body='<a href="../">Home</a> <p>Settings › Controller › '
+                                                         'Help add a controller…</p><p>Help add a controller</p>')})
+        self.assertEqual(check_site.problems(root), [
+            "support/index.html: names the button Help add a controller…, which 1.1 replaced with Help add it… "
+            "and Controller not found?",
         ])
 
     def test_the_jog_display_is_shown_by_the_apps_renderer_not_the_teaser_art(self):
