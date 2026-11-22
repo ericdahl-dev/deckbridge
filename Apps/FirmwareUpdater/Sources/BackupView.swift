@@ -19,7 +19,7 @@ final class BackupModel {
         let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(typed: typed)
         typed = ""
         switch outcome {
-        case .sent: stepResult = "Sent. The display chip restarts in update mode: give it a few seconds, then back it up. It stays in update mode until it's flashed; whether a power cycle ends it isn't known yet. Denon's own updater flashes a chip in update mode, so it is the way back."
+        case .sent: stepResult = UpdateModeStep.sentText
         case .refused(let reason): stepResult = reason
         }
     }
