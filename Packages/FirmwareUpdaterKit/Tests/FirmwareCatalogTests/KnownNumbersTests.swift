@@ -5,13 +5,15 @@ import FirmwareCatalog
 /// The unit check's numbers (#692): which firmware a chip runs, known by numbers only, never the firmware itself.
 @Suite("Catalog: the numbers LC6000 firmware is known by")
 struct KnownNumbersTests {
-    @Test("The built-in catalog knows stock wd 00.50 by the trailer CRC the kit's patch names, and no tp hash yet")
+    @Test("The built-in catalog knows stock wd 00.50 by the trailer CRC the kit's patch names, and stock tp 00.31 by its hash")
     func builtIn() throws {
         let kit = try String(contentsOf: kitPatches.appending(path: "wd-00.50-show-slot-16.patch"), encoding: .utf8)
         let named = try #require(kit.firstMatch(of: /trailer CRC 0x([0-9A-F]{8})/)).1
         let known = try Catalog.builtIn().knownNumbers
         #expect(known.display == [UInt32(named, radix: 16)!: "00.50"])
-        #expect(known.topPanel == [:])
+        // The SHA-256 of the 229376-byte app area as the app reads it, from the owner's unit (#709, cos, 2026-11-22):
+        // the first 96K stock tp 00.31, the rest 0xFF. It holds for that read range only.
+        #expect(known.topPanel == ["1f97959902b2febae979e47ab9a9c09b5b362d17e5736ac110df5f1a761a76cc": "00.31"])
     }
 
     @Test("A known number that isn't one: the catalog doesn't load",
