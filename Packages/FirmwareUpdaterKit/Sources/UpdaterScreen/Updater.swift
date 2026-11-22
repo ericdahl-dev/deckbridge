@@ -36,6 +36,7 @@ public final class Updater {
     /// The firmware offered (#704): nil until `loadFirmware()` has its answer. Its own line, never a device's detail.
     public private(set) var firmware: FirmwareLine?
     private let fetchFirmware: (@Sendable () async -> FirmwareLine)?
+    private var firmwareAsked = false
     private var lookAgain = false
     private var found = Found()
     private var lc6000WarningAccepted = false
@@ -77,9 +78,10 @@ public final class Updater {
         looking = false
     }
 
-    /// Fetches the firmware line, for launch.
+    /// Fetches the firmware line, once: for launch. Looking again never fetches it (one GitHub request per launch).
     public func loadFirmware() async {
-        guard let fetchFirmware else { return }
+        guard let fetchFirmware, !firmwareAsked else { return }
+        firmwareAsked = true
         firmware = await fetchFirmware()
     }
 

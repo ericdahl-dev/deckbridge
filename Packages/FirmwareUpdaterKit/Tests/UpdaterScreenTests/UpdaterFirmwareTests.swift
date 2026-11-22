@@ -33,4 +33,20 @@ struct UpdaterFirmwareTests {
         #expect(source.asked == 1)
         #expect(updater.screen.panel.detail == nil)
     }
+
+    @Test("Looking again, a USB change and a second load never fetch the firmware line again")
+    func neverFetchesAgain() async {
+        let rig = Rig()
+        let source = FakeFirmwareSource(Self.builtIn)
+        let (changes, change) = AsyncStream<Void>.makeStream()
+        let updater = Updater(finder: rig.finder, changes: changes, firmware: source.fetch)
+        await updater.loadFirmware()
+        await updater.refresh()
+        change.yield()
+        change.finish()
+        await updater.watch()
+        await updater.loadFirmware()
+        #expect(source.asked == 1)
+        #expect(updater.firmware == Self.builtIn)
+    }
 }
