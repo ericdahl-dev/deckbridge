@@ -28,6 +28,8 @@ public enum CatalogError: Error, Equatable {
     case missingBlock(String)
     /// A block entry that isn't shaped like block A or block B as this repo builds them.
     case notOurBlock(String)
+    /// A known number (#692) that isn't a wd CRC ("0x" and 8 hex digits) or a tp SHA-256 (64 hex digits).
+    case badNumber(String)
     /// A panel entry (named by its version) with a bootloader and no partition table, or the other way round.
     case missingBootPart(String)
     /// Not an ESP32 image for 16 MB of flash that fits below the partition table at 0x8000.
@@ -40,6 +42,7 @@ public enum CatalogError: Error, Equatable {
 public struct Catalog: Sendable {
     private let panel: [PanelFirmware]
     private let lc6000: [LC6000PatchSet]
+    public let knownNumbers: KnownNumbers
 
     public init(directory: URL) throws {
         let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: directory.appending(path: "catalog.json")))
@@ -68,6 +71,7 @@ public struct Catalog: Sendable {
                 },
                 blocks: Self.ownBlocks(in: set.entries, directory: directory))
         }
+        knownNumbers = try Self.numbers(file.lc6000)
         let named = Set(["catalog.json"] + names)
         if let stray = try Self.files(in: directory).first(where: { !named.contains($0) }) {
             throw CatalogError.unnamedFile(stray)
@@ -159,6 +163,25 @@ public struct Catalog: Sendable {
         }
     }
 
+    /// The numbers the sets' stock firmware is known by (#692). A number that isn't one fails the load.
+    private static func numbers(_ sets: [File.Set]) throws -> KnownNumbers {
+        var display: [UInt32: String] = [:], topPanel: [String: String] = [:]
+        for set in sets {
+            guard let known = set.known else { continue }
+            if let crc = known.wd_crc {
+                guard crc.wholeMatch(of: /0x[0-9A-F]{8}/) != nil, let value = UInt32(crc.dropFirst(2), radix: 16) else {
+                    throw CatalogError.badNumber(crc)
+                }
+                display[value] = set.wd
+            }
+            if let hash = known.tp_sha256 {
+                guard hash.wholeMatch(of: /[0-9a-f]{64}/) != nil else { throw CatalogError.badNumber(hash) }
+                topPanel[hash] = set.tp
+            }
+        }
+        return KnownNumbers(display: display, topPanel: topPanel)
+    }
+
     /// The SHA of every panel build the catalog lists, carried or not.
     public var listedPanelSHAs: [String] { panel.map(\.sha) }
 
@@ -181,7 +204,9 @@ public struct Catalog: Sendable {
             var bootloader: String? = nil
             var partitions: String? = nil
         }
-        struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry] }
+        struct Set: Decodable { let wd: String; let tp: String; let entries: [Entry]; var known: Known? = nil }
+        /// The numbers this set's stock firmware is known by (#692): "0x" and 8 hex digits; 64 hex digits.
+        struct Known: Decodable { let wd_crc: String?; let tp_sha256: String? }
         struct Entry: Decodable {
             let kind: LC6000Entry.Kind
             let chip: Chip
@@ -193,6 +218,14 @@ public struct Catalog: Sendable {
         let panel: [Panel]
         let lc6000: [Set]
     }
+}
+
+/// Numbers only, never firmware: the wd image's trailer CRC and the tp app area's SHA-256 (hex), each to its version.
+public struct KnownNumbers: Sendable, Hashable {
+    public let display: [UInt32: String]
+    public let topPanel: [String: String]
+    /// Nothing known: every version refused for updates, backups still allowed.
+    public static let none = KnownNumbers(display: [:], topPanel: [:])
 }
 
 /// What the app offers a deck panel.
