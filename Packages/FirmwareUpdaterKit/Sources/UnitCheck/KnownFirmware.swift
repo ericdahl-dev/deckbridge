@@ -54,4 +54,11 @@ public struct Identified: Sendable, Hashable {
     public var ours: Bool = false
     /// A read-only backup of the owner's own unit is always allowed (#692, the owner's spec answer).
     public var backupAllowed: Bool { true }
+
+    public init(kind: ChipKind, version: String?, refusal: String?, ours: Bool = false) {
+        self.kind = kind
+        self.version = version
+        self.refusal = refusal
+        self.ours = ours
+    }
 }

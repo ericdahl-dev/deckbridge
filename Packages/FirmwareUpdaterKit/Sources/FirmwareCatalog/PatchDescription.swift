@@ -3,13 +3,13 @@ import Foundation
 /// Reads a patch description in the flash kit's format (tools/lc6000-firmware/README.md): one edit per line,
 /// `ADDRESS OLD-HEX NEW-HEX`, `#` starts a comment. The limits keep an LC6000 entry a description, never an image:
 /// the kit's largest edit is 4 bytes and its longest file under 1.3 KB.
-enum PatchDescription {
+public enum PatchDescription {
     static let maxFileBytes = 8 * 1024
     static let maxEditBytes = 16
     static let maxEdits = 32
 
     /// The edits, or nil if the file is anything but a small patch description.
-    static func edits(_ data: Data) -> [PatchEdit]? {
+    public static func edits(_ data: Data) -> [PatchEdit]? {
         guard data.count <= maxFileBytes, let text = String(data: data, encoding: .utf8) else { return nil }
         var edits: [PatchEdit] = []
         for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {

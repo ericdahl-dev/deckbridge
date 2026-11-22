@@ -4,13 +4,15 @@ import SwiftUI
 import UnitCheck
 
 /// The LC6000 section's unit check and backup (#692): the owner puts one chip in update mode, picks a folder, and the
-/// app reads the chip twice and saves it. Nothing is written to the unit.
+/// app reads the chip twice and saves it. The backup writes nothing to the unit; an update (#693) writes only after its confirm.
 @MainActor @Observable
 final class BackupModel {
     private(set) var running = false
     private(set) var result: String?
     var typed = ""
     private(set) var stepResult: String?
+    /// The update this session's backup allows (#693); nil until a backup is saved.
+    private(set) var update: UpdateModel?
 
     /// The display chip's step into update mode: only on the owner's typed UPDATE, once.
     func enterUpdateMode() async {
@@ -46,7 +48,9 @@ final class BackupModel {
         }
         let report = await UnitCheck(known: Self.known, log: FileLog.shared)
             .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: Self.stamp())
-        result = Self.text(report)
+        update = report.read.map { UpdateModel(read: $0) }
+        // With a read, the update's view of it: a chip already running this app's patch is said to (#748).
+        result = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
     }
 
     static var known: KnownFirmware {
@@ -105,6 +109,7 @@ struct BackupView: View {
                 if model.running { ProgressView().controlSize(.small) }
             }
             if let result = model.result { Text(result).fixedSize(horizontal: false, vertical: true) }
+            if let update = model.update { UpdateView(model: update) }
         }
         .padding(.top, 4)
     }

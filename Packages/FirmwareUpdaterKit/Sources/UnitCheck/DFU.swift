@@ -146,7 +146,7 @@ public struct ReadOnlyTransport: DFUTransport {
 extension DFURequest {
     /// What dfu-util's DfuSe upload sends, and nothing else: GETSTATUS, GETSTATE, CLRSTATUS, ABORT, UPLOAD of a block,
     /// and the one download that sets the address pointer (DfuSe 0x21 and a 4-byte address, in block 0).
-    var isReadOnly: Bool {
+    public var isReadOnly: Bool {
         switch (requestType, request) {
         case (0xA1, 3): data.isEmpty && length == 6
         case (0xA1, 5): data.isEmpty && length == 1

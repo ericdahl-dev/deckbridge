@@ -8,6 +8,8 @@ public struct UnitCheck: Sendable {
         public var identified: Identified?
         public var files: [URL] = []
         public var refusal: String?
+        /// What was read and saved: an update's plan is built from it, in this run of the app only (#693).
+        public var read: ChipRead?
     }
 
     let known: KnownFirmware
@@ -43,7 +45,7 @@ public struct UnitCheck: Sendable {
             log.log("\(chip): firmware \(version)\(identified.ours ? ", ours" : "")\(Self.number(saved.read))")
         }
         log.log("\(chip): backup saved, read twice and the same (\(saved.files.count) files)")
-        return Result(identified: identified, files: saved.files)
+        return Result(identified: identified, files: saved.files, read: saved.read)
     }
 
     private func refused(_ reason: String) -> Result {
