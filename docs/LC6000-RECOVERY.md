@@ -54,3 +54,13 @@ Only the flash sectors whose bytes the update changes. Each is erased and writte
 - **Top panel chip, no-deck-select patch:** `0x08010000-0x0801FFFF` (64 KB).
 
 Every other sector is untouched, including the bootloader area and the settings sector. **Restore backup** writes the same sectors.
+
+## Block B on the display chip
+
+Block B is DeckBridge's drawing for the jog display (#751). The updater installs it at `0x08080000` and up, in sectors 8-11 (`0x08080000-0x080FFFFF`, 128 KB each), outside Denon's image. Before writing, it reads that area twice and saves it beside the chip's backup as `lc6000-display-upper-<time>.bin`.
+
+- **What it writes:** only the sectors from `0x08080000` whose bytes change. That's block B, then erased flash to the end of any longer B that was there. Nothing below `0x08080000` is written: not Denon's image, not our hook or block A, not the settings or the bootloader area.
+- **If it went wrong, the display still starts as stock.** Block A checks B's header, CRC and layout before it calls anything in it, and stays silent for a bad or cut-off B. Stock's own drawing runs either way. That's shown by the kit's tests (`tools/lc6000-display-fw/arm/test/test_block.py`), not yet on hardware.
+- **To put the old B area back:** if the updater showed **The chip read back different**, use **Restore backup** while the chip is in update mode. It writes the saved area's bytes back to the same sectors and reads them back. If the chip has left update mode, put it back in (step 3; the display chip's firmware is untouched by a B install, so its update-mode step still works), back it up again, and restore.
+- **Denon's updater doesn't touch block B** (it never erases sector 8, #434). A B left there after a restore to stock is harmless: only our block A ever calls it.
+
