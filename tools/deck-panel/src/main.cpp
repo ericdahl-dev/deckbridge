@@ -105,7 +105,7 @@ FeedUdp g_udp;
 std::atomic<bool> g_feed_connected{false};
 std::atomic<uint32_t> g_feed_joins{0};
 #else
-// FEED_RX_TASK=0 (feed_flags.h): main's path. The drain's 512-byte buffer stays off the loop task's stack.
+// FEED_RX_TASK=0 (feed_flags.h), the default: no receive task. The drain's 512-byte buffer stays off the loop task's stack.
 feed_drain::Drain g_drain;
 FeedUdp g_udp;
 #endif
@@ -391,7 +391,7 @@ void setup() {
     char boot[96];
     build_info::boot_line(kBuild, boot, sizeof boot);
     Serial.println(boot);
-#if !FEED_RX_TASK || FEED_STAMP_AT_READ || FEED_RX_DELAY_TICKS != 0 || FEED_RX_WAIT_MS != 5
+#if FEED_FLAGS_OFF_DEFAULT
     // Only off the defaults (feed_flags.h), so a run's log says which build it was.
     Serial.printf("deck panel: feed flags FEED_RX_TASK=%d FEED_STAMP_AT_READ=%d FEED_RX_WAIT_MS=%d "
                   "FEED_RX_DELAY_TICKS=%d\n",
