@@ -6,8 +6,9 @@ public enum WindowFit {
     public static let minWidth: CGFloat = 560
 
     /// The window's size for `content` (the sections' own size) under a title bar `titleBar` tall, on a screen whose
-    /// visible frame is `visible`.
+    /// visible frame is `visible`. Never bigger than that frame: past it, the content scrolls.
     public static func size(content: CGSize, titleBar: CGFloat, visible: CGSize) -> CGSize {
-        CGSize(width: max(content.width, minWidth), height: content.height + titleBar)
+        CGSize(width: min(max(content.width, minWidth), visible.width),
+               height: min(content.height + titleBar, visible.height))
     }
 }

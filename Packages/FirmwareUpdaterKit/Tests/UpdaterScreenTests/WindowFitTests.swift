@@ -19,4 +19,16 @@ struct WindowFitTests {
         let size = WindowFit.size(content: CGSize(width: 700, height: 300), titleBar: 28, visible: Self.laptop)
         #expect(size == CGSize(width: 700, height: 328))
     }
+
+    @Test("Content taller than the screen: the window stops at the screen's visible height, and the content scrolls")
+    func tallerThanScreen() {
+        let size = WindowFit.size(content: CGSize(width: 560, height: 1200), titleBar: 28, visible: Self.laptop)
+        #expect(size == CGSize(width: 560, height: 860))
+    }
+
+    @Test("Content wider than the screen: the window stops at the screen's visible width")
+    func widerThanScreen() {
+        let size = WindowFit.size(content: CGSize(width: 2000, height: 300), titleBar: 28, visible: Self.laptop)
+        #expect(size == CGSize(width: 1470, height: 328))
+    }
 }
