@@ -1,5 +1,6 @@
 import DeviceFinder
 import Foundation
+import PanelFlasher
 
 /// Steps to install a missing USB driver (#688): plain text, and the maker's own download page.
 public struct DriverGuide: Sendable, Equatable {
@@ -48,7 +49,7 @@ public struct UpdaterScreen: Sendable, Equatable {
         """
 
     /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
-    public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
+    public static let portBusy = "DeckBridge is using the panel's USB cable. \(PanelUpdate.turnOffCable), then look again."
 
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
