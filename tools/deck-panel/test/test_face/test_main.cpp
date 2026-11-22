@@ -281,6 +281,16 @@ void test_the_tick_turns_dark_at_lightness_160() {
     TEST_ASSERT_EQUAL_HEX32(0x000000, deck_core::face(v).phase_tick_color);
 }
 
+// The weights are the eye's (Rec. 709), not equal: pure green is light (182 of 255), so its tick is dark; pure blue is
+// dark (18), so its tick is white (firmware review).
+void test_the_tick_weighs_green_light_and_blue_dark() {
+    DeckView v = loaded_deck();
+    v.color = 0x00FF00;
+    TEST_ASSERT_EQUAL_HEX32(0x000000, deck_core::face(v).phase_tick_color);
+    v.color = 0x0000FF;
+    TEST_ASSERT_EQUAL_HEX32(0xFFFFFF, deck_core::face(v).phase_tick_color);
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -351,6 +361,7 @@ int main(int, char**) {
     RUN_TEST(test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked);
     RUN_TEST(test_the_locked_tick_is_dark_on_a_light_deck_and_white_on_a_dark_one);
     RUN_TEST(test_the_tick_turns_dark_at_lightness_160);
+    RUN_TEST(test_the_tick_weighs_green_light_and_blue_dark);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
