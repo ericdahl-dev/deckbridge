@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
         .library(name: "UnitCheck", targets: ["UnitCheck"]),
+        .library(name: "LC6000Update", targets: ["LC6000Update"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
         .library(name: "PortHandoff", targets: ["PortHandoff"]),
         .executable(name: "firmware-release", targets: ["firmware-release"]),
@@ -45,5 +46,10 @@ let package = Package(
         // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
         .target(name: "UnitCheck", dependencies: ["FirmwareModel", "DeviceFinder"]),
         .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel", "DeviceFinder"]),
+        // The guarded LC6000 update (#693): the patched image built from the backup and the catalog's patch set, the
+        // sectors it changes, and writing them over DFU only after the owner's confirm, then reading back. Restore
+        // writes the backup's same sectors. Tested on a fake DFU device; the owner runs every write on a unit.
+        .target(name: "LC6000Update", dependencies: ["UnitCheck", "FirmwareCatalog", "FirmwareModel"]),
+        .testTarget(name: "LC6000UpdateTests", dependencies: ["LC6000Update", "UnitCheck", "FirmwareCatalog", "FirmwareModel"]),
     ]
 )

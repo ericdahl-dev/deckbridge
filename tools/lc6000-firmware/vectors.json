@@ -37,5 +37,30 @@
     "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
     "patch": "0x080083E0 0000 1111\n",
     "sha256": null
+  },
+  {
+    "name": "overlapping lines: refused",
+    "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
+    "patch": "0x08008040 5aa50ff0 00000000\n0x08008042 0ff0 1111\n",
+    "sha256": null
+  },
+  {
+    "name": "a line outside the image: refused",
+    "chip": "tp", "size": "0x400", "fill": "ff",
+    "patch": "0x08008400 ffff 0000\n",
+    "sha256": null
+  },
+  {
+    "name": "a line below the image's start: refused",
+    "chip": "tp", "size": "0x400", "fill": "ff",
+    "patch": "0x08007FF0 ffff 0000\n",
+    "sha256": null
+  },
+  {
+    "name": "a wd image whose trailer CRC is stale (a byte changed after it): refused",
+    "chip": "wd", "size": "0x400", "fill": "5aa50ff0",
+    "after_trailer": [{"at": "0x08008010", "hex": "00"}],
+    "patch": "0x08008040 5aa5 1234\n",
+    "sha256": null
   }
 ]

@@ -24,6 +24,10 @@ def element(recipe):
         struct.pack_into("<4sII", body, size - 32, b"\x00\x00\x05\x00", 0xDEADBEEF, covered)
         struct.pack_into("<I", body, covered, dfupatch.stm32_crc(bytes(body[:covered])))
     body[size - 16:] = b"EndOfFlashToken\x00"
+    for plant in recipe.get("after_trailer", []):  # changed after the trailer was made: a stale CRC
+        at = int(plant["at"], 16) - BASE
+        raw = bytes.fromhex(plant["hex"])
+        body[at:at + len(raw)] = raw
     return bytes(body)
 
 
