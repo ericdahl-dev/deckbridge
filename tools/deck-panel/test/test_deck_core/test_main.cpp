@@ -924,7 +924,7 @@ void test_the_waiting_texts_come_fitted_to_the_fonts() {
 
 
 // #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives. #718:
-// the build's lead early, 50 ms unless the build sets DECK_PANEL_BEAT_LEAD_MS.
+// the build's lead early (DECK_PANEL_BEAT_LEAD_MS).
 void test_the_next_beat_box_lights_the_lead_before_its_beat_is_due() {
     const uint32_t lit = 1938 - deck_core::BeatClock::kLeadMs;  // beat 3 is due at 1938
     deck_core::DeckCore core;

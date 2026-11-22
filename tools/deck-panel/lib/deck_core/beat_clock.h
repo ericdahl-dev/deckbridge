@@ -6,7 +6,7 @@
 #include <cstdint>
 
 #ifndef DECK_PANEL_BEAT_LEAD_MS
-#define DECK_PANEL_BEAT_LEAD_MS 50
+#define DECK_PANEL_BEAT_LEAD_MS 80
 #endif
 
 #ifndef DECK_PANEL_PREDICT_BEATS
@@ -20,9 +20,9 @@ class BeatClock {
     /// `lead_ms`: each beat shows this long before it's due (#718), so the box lands with the LC6000, not the feed's
     /// delay behind it. 0: on time.
     explicit BeatClock(uint32_t lead_ms = 0) : lead_ms_(lead_ms) {}
-    /// The deck view's lead (#718): the feed's path (Syndicate, DeckBridge, Wi-Fi) and the panel's read-to-glass, about
-    /// 50 ms on the owner's videos of 2026-11-21. The coordinator tunes it against the LC6000's jog display at 120 fps;
-    /// -DDECK_PANEL_BEAT_LEAD_MS=<ms> builds another.
+    /// The deck view's lead (#718): the feed's path (Syndicate, DeckBridge, Wi-Fi) and the panel's read-to-glass. Tuned
+    /// to Syndicate's metronome, the owner's reference, at 120 fps: lead 50 lit 31 ms after the click on average
+    /// (2026-11-21), so 80. -DDECK_PANEL_BEAT_LEAD_MS=<ms> builds another.
     static constexpr uint32_t kLeadMs = DECK_PANEL_BEAT_LEAD_MS;
     /// How many beats past the last edge heard the clock shows when they're due. 1: the next beat lights on time,
     /// and if the master stops, at most one beat shows that didn't happen. 0: never past the last edge, as before
