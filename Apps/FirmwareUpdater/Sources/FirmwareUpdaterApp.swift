@@ -31,11 +31,13 @@ enum Live {
 
 struct UpdaterView: View {
     let model: Updater
+    @State private var backup = BackupModel()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
             SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
+            if model.screen.lc6000.warning == nil { BackupView(model: backup) }
             HStack {
                 Spacer()
                 if model.looking { ProgressView().controlSize(.small) }

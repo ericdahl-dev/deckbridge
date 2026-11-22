@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "FirmwareCatalog", targets: ["FirmwareCatalog"]),
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
+        .library(name: "UnitCheck", targets: ["UnitCheck"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
         .library(name: "PortHandoff", targets: ["PortHandoff"]),
         .executable(name: "firmware-release", targets: ["firmware-release"]),
@@ -40,5 +41,9 @@ let package = Package(
         .target(name: "PortHandoff"),
         .testTarget(name: "PortHandoffTests", dependencies: ["PortHandoff"]),
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel", "PortHandoff"]),
+        // The LC6000 unit check and backup (#692): reads a chip in ST's update mode (DFU) and writes nothing to it. A
+        // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
+        .target(name: "UnitCheck", dependencies: ["FirmwareModel", "DeviceFinder"]),
+        .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel", "DeviceFinder"]),
     ]
 )

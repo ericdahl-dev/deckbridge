@@ -34,6 +34,10 @@ targets:
       - package: FirmwareUpdaterKit
         product: FirmwareModel
       - package: FirmwareUpdaterKit
+        product: UnitCheck
+      - package: FirmwareUpdaterKit
+        product: FirmwareCatalog
+      - package: FirmwareUpdaterKit
         product: PortHandoff
     info:
       path: Sources/Info.plist
