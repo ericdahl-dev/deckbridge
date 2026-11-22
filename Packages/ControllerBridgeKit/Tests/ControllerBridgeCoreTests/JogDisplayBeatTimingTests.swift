@@ -50,4 +50,32 @@ struct JogDisplayBeatTimingTests {
         Self.tick(rig, until: 1.50)
         #expect(Self.beats(port) == [1, 2])
     }
+
+    @Test("Denon's images (beat mode): the next beat's slot shows when it's due, before its message, and only once")
+    func slotShowBeforeItsMessage() throws {
+        typealias Slots = JogDisplayBeatSlotTests
+        let rig = try ControllerBridgeCoreTests.Rig()
+        let (port, _) = Slots.attach(rig)
+        Slots.clock(rig, 3)
+        rig.coordinator.start()
+        _ = Slots.uploadAll(rig, port)
+        port.wd.removeAll()
+        func at(_ time: Double, _ beat: Int? = nil) {
+            while rig.clock.now < time - 1e-9 {
+                rig.clock.now = ((rig.clock.now + 0.01) * 100).rounded() / 100
+                rig.coordinator.tick()
+            }
+            if let beat { Slots.clock(rig, beat) }
+        }
+        // The uploads' beat (3, at 0) is long before: a gap, so the run starts at 4.
+        at(2.00, 4)
+        at(2.47, 1)
+        at(2.93)
+        #expect(Slots.shows(port) == [4, 1])
+        at(2.94)
+        #expect(Slots.shows(port) == [4, 1, 2])
+        at(2.97, 2)
+        at(3.00)
+        #expect(Slots.shows(port) == [4, 1, 2])
+    }
 }
