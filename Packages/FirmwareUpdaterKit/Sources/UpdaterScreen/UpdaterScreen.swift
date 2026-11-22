@@ -52,7 +52,7 @@ public struct UpdaterScreen: Sendable, Equatable {
 
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false) {
-        firstLookLine = Self.firstLook(found)
+        firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
         case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
@@ -81,9 +81,10 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// port, so the launch smoke check can match it exactly. The LC6000's words don't wait for its warning.
     public let firstLookLine: String
 
-    static func firstLook(_ found: Found) -> String {
+    static func firstLook(_ found: Found, panelWaiting: Bool) -> String {
         let panel = switch found.panel {
         case nil: "not found"
+        case .driverMissing where panelWaiting: "found (waiting for its port)"
         case .driverMissing: "found (driver missing)"
         case .portBusy: "found (port busy)"
         case .onSerial(let build): build == nil ? "found (build not read)" : "found (build read)"

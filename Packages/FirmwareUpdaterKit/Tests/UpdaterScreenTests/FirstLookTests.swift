@@ -36,4 +36,10 @@ struct FirstLookTests {
         #expect(line(.portBusy, .updateMode) == "first look: deck panel found (port busy), LC6000 in update mode")
         #expect(line(.onSerial(build: nil), nil) == "first look: deck panel found (build not read), LC6000 not found")
     }
+
+    @Test("A panel whose port may still come (#700): waiting, never driver missing")
+    func panelWaiting() {
+        let screen = UpdaterScreen(found: Found(panel: .driverMissing), lc6000WarningAccepted: false, panelWaiting: true)
+        #expect(screen.firstLookLine == "first look: deck panel found (waiting for its port), LC6000 not found")
+    }
 }
