@@ -59,7 +59,8 @@ public struct UpdaterScreen: Sendable, Equatable {
                                                     guide: .ch34x)
         case .onSerial(let build?):
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
-            panel = DeviceSection(status: "Deck panel found", detail: "Build \(build.sha)\(development)")
+            let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"
+            panel = DeviceSection(status: "Deck panel found", detail: shown + development)
         case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
