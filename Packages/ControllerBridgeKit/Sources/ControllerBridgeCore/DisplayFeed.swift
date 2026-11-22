@@ -249,6 +249,8 @@ final class DisplayFeed {
     func resend(at now: Double) {
         sent = [:]
         open = true
+        // A display starts counting again here (#750): this bundle is 1, never a gap after the last destination's.
+        seq = 0
         holdUntil = now + Self.holdSeconds
         holdSaid = false
         snapshotReason = "destination open"

@@ -20,4 +20,27 @@ struct DisplayFeedSeqTests {
         #expect(feed.rawBundles.allSatisfy { $0.first?.address == "/DeckBridge/Display/seq" })
         #expect(feed.seqs == (1...UInt32(feed.rawBundles.count)).map { $0 })
     }
+
+    @Test("It starts again at 1 each time the destination opens: off and on, or a new address")
+    func restartsOnOpen() throws {
+        let (rig, feed) = try DisplayFeedCoordinatorTests.rig()
+        rig.coordinator.start()
+        DisplayFeedCoordinatorTests.load(rig)
+        DisplayFeedCoordinatorTests.turnOn(rig)
+        DisplayFeedCoordinatorTests.run(rig, from: 0.01, to: 1)
+        var off = DisplayFeedCoordinatorTests.on
+        off.enabled = false
+        rig.coordinator.setDisplayFeed(off)
+        #expect(feed.seqs.count >= 2)
+        let before = feed.seqs.count
+
+        DisplayFeedCoordinatorTests.turnOn(rig)
+        #expect(feed.seqs.dropFirst(before).first == 1)
+
+        let moved = feed.seqs.count
+        var elsewhere = DisplayFeedCoordinatorTests.on
+        elsewhere.host = "192.168.1.41"
+        DisplayFeedCoordinatorTests.turnOn(rig, elsewhere)
+        #expect(feed.seqs.dropFirst(moved).first == 1)
+    }
 }
