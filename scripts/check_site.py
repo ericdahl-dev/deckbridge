@@ -15,11 +15,13 @@
 - no page title or main heading uses another company's name as the product's
 - the privacy page says the app collects no data, and discloses the website's PostHog visit counts as
   showrecorder.app's does (PRIVACY_STATEMENTS)
+- a sentence saying nothing goes to the network, that the app talks or sends only to Syndicate, or that nothing
+  leaves the Mac names the display feed; the privacy page discloses the feed in the owner's wording (#632)
 - no other company's logo is in the site
 - the whole site stays under 2 MB
 Standard library only. Run: python3 -I scripts/check_site.py [website]   (exits 1 on any problem)
 Tested by scripts/test_check_site.py."""
-import json, os, re, sys
+import html, json, os, re, sys
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
@@ -37,6 +39,8 @@ PRIVACY_STATEMENTS = [
     # the website: cookieless PostHog (persistence memory, cookieless_mode always), worded as showrecorder.app's
     "posthog", "no cookies", "anonymous hash that changes every day", "does not keep the address",
     "counts clicks on a few links", "to have your visits removed, email",
+    # the display feed (#632), in the owner's wording: what it sends, unencrypted, and where
+    "display feed", "including track title and artist", "unencrypted to the one address you set on your local network",
     # the web capture (#190): it uploads nothing, and the analytics count only that one started and finished
     "web capture", "nothing is uploaded", "counts only that a capture started and finished",
 ]
@@ -192,6 +196,36 @@ def json_ld_nodes(blocks):
         except ValueError:
             pass  # reported by check_page
     return out
+
+
+# A sentence that says nothing goes to the network (#632): with the display feed on, the deck in front goes,
+# unencrypted, to the one address the DJ sets (ADR 0011), so the sentence must name the display feed.
+NOTHING_TO_THE_NETWORK = re.compile(r'[^.!?"<>{}]*\bnothing\b[^.!?"<>{}]*\bnetwork\b[^.!?"<>{}]*[.!?]', re.IGNORECASE)
+
+
+INLINE_TAG = re.compile(r"</?(?:a|strong|em|b|i|code|span|abbr)\b[^>]*>", re.IGNORECASE)
+
+
+# A sentence that says the app talks or sends only to the controller and Syndicate, or that nothing leaves the Mac
+# (#632): the display feed is the exception once it's on, so the sentence must name it.
+ONLY_SYNDICATE = re.compile(r'[^.!?"<>{}]*\b(?:only (?:talks|sends)|sends [^.!?"<>{}]*\bonly to|nothing leaves your mac)\b'
+                            r'[^.!?"<>{}]*[.!?]', re.IGNORECASE)
+# A meta description's text, which search results show: read as a sentence of its own.
+META_CONTENT = re.compile(r'<meta\s[^>]*(?:name|property)="(?:description|og:description|twitter:description)"[^>]*'
+                          r'content="([^"]*)"', re.IGNORECASE)
+
+
+def network_problems(file, text):
+    # Inline tags sit inside a sentence; any other tag ends one.
+    plain = text
+    if file.endswith(".html"):
+        metas = ". ".join(META_CONTENT.findall(text))
+        plain = html.unescape(metas + ". " + re.sub(r"<[^>]+>", ".", INLINE_TAG.sub(" ", text)))
+    out = [f'{file}: says nothing goes to the network without naming the display feed: "{" ".join(m.group(0).split())}"'
+           for m in NOTHING_TO_THE_NETWORK.finditer(plain) if "display feed" not in m.group(0).lower()]
+    return out + [f'{file}: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed:'
+                  f' "{" ".join(m.group(0).split())}"'
+                  for m in ONLY_SYNDICATE.finditer(plain) if "display feed" not in m.group(0).lower()]
 
 
 def check_price(file, blocks):
@@ -401,6 +435,7 @@ def problems(root, app_prompts=None):
             with open(path, encoding="utf-8") as f:
                 text = f.read()
             out += company_problems(file, text)
+            out += network_problems(file, text)
             if PLACEHOLDER.search(text):
                 out.append(f"{file}: still has a TODO(user) TestFlight placeholder")
             if file.endswith(".html"):

@@ -97,7 +97,7 @@ Click the menu-bar icon (a jog wheel) to open the panel:
   - **TEMPO:** MASTER when this deck leads the tempo.
 - **Why no LEDs?:** says in plain words what to fix when something is wrong, with a **Copy details** button for the raw error.
 - **Settings…** and **Diagnostics…**
-- **Demo controller:** runs a scripted controller against a simulated Syndicate, so you can see the bridge work without hardware. Nothing goes to the network, and it's off again at the next launch.
+- **Demo controller:** runs a scripted controller against a simulated Syndicate, so you can see the bridge work without hardware. Nothing goes to the network unless you turn on the display feed, and then only unencrypted to the one address you set on your local network. It's off again at the next launch.
 - **Quit:** asks first while feedback is live, because quitting stops the controller.
 
 If the bridge itself can't start, the header says **Bridge stopped** with the reason: MIDI, Syndicate's address or the controller profiles. The help says how to fix it.

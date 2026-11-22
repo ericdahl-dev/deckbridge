@@ -26,6 +26,9 @@ WEBSITE = ('<h2>This website</h2><p>It counts visits with PostHog and sets no co
            ' To have your visits removed, email us. On the capture page it counts only that a capture started and finished.</p>'
            '<p>The web capture saves the file on your computer; nothing is uploaded.</p>')
 
+FEED = ('<p>If you turn on the display feed, it also sends the deck in front\'s state, including track title and artist,'
+        ' unencrypted to the one address you set on your local network.</p>')
+
 CAPTURE_LD = ('<script type="application/ld+json">{"@type": "FAQPage", "mainEntity": [{"@type": "Question", '
               '"name": "Which controllers does DeckBridge support?", "acceptedAnswer": {"@type": "Answer", '
               '"text": "The LC6000 PRIME. Record yours at https://getdeckbridge.app/capture/."}}]}</script>')
@@ -49,7 +52,7 @@ GOOD = {
     "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'),
     "capture/index.html": page(body='<a href="../">Home</a>'),
     "for/lc6000/index.html": page(body='<a href="../../">Home</a>'),
-    "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + WEBSITE),
+    "privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + FEED + WEBSITE),
     "style.css": '@font-face { font-family: Inter; src: url("fonts/Inter-Regular.ttf"); } body { color: #EDEDEA; }',
     "fonts/Inter-Regular.ttf": "font",
     "img/icon.png": "png",
@@ -229,12 +232,66 @@ class CheckSiteTests(unittest.TestCase):
         self.assertEqual(check_site.problems(root), ["support/index.html: no <title>",
                                                      "support/index.html: no meta description"])
 
+    def test_saying_nothing_goes_to_the_network_must_name_the_display_feed(self):
+        """With the display feed on, the deck in front goes to the address the DJ sets (#632, ADR 0011): a sentence
+        that says nothing goes to the network must say so, in its HTML text, its JSON-LD and index.md alike."""
+        root = self.site({
+            "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                                            '<p>A scripted controller plays, with nothing sent to the network.</p>'),
+            "for/lc6000/index.html": page(head='<script type="application/ld+json">{"text": "Nothing goes to the network, and it\'s off at launch."}</script>',
+                                          body='<a href="../../">Home</a>'),
+            "index.md": "Yes. Nothing goes to the network.\n",
+        })
+        self.assertEqual(check_site.problems(root), [
+            'for/lc6000/index.html: says nothing goes to the network without naming the display feed: "Nothing goes to the network, and it\'s off at launch."',
+            'index.md: says nothing goes to the network without naming the display feed: "Nothing goes to the network."',
+            'support/index.html: says nothing goes to the network without naming the display feed: "A scripted controller plays, with nothing sent to the network."',
+        ])
+
+    def test_naming_the_display_feed_in_that_sentence_passes(self):
+        root = self.site({
+            "support/index.html": page(body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                                            '<p>Nothing goes to the network unless you turn on the display feed, and then only'
+                                            ' unencrypted to the one address you set on your local network.</p>'),
+        })
+        self.assertEqual(check_site.problems(root), [])
+
+    def test_the_privacy_page_must_disclose_the_display_feed(self):
+        """The owner's wording (#632): what the feed sends, unencrypted, to the one address set on the local network."""
+        root = self.site({"privacy/index.html": page(body='<h2 id="network">Network</h2><p>DeckBridge collects no data.</p>' + WEBSITE)})
+        self.assertEqual(check_site.problems(root), [
+            'privacy/index.html: doesn\'t say "display feed"',
+            'privacy/index.html: doesn\'t say "including track title and artist"',
+            'privacy/index.html: doesn\'t say "unencrypted to the one address you set on your local network"',
+        ])
+
+    def test_saying_only_syndicate_or_nothing_leaves_the_mac_must_name_the_display_feed(self):
+        root = self.site({"support/index.html": page(
+            body='<a href="../">Home</a> <a href="../privacy/#network">Network</a>'
+                 '<p>It only talks to your LC6000 controller and to Syndicate. Nothing leaves your Mac except OSC.'
+                 ' It only sends OSC messages to Syndicate, and the display feed if you turn it on.</p>')})
+        self.assertEqual(check_site.problems(root), [
+            'support/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It only talks to your LC6000 controller and to Syndicate."',
+            'support/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "Nothing leaves your Mac except OSC."',
+        ])
+
+    def test_the_rule_reads_meta_descriptions_and_sends_only_to(self):
+        root = self.site({
+            "capture/index.html": page(description="It only talks to your LC6000 controller and to Syndicate.",
+                                       body='<a href="../">Home</a>'),
+            "index.md": "It sends OSC messages only to Syndicate, on this Mac by default.\n",
+        })
+        self.assertEqual(check_site.problems(root), [
+            'capture/index.html: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It only talks to your LC6000 controller and to Syndicate."',
+            'index.md: says the app sends only to Syndicate or nothing leaves the Mac without naming the display feed: "It sends OSC messages only to Syndicate, on this Mac by default."',
+        ])
+
     def test_the_privacy_page_must_say_no_data_is_collected(self):
-        root = self.site({"privacy/index.html": page(body="<p>We care about your privacy.</p>" + WEBSITE)})
+        root = self.site({"privacy/index.html": page(body="<p>We care about your privacy.</p>" + FEED + WEBSITE)})
         self.assertEqual(check_site.problems(root), ['privacy/index.html: doesn\'t say "collects no data"'])
 
     def test_the_privacy_page_must_disclose_the_website_analytics(self):
-        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data. This site uses no cookies.</p>")})
+        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data. This site uses no cookies.</p>" + FEED)})
         self.assertEqual(check_site.problems(root), [
             'privacy/index.html: doesn\'t say "posthog"',
             'privacy/index.html: doesn\'t say "anonymous hash that changes every day"',
@@ -249,7 +306,7 @@ class CheckSiteTests(unittest.TestCase):
     def test_the_privacy_page_must_disclose_the_web_capture(self):
         without = WEBSITE.replace(" On the capture page it counts only that a capture started and finished.", "").replace(
             "<p>The web capture saves the file on your computer; nothing is uploaded.</p>", "")
-        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data.</p>" + without)})
+        root = self.site({"privacy/index.html": page(body="<p>DeckBridge collects no data.</p>" + FEED + without)})
         self.assertEqual(check_site.problems(root), [
             'privacy/index.html: doesn\'t say "web capture"',
             'privacy/index.html: doesn\'t say "nothing is uploaded"',
@@ -438,7 +495,7 @@ class CheckSiteTests(unittest.TestCase):
     def test_titles_and_headings_dont_use_other_companies_names(self):
         root = self.site({
             "support/index.html": page(title="Syndicate Bridge Support", body='<h1>Denon <em>Controller</em> Help</h1><a href="../">Home</a>'),
-            "privacy/index.html": page(body="<h1>Privacy</h1><p>Works with Syndicate. DeckBridge collects no data.</p>" + WEBSITE),
+            "privacy/index.html": page(body="<h1>Privacy</h1><p>Works with Syndicate. DeckBridge collects no data.</p>" + FEED + WEBSITE),
         })
         self.assertEqual(check_site.problems(root), ['support/index.html: the <title> names Syndicate',
                                                      'support/index.html: the <h1> names Denon'])
