@@ -34,7 +34,7 @@ struct JogSimulatorState: Sendable {
             case .needle: break
             case .deckNeedle(let deck, let pitchBend):
                 var limiter = needleLimiters[deck] ?? RedrawLimiter<Int>(interval: 1.0 / 30)
-                if let value = limiter.offer(pitchBend, at: now.timeIntervalSinceReferenceDate) { sim.apply(.marker(deck: deck, pitchBend: value)) }
+                if let value = limiter.offer(pitchBend, at: now.timeIntervalSinceReferenceDate) { sim.apply(.needle(deck: deck, pitchBend: value)) }
                 needleLimiters[deck] = limiter
             // The master clock's beat: the lit segment on every deck (#165).
             case .masterBeat(let beat): sim.apply(.masterBeat(beat))
@@ -52,7 +52,7 @@ struct JogSimulatorState: Sendable {
     mutating func tick(_ now: Date) {
         if drawn.drawing { drawnClock = (now.timeIntervalSinceReferenceDate * 4).rounded(.down) / 4 }
         for deck in needleLimiters.keys.sorted() {
-            if let value = needleLimiters[deck]?.tick(at: now.timeIntervalSinceReferenceDate) { sim.apply(.marker(deck: deck, pitchBend: value)) }
+            if let value = needleLimiters[deck]?.tick(at: now.timeIntervalSinceReferenceDate) { sim.apply(.needle(deck: deck, pitchBend: value)) }
         }
     }
 }
@@ -179,7 +179,7 @@ private struct JogDeckPreview: View, Equatable {
         onUnit = sim.onUnit(deck: deck)
         card = sim.card(deck: deck)
         litBeat = sim.litBeat(deck: deck)
-        marker = sim.markerTurns(deck: deck)
+        marker = sim.needleTurns(deck: deck)
         playing = sim.playing(deck: deck)
     }
 

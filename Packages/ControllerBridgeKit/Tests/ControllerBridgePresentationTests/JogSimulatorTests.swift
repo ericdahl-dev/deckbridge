@@ -47,11 +47,11 @@ struct JogSimulatorTests {
 
     @Test("The marker's pitch bend is a fraction of a turn: 0 is 12 o'clock, 4096 a quarter turn clockwise (provisional, #165)")
     func markerAngle() {
-        #expect(JogMarkerAngle.degrees(pitchBend: 0) == 0)
-        #expect(JogMarkerAngle.degrees(pitchBend: 4096) == 90)
-        #expect(JogMarkerAngle.degrees(pitchBend: 8192) == 180)
-        #expect(JogMarkerAngle.degrees(pitchBend: 12288) == 270)
-        #expect(JogMarkerAngle.degrees(pitchBend: 16383) == 359.978_027_343_75)
+        #expect(JogNeedleAngle.degrees(pitchBend: 0) == 0)
+        #expect(JogNeedleAngle.degrees(pitchBend: 4096) == 90)
+        #expect(JogNeedleAngle.degrees(pitchBend: 8192) == 180)
+        #expect(JogNeedleAngle.degrees(pitchBend: 12288) == 270)
+        #expect(JogNeedleAngle.degrees(pitchBend: 16383) == 359.978_027_343_75)
     }
 
     // The simulator's state from the display driver's events (#221), mapped by the App one to one.
@@ -130,11 +130,11 @@ struct JogSimulatorTests {
         var sim = JogSimulator()
         sim.apply(.connected)
         sim.apply(.uploadStarted(slot: 1, deck: 1, bytes: 100, at: Self.noon))
-        sim.apply(.marker(deck: 1, pitchBend: 4096))
-        sim.apply(.marker(deck: 3, pitchBend: 8192))
+        sim.apply(.needle(deck: 1, pitchBend: 4096))
+        sim.apply(.needle(deck: 3, pitchBend: 8192))
         sim.apply(.playing(deck: 3, true))
-        #expect(sim.marker(deck: 1) == 4096)
-        #expect(sim.marker(deck: 3) == 8192)
+        #expect(sim.needle(deck: 1) == 4096)
+        #expect(sim.needle(deck: 3) == 8192)
         #expect(!sim.playing(deck: 1))
         #expect(sim.playing(deck: 3))
         sim.apply(.playing(deck: 3, false))
@@ -143,7 +143,7 @@ struct JogSimulatorTests {
 
     @Test("A deck with no needle yet sits at 12 o'clock")
     func noNeedleYet() {
-        #expect(JogSimulator().marker(deck: 2) == 0)
+        #expect(JogSimulator().needle(deck: 2) == 0)
     }
 
     @Test("The lit beat is the master's, the same on every deck, paused or not; none before the master clock runs")
@@ -152,9 +152,9 @@ struct JogSimulatorTests {
         #expect(sim.litBeat(deck: 1) == nil)
         sim.apply(.masterBeat(3))
         #expect([1, 2, 3, 4].map { sim.litBeat(deck: $0) } == [3, 3, 3, 3])
-        sim.apply(.marker(deck: 1, pitchBend: 0))
+        sim.apply(.needle(deck: 1, pitchBend: 0))
         #expect(sim.litBeat(deck: 1) == 3, "the needle doesn't pick the segment")
-        #expect(sim.markerTurns(deck: 3) == 0)
+        #expect(sim.needleTurns(deck: 3) == 0)
     }
 
     @Test("Diagnostics has a Jog display tab, last; before the unit shows anything it says how to turn it on")
