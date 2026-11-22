@@ -36,6 +36,13 @@ final class StubDeckBridge: HandoffChannel, @unchecked Sendable {
 /// The flasher (#687) as the updater sees it: it reports these steps, as PanelUpdate would.
 final class StubFlasher: PanelFlashing, @unchecked Sendable {
     let steps: [PanelUpdate.Step]
+    var offered: PanelUpdateOffer? = PanelUpdateOffer(version: "1.3.0", note: nil)
+    private(set) var asked: [PanelBuild] = []
+
+    func offer(for build: PanelBuild) -> PanelUpdateOffer? {
+        asked.append(build)
+        return offered
+    }
     private let runs = Mutex(0)
     var started: Int { runs.withLock { $0 } }
 
@@ -49,6 +56,7 @@ final class StubFlasher: PanelFlashing, @unchecked Sendable {
 
 /// A flasher that writes until it is canceled, then says so as PanelUpdate does.
 final class WaitingFlasher: PanelFlashing, @unchecked Sendable {
+    func offer(for build: PanelBuild) -> PanelUpdateOffer? { nil }
     private let state = Mutex((runs: 0, writing: false))
     var started: Int { state.withLock { $0.runs } }
     var writing: Bool { state.withLock { $0.writing } }
@@ -157,5 +165,39 @@ struct PanelUpdateFlowTests {
         updater.cancelUpdate()
         await run.value
         #expect(usb.reads == 1)   // the one look after the update
+    }
+
+    @Test("A panel that told its build: the update the catalog has for it is offered")
+    func offered() async {
+        let rig = Rig()
+        UpdaterScreenTests.panel(rig, printing: ["deck panel: boot, build 1d0683f"])
+        let flasher = StubFlasher([])
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, flasher: flasher)
+        await updater.refresh()
+        #expect(updater.screen.panelUpdate == PanelUpdateOffer(version: "1.3.0", note: nil))
+        #expect(flasher.asked == [PanelBuild(sha: "1d0683f")])
+    }
+
+    @Test("Nothing to offer: up to date, the build not read, or no flasher")
+    func notOffered() async {
+        let rig = Rig()
+        UpdaterScreenTests.panel(rig, printing: ["deck panel: boot, build 1d0683f"])
+        let upToDate = StubFlasher([])
+        upToDate.offered = nil
+        let one = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, flasher: upToDate)
+        await one.refresh()
+        #expect(one.screen.panelUpdate == nil)
+
+        let none = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() })
+        await none.refresh()
+        #expect(none.screen.panelUpdate == nil)
+
+        let silent = Rig()
+        UpdaterScreenTests.panel(silent, printing: ["deck panel: waiting"])
+        let unread = StubFlasher([])
+        let two = Updater(finder: silent.finder, changes: AsyncStream { $0.finish() }, flasher: unread)
+        await two.refresh()
+        #expect(two.screen.panelUpdate == nil)
+        #expect(unread.asked.isEmpty)
     }
 }

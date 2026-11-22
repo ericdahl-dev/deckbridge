@@ -51,8 +51,10 @@ public struct UpdaterScreen: Sendable, Equatable {
     public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
 
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
-    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, update: String? = nil) {
+    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, update: String? = nil,
+                panelUpdate: PanelUpdateOffer? = nil) {
         self.update = update
+        self.panelUpdate = panelUpdate
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
         case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
@@ -79,4 +81,6 @@ public struct UpdaterScreen: Sendable, Equatable {
 
     /// What the update over the cable says now (#687): a step, the result, or what to do; nil before one starts.
     public let update: String?
+    /// The update offered for the panel over its cable (#687); nil when there's none.
+    public let panelUpdate: PanelUpdateOffer?
 }

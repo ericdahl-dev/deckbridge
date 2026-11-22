@@ -61,6 +61,12 @@ public final class Updater {
     public private(set) var updating = false
     private var flashing: Task<Void, Never>?
 
+    /// The update offered for the panel's build, when the panel told it and the catalog has one newer.
+    private var offer: PanelUpdateOffer? {
+        guard let flasher, case .onSerial(let build?) = found.panel else { return nil }
+        return flasher.offer(for: build)
+    }
+
     /// Stops the update: the flasher resets the panel into its app and says what that leaves.
     public func cancelUpdate() { flashing?.cancel() }
 
@@ -121,7 +127,7 @@ public final class Updater {
 
     private func show() {
         screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort,
-                               update: updateText)
+                               update: updateText, panelUpdate: offer)
     }
 
     /// The panel is on USB with no port, and the wait isn't up: it may still be coming.
