@@ -26,9 +26,16 @@ struct JogDisplayBeatTimingTests {
         Live.clock(rig, beat)
     }
 
+    /// Drawn mode playing, with the jog display's beat lead set to `lead` (seconds).
+    static func playing(lead: Double) throws -> (Rig, DrawnDisplayHandshakeTests.Port) {
+        let (rig, port) = try Live.playing()
+        rig.coordinator.apply(.setJogBeatLead(lead))
+        return (rig, port)
+    }
+
     @Test("Drawing: the next beat goes when it's due, before Syndicate's message for it, and only once")
     func nextBeatBeforeItsMessage() throws {
-        let (rig, port) = try Live.playing()
+        let (rig, port) = try Self.playing(lead: 0)
         Self.clock(rig, 1, at: 1.00)
         Self.clock(rig, 2, at: 1.47)  // 470 ms a beat
         Self.tick(rig, until: 1.93)
@@ -42,7 +49,7 @@ struct JogDisplayBeatTimingTests {
 
     @Test("With Syndicate's master BPM one beat is enough: the next goes a beat length on, before its message")
     func masterBPMTimesTheFirstBeat() throws {
-        let (rig, port) = try Live.playing()
+        let (rig, port) = try Self.playing(lead: 0)
         rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(120)]))
         Self.clock(rig, 1, at: 1.00)
         Self.tick(rig, until: 1.49)
@@ -56,6 +63,7 @@ struct JogDisplayBeatTimingTests {
         typealias Slots = JogDisplayBeatSlotTests
         let rig = try ControllerBridgeCoreTests.Rig()
         let (port, _) = Slots.attach(rig)
+        rig.coordinator.apply(.setJogBeatLead(0))
         Slots.clock(rig, 3)
         rig.coordinator.start()
         _ = Slots.uploadAll(rig, port)
@@ -81,7 +89,7 @@ struct JogDisplayBeatTimingTests {
 
     /// Deck 1 (playing, drawn) as the master or not, the master beat 1 and 2 heard, then deck 1 pauses at 1.80.
     static func pausedAfterTwoBeats(master: Bool) throws -> DrawnDisplayHandshakeTests.Port {
-        let (rig, port) = try Live.playing()
+        let (rig, port) = try Self.playing(lead: 0)
         rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Sync", [.int(master ? 1 : 0)]))
         Self.clock(rig, 1, at: 1.00)
         Self.clock(rig, 2, at: 1.47)
@@ -99,5 +107,31 @@ struct JogDisplayBeatTimingTests {
     @Test("Another deck's pause says nothing about the master clock: the next beat still goes when due")
     func otherDeckPauseKeepsTheClock() throws {
         #expect(Self.beats(try Self.pausedAfterTwoBeats(master: false)) == [1, 2, 3])
+    }
+
+    /// When the third beat (due at 1.94, beats at 1.00 and 1.47) first went out; nil if it didn't by 1.97.
+    static func thirdBeatSent(_ rig: Rig, _ port: DrawnDisplayHandshakeTests.Port) -> Double? {
+        Self.clock(rig, 1, at: 1.00)
+        Self.clock(rig, 2, at: 1.47)
+        while rig.clock.now < 1.97 - 1e-9 {
+            Self.tick(rig, until: rig.clock.now + 0.01)
+            if Self.beats(port).count == 3 { return rig.clock.now }
+        }
+        return nil
+    }
+
+    @Test("The jog display's beat goes 60 ms early by default: the owner's video put it about 60 ms after the click")
+    func defaultLead() throws {
+        let (rig, port) = try Live.playing()
+        let sent = try #require(Self.thirdBeatSent(rig, port))
+        #expect(abs(sent - 1.88) < 1e-6)
+    }
+
+    @Test("The lead setting is kept to 0-200 ms (cos, #720)",
+          arguments: [(-0.010, 1.94), (0.0, 1.94), (0.100, 1.84), (0.200, 1.74), (0.250, 1.74)])
+    func leadSetting(lead: Double, sentAt: Double) throws {
+        let (rig, port) = try Self.playing(lead: lead)
+        let sent = try #require(Self.thirdBeatSent(rig, port))
+        #expect(abs(sent - sentAt) < 1e-6)
     }
 }

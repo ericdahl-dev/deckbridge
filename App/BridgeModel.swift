@@ -447,6 +447,11 @@ final class BridgeModel {
         pipe.producer.send(.setDisplayFirmware(settings.displayFirmware))
         // How the key is written (#590), before the first content is shown.
         pipe.producer.send(.setKeyDisplay(settings.keyDisplay))
+        // The jog display's beat lead (#720): a hidden default while it's tuned on video, no Settings control.
+        // `defaults write dev.ericdahl.ControllerBridge jogDisplayBeatLeadMs -float 70` sets it; unset, the Kit's 60 ms.
+        if let ms = UserDefaults.standard.object(forKey: "jogDisplayBeatLeadMs") as? Double {
+            pipe.producer.send(.setJogBeatLead(ms / 1000))
+        }
         pipe.producer.send(.setJogDisplay(enabled: settings.jogDisplay))
         pipe.producer.send(.setDisplayFeed(settings.displayFeed))
         // After the setting, so the port's opening finds the cable's feed on.

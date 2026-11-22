@@ -25,10 +25,15 @@ struct BeatClock {
     /// Past half a beat the beat just heard shows only briefly, and past a whole beat (200 ms at 300 BPM) not at all.
     static let longestLead = 0.200
     /// Each beat shows this long before it's due, so it lands with Syndicate's click, not the path's delay behind it.
-    let lead: Double
+    private(set) var lead = 0.0
 
     /// `lead`: seconds, kept to 0...`longestLead`.
     init(lead: Double = 0) {
+        setLead(lead)
+    }
+
+    /// A new lead, kept to 0...`longestLead`; the beats heard and the tempo stay.
+    mutating func setLead(_ lead: Double) {
         self.lead = min(max(lead, 0), Self.longestLead)
     }
 
