@@ -80,7 +80,7 @@
    "applicationCategory": "MultimediaApplication",
    "applicationSubCategory": "DJ controller bridge",
    "operatingSystem": "macOS 26 or later",
-   "softwareVersion": "1.0.1",
+   "softwareVersion": "1.1.0",
    "offers": {
     "@type": "Offer",
     "price": "0",
@@ -175,7 +175,7 @@
      "name": "How much does DeckBridge cost?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "DeckBridge is free. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon."
+      "text": "DeckBridge is free. Version 1.1.0 is in beta on TestFlight now, and the Mac App Store version is coming soon."
      }
     },
     {
@@ -231,7 +231,7 @@
      "name": "Where do I get DeckBridge?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "DeckBridge 1.0.1 is available now as a beta on TestFlight, and it’s coming soon to the Mac App Store. Join the beta at https://testflight.apple.com/join/HWcpqqpz."
+      "text": "DeckBridge 1.1.0 is available now as a beta on TestFlight, and it’s coming soon to the Mac App Store. Join the beta at https://testflight.apple.com/join/HWcpqqpz."
      }
     },
     {
@@ -239,7 +239,7 @@
      "name": "What’s coming next for DeckBridge?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Coming in v1.1, DeckBridge will show art on the LC6000’s jog-wheel display in real time. Version 1.0.1 is in beta on TestFlight now, so this LC6000 Syndicate setup keeps growing from there."
+      "text": "Coming in v1.1, DeckBridge will show art on the LC6000’s jog-wheel display in real time. Version 1.1.0 is in beta on TestFlight now, so this LC6000 Syndicate setup keeps growing from there."
      }
     }
    ]
@@ -311,7 +311,7 @@
   <section class="hero hero--centred" data-enter aria-labelledby="hero-h"><!-- spelling: ok (kit class name) -->
     <div class="wrap"><div class="hero-text">
       <div class="hero__c">
-        <p class="pill"><span>Version 1.0.1 on TestFlight</span><span class="muted pill__more">Mac App Store coming soon</span></p>
+        <p class="pill"><span>Version 1.1.0 on TestFlight</span><span class="muted pill__more">Mac App Store coming soon</span></p>
         <h1 id="hero-h">The LC6000 PRIME bridge for your Mac</h1>
         <p class="hero__lead">A menu-bar app that plays Syndicate from a Denon LC6000 PRIME over OSC, with 14‑bit jog and pitch.</p>
         <div class="btn-row">
@@ -435,15 +435,15 @@
           <details><summary>What is DeckBridge?</summary><p>DeckBridge is a native Mac menu-bar app that lets you play Syndicate from a Denon LC6000 PRIME by bridging the controller’s MIDI to Syndicate OSC. It sends the 14-bit jog wheel and pitch fader to Syndicate at full resolution and lights the controller’s LEDs from Syndicate’s OSC feedback.</p></details>
           <details><summary>Which controllers does DeckBridge support?</summary><p>DeckBridge supports one controller today, the <a class="link" href="for/lc6000/">Denon LC6000 PRIME</a>, connected over USB. A single LC6000 drives all four Syndicate decks through its own deck layers. To help add yours, DeckBridge 1.2’s <strong>Help add it…</strong> (in the panel) or <strong>Controller not found?</strong> (in Settings) records what your controller sends, and you choose whether to email the file. Without the app, <a class="link" href="capture/">record it in your browser</a> (Chrome, Edge or Firefox).</p></details>
           <details><summary>What are the requirements for DeckBridge?</summary><p>DeckBridge needs macOS 26 or later, Syndicate with OSC input enabled, and a Denon LC6000 PRIME connected over USB. It runs in the menu bar with no Dock icon.</p></details>
-          <details><summary>How much does DeckBridge cost?</summary><p>DeckBridge is free. Version 1.0.1 is in beta on TestFlight now, and the Mac App Store version is coming soon.</p></details>
+          <details><summary>How much does DeckBridge cost?</summary><p>DeckBridge is free. Version 1.1.0 is in beta on TestFlight now, and the Mac App Store version is coming soon.</p></details>
           <details><summary>How does DeckBridge setup work?</summary><p>To set up DeckBridge, you change four settings in Syndicate once: turn on OSC input (port 9090), point OSC feedback at 127.0.0.1 port 9096, turn on the listed feedback subscriptions, and turn the LC6000’s MIDI input off in Syndicate. DeckBridge opens a setup guide with these steps on first launch, and it shows “Done: feedback live” once Syndicate answers.</p></details>
           <details><summary>Does DeckBridge need djay Pro or Engine DJ?</summary><p>No, DeckBridge works with Syndicate only and doesn’t need djay Pro or Engine DJ to run the LC6000. Quit those apps or any other app using the LC6000 first, and power-cycle the controller if one was open, because they can switch its MIDI mode until it restarts.</p></details>
           <details><summary>Is DeckBridge made by or affiliated with Untitled Audio Syndicate Ltd. or Denon DJ?</summary><p>No, DeckBridge is an independent app, not made by, affiliated with or endorsed by Untitled Audio Syndicate Ltd. (the makers of Syndicate) or Denon DJ. It works with Syndicate through Syndicate’s OSC API.</p></details>
           <details><summary>Does DeckBridge collect any data?</summary><p>No, the DeckBridge app collects no data: no account, no tracking, no analytics. It sends OSC messages to Syndicate and listens for its feedback, on this Mac by default or on your local network if you choose that. If you turn on the display feed, it also sends the deck in front’s state, including track title and artist, unencrypted to the one address you set on your local network. This website counts visits with PostHog, without cookies; the privacy page has the details.</p></details>
           <details><summary>Can I try DeckBridge without an LC6000?</summary><p>Yes, DeckBridge’s demo controller runs a scripted controller against a simulated Syndicate, so you can see it work without an LC6000. Nothing goes to the network unless you turn on the display feed, and then only unencrypted to the one address you set on your local network. Demo mode is off again at the next launch.</p></details>
           <details><summary>Can I use two LC6000s, or run Syndicate on another Mac?</summary><p>Yes, DeckBridge can drive a second LC6000 on another Syndicate deck, and it can reach Syndicate running on another Mac over your local network. Add the second unit under Settings › Add controller; both share Syndicate’s one feedback stream. For another Mac, set Syndicate’s host to that Mac’s IP address and set feedback to listen on All networks. macOS asks once for local-network permission.</p></details>
-          <details><summary>Where do I get DeckBridge?</summary><p>DeckBridge 1.0.1 is available now as a beta on TestFlight, and it’s coming soon to the Mac App Store. Join the beta at <a class="link" href="https://testflight.apple.com/join/HWcpqqpz" data-track="join_beta_clicked" data-track-destination="testflight">testflight.apple.com/join/HWcpqqpz</a>.</p></details>
-          <details><summary>What’s coming next for DeckBridge?</summary><p>Coming in v1.1, DeckBridge will show art on the LC6000’s jog-wheel display in real time. Version 1.0.1 is in beta on TestFlight now, so this LC6000 Syndicate setup keeps growing from there.</p></details>
+          <details><summary>Where do I get DeckBridge?</summary><p>DeckBridge 1.1.0 is available now as a beta on TestFlight, and it’s coming soon to the Mac App Store. Join the beta at <a class="link" href="https://testflight.apple.com/join/HWcpqqpz" data-track="join_beta_clicked" data-track-destination="testflight">testflight.apple.com/join/HWcpqqpz</a>.</p></details>
+          <details><summary>What’s coming next for DeckBridge?</summary><p>Coming in v1.1, DeckBridge will show art on the LC6000’s jog-wheel display in real time. Version 1.1.0 is in beta on TestFlight now, so this LC6000 Syndicate setup keeps growing from there.</p></details>
         </div>
       </div>
     </div>
@@ -454,7 +454,7 @@
   <div class="wrap">
     <div class="closing__cta close--word">
       <div class="section-head--split">
-        <div><h2 id="close-h">Put the LC6000 in the mix</h2><p class="t-lead">Version 1.0.1 is in beta on TestFlight now. Four settings in Syndicate, once.</p></div>
+        <div><h2 id="close-h">Put the LC6000 in the mix</h2><p class="t-lead">Version 1.1.0 is in beta on TestFlight now. Four settings in Syndicate, once.</p></div>
         <a class="btn btn--primary" href="https://testflight.apple.com/join/HWcpqqpz" data-track="join_beta_clicked" data-track-destination="testflight">Join the TestFlight beta<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
       </div>
       <p class="close__word" aria-hidden="true">DeckBridge</p>
