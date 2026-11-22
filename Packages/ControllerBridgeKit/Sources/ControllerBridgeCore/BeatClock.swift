@@ -59,6 +59,9 @@ struct BeatClock {
             return
         }
         guard beat != self.beat else { return }
+        // Beats again after a stop: a new run, so the time since the stop is never taken for a beat's length (#720;
+        // the panel gets clockBpm again as the clock starts, the jog display doesn't get Syndicate's BPM again).
+        let resumed = stopped
         stopped = false
         let sinceLast = at - edgeAt
         // Too long since the last for one beat: a gap (the master stopped, or the feedback went quiet), not a length.
@@ -66,7 +69,7 @@ struct BeatClock {
         if self.beat != 0, !gap, period > 0, beat != Self.next(self.beat) {
             return snap(beat, at: at)  // out of turn: a cue jump on the master
         }
-        if self.beat == 0 || beat != Self.next(self.beat) || gap {
+        if self.beat == 0 || beat != Self.next(self.beat) || gap || resumed {
             // A first beat, or not the next one: a new run starts here.
             self.beat = beat
             edgeAt = at

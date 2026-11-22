@@ -274,4 +274,26 @@ struct BeatClockTests {
         let shown = try #require(Self.firstShows(clock, 3, from: 1500, to: 2100))
         #expect(abs(shown - 1940) <= 3)
     }
+
+    @Test("Beats again soon after a stop, with the BPM: the clock times them from it, lead and all")
+    func resumeAfterStopWithBPM() throws {
+        var clock = Self.locked(lead: Self.ms(50))  // the last edge, beat 4, at 4281
+        clock.setTempo(128)
+        clock.stop()
+        clock.edge(1, at: Self.ms(5081))  // 0.8 s on: no gap at 1.5 beats, but not a beat length either
+        clock.edge(2, at: Self.ms(5550))
+        let shown = try #require(Self.firstShows(clock, 3, from: 5550, to: 6500))
+        #expect(abs(shown - 5969) <= 3)  // due at 6019, less 50
+    }
+
+    @Test("Beats again soon after a stop, no BPM: the time since the stop isn't taken for a beat length")
+    func resumeAfterStopNoBPM() throws {
+        var clock = Self.locked()  // the last edge, beat 4, at 4281
+        clock.stop()
+        clock.edge(1, at: Self.ms(5081))
+        clock.edge(2, at: Self.ms(5550))
+        clock.edge(3, at: Self.ms(6019))
+        let shown = try #require(Self.firstShows(clock, 4, from: 6019, to: 7000))
+        #expect(abs(shown - 6488) <= 3)
+    }
 }
