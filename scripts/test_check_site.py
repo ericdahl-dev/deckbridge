@@ -605,7 +605,7 @@ class CheckSiteTests(unittest.TestCase):
 
     def test_the_why_rows_draw_their_faders_as_an_illustration(self):
         # #753: the 7-bit and 14-bit rows each get a fader, hidden from screen readers, moved by one scrub that obeys
-        # reduced motion; the pair is labelled as an illustration.
+        # reduced motion; the pair is labeled as an illustration.
         site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
         with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
             home = f.read()
