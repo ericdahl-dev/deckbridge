@@ -292,4 +292,30 @@ struct StripFaderTests {
         #expect(abs((sent.last ?? 0) - 0.75) < 0.001, "sent \(sent)")
         #expect(Self.sentVolumes(rig, channel: 1).isEmpty)
     }
+
+    /// A touch with or without Shift, then half the strip: whether it moved the fader, and whether it seeked.
+    static func slide(_ rig: Rig, shift: Bool) -> (faded: Bool, seeked: Bool) {
+        rig.osc.sent.removeAll()
+        if shift { Self.shift(rig, true) }
+        Self.touch(rig, true)
+        Self.at(rig, 0)
+        Self.at(rig, 8192)
+        Self.touch(rig, false)
+        if shift { Self.shift(rig, false) }
+        return (!Self.sentVolumes(rig).isEmpty, !Self.seeks(rig).isEmpty)
+    }
+
+    @Test("The fader off (the profile's or Settings'): the strip seeks with or without Shift, so needle drop is never lost")
+    func offSeeksBothWays() throws {
+        let profileOff = try C.started(#"{ "needle": { "shift_fader": false } }"#)
+        let settingOff = try C.started()
+        settingOff.coordinator.apply(.setStripFader(StripFaderSetting(enabled: false)))
+        for rig in [profileOff, settingOff] {
+            Self.volume(rig, 0.25)
+            for shift in [false, true] {
+                let slid = Self.slide(rig, shift: shift)
+                #expect(!slid.faded && slid.seeked, "shift \(shift)")
+            }
+        }
+    }
 }
