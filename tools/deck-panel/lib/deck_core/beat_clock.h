@@ -69,4 +69,7 @@ class BeatClock {
     bool stopped_ = false;      ///< stop() since the last edge: nothing ahead until beats come again
 };
 
+// A lead of a beat or more would skip each beat just heard (300 BPM is 200 ms); a negative -D wraps to a huge one.
+static_assert(BeatClock::kLeadMs < BeatClock::kShortestBeatMs / 2, "DECK_PANEL_BEAT_LEAD_MS: 0 to 99 ms (#718)");
+
 }  // namespace deck_core
