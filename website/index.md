@@ -32,7 +32,7 @@ LC6000 PRIME <--MIDI LEDs-- DeckBridge  <--OSC feedback, port 9096--  Syndicate
   - The jog display: the jog-wheel display shows the deck's track, key and BPM, with Syndicate's master clock around the ring and the deck's own bar in the needle.
   - Transpose: Shift + Pitch Bend − / + transposes the deck a semitone, turning its key lock on first.
   - CDJ-style cue: PLAY while CUE is held keeps the deck playing; Shift + CUE goes back to the cue point and stops. Shift + a hot cue pad jumps there at once.
-  - Channel fader: Shift + Needle Drop moves the deck's channel fader in Syndicate, from where it is (Relative) or straight to where you touch (Jump) (Settings › Controller, on by default).
+  - Channel fader: Needle Drop moves the deck's channel fader in Syndicate, from where it is (Relative) or straight to where you touch (Jump) (Settings › Controller, on by default).
   - Exact colors: the platter ring and pads light in the deck's and cues' exact colors, with no firmware change (Settings › Decks › Exact colors on the LC6000, on by default); Light brightness sets how bright.
   - Key display: Settings › Controller › Key display (with the jog display on) writes keys as Syndicate does, traditional or Camelot.
   - Display feed: DeckBridge can send the deck in front to a display on your local network, unencrypted to the one address you set (Settings › Syndicate › Display feed, off by default).
