@@ -12,6 +12,12 @@ public struct CableHandoff: Sendable {
         case lookAgain
     }
 
+    /// The signals between the two apps (on this Mac only: the app posts and hears them, names only). Any local process
+    /// can post them; the worst a stray one does is have DeckBridge let go of the port until done or a switch toggle.
+    public static let releaseName = "dev.ericdahl.deckbridge.panel-port.release"
+    public static let releasedName = "dev.ericdahl.deckbridge.panel-port.released"
+    public static let doneName = "dev.ericdahl.deckbridge.panel-port.done"
+
     /// Lent to the updater: until it's done, DeckBridge doesn't look for the port, so it never takes it mid-update.
     public private(set) var lent = false
 

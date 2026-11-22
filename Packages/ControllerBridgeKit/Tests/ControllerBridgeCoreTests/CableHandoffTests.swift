@@ -49,4 +49,12 @@ struct CableHandoffTests {
         #expect(handoff.mayLook)
         #expect(handoff.doneAsked(cableOn: false) == [])
     }
+
+    /// The Firmware Updater's FirmwareUpdaterKit (PortHandoff) has the same names.
+    @Test("The signals' names, the same in both apps")
+    func names() {
+        #expect(CableHandoff.releaseName == "dev.ericdahl.deckbridge.panel-port.release")
+        #expect(CableHandoff.releasedName == "dev.ericdahl.deckbridge.panel-port.released")
+        #expect(CableHandoff.doneName == "dev.ericdahl.deckbridge.panel-port.done")
+    }
 }
