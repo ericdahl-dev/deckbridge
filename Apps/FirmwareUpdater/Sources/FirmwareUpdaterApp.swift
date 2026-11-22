@@ -31,9 +31,13 @@ struct FirmwareUpdaterApp: App {
 enum Live {
     static let usbChanges = IOKitUSBChanges()
     static func updater() -> Updater {
-        Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
-                changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow,
-                firmware: firmwareOffer)
+        let usb = IOKitUSB()
+        let finder = DeviceFinder(usb: usb, midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared)
+        let flasher = (try? Catalog.builtIn()).map {
+            CatalogFlasher(catalog: $0, usb: usb, finder: finder, opener: FlashingSerialOpener())
+        }
+        return Updater(finder: finder, changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow,
+                       firmware: firmwareOffer, flasher: flasher)
     }
 
     /// The firmware on offer (#704): this project's newest GitHub release if it checks out against the app's keys, else
@@ -59,6 +63,7 @@ struct UpdaterView: View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
             FirmwareRow(line: model.firmware)
+            PanelUpdateView(model: model)
             SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
             if model.screen.lc6000.warning == nil { BackupView(model: backup) }
             HStack {
@@ -128,6 +133,46 @@ struct FirmwareRow: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Checking for newer firmware…").foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// Updating the panel over its cable (#687): the offer, each step while it runs with Cancel, then the result.
+struct PanelUpdateView: View {
+    let model: Updater
+    @State private var confirmingRepair = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if model.updating {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(model.screen.update ?? "")
+                    Spacer()
+                    Button("Cancel") { model.cancelUpdate() }
+                        .disabled(!model.canCancel)
+                }
+                if let note = model.screen.cancelNote {
+                    Text(note).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                if let text = model.screen.update { Text(text).fixedSize(horizontal: false, vertical: true) }
+                if let offer = model.screen.panelUpdate {
+                    if let note = offer.note { Text(note).foregroundStyle(.secondary) }
+                    Button("Update the panel to \(offer.version)") { Task { await model.updatePanel() } }
+                        .disabled(model.looking)
+                }
+                if let repair = model.screen.panelRepair {
+                    Button("Repair the panel") { confirmingRepair = true }
+                        .disabled(model.looking)
+                        .confirmationDialog("Repair the panel?", isPresented: $confirmingRepair) {
+                            Button("Repair: write \(repair.version)") { Task { await model.repairPanel() } }
+                            Button("Not now", role: .cancel) {}
+                        } message: {
+                            Text(UpdaterScreen.repairConfirm(version: repair.version))
+                        }
                 }
             }
         }
