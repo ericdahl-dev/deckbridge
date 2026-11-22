@@ -12,7 +12,8 @@ final class DebugTrace: @unchecked Sendable {
     /// The app container's Library/Logs/DeckBridge/deckbridge.log (sandboxed, so under the container).
     let fileURL: URL
     private let file: RollingLogFile
-    private let queue = DispatchQueue(label: "dev.ericdahl.ControllerBridge.trace")
+    /// The file's writer: its queue keeps the lines in order off the caller, and flush() holds a quit for them (#653).
+    private let writer: TraceWriter
     private let loggers: [TraceCategory: Logger]
     /// The last status summary written, so only changes are logged.
     private var lastStatus = ""
@@ -25,6 +26,7 @@ final class DebugTrace: @unchecked Sendable {
             .appendingPathComponent("Logs/DeckBridge", isDirectory: true)
         file = RollingLogFile(directory: logs, name: "deckbridge.log", cap: 20_000_000, keep: 3)
         fileURL = file.url
+        writer = TraceWriter(file)
         loggers = Dictionary(uniqueKeysWithValues: TraceCategory.allCases.map {
             ($0, Logger(subsystem: "dev.ericdahl.ControllerBridge", category: $0.rawValue))
         })
@@ -42,15 +44,18 @@ final class DebugTrace: @unchecked Sendable {
             if category == .error { loggers[category]?.error("\(text, privacy: .public)") } else {
                 loggers[category]?.debug("\(text, privacy: .public)")
             }
-            queue.async { self.file.append(TraceLine.format(at: now, category, text)) }
+            writer.append(TraceLine.format(at: now, category, text))
         }
     }
+
+    /// Waits until every line so far is in the file: a quit calls it, so the trace's last line is the last thing done.
+    func flush() { writer.flush() }
 
     /// A debug capture (#582) as its own file beside the trace, named with the time; its path goes to the trace.
     func writeCapture(_ text: String, named name: String) {
         let stamp = ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-")
         let url = fileURL.deletingLastPathComponent().appendingPathComponent("\(name)-\(stamp).csv")
-        queue.async {
+        writer.async {
             try? Data(text.utf8).write(to: url)
             self.file.append(TraceLine.format(at: .now, .coordinator, "Meter capture written: \(url.path)"))
         }
@@ -61,7 +66,7 @@ final class DebugTrace: @unchecked Sendable {
     func status(_ status: CoordinatorStatus) {
         let summary = "controllers \(status.controllers) feedback \(status.feedback) missing subscriptions "
             + "\(status.missingSubscriptions) other host \(status.otherHost)"
-        queue.async {
+        writer.async {
             guard summary != self.lastStatus else { return }
             self.lastStatus = summary
             self.file.append(TraceLine.format(at: .now, .coordinator, summary))

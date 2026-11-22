@@ -1,0 +1,3 @@
+.pio/
+# Written by the old wifi_secrets.py (before #622): a stale copy holds a real Wi-Fi password, so never commit it.
+src/wifi_secrets.h

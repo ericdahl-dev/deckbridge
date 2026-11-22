@@ -59,7 +59,13 @@ final class Rig {
 
     final class FakeOSC: OSCSender, @unchecked Sendable {
         var sent: [OSCMessage] = []
+        /// Each bundle as sent (#636); its messages are in `sent` too.
+        var bundles: [[OSCMessage]] = []
         func send(_ message: OSCMessage) { sent.append(message) }
+        func send(bundle messages: [OSCMessage]) {
+            bundles.append(messages)
+            sent += messages
+        }
     }
 
     final class FakeClock: Clock, @unchecked Sendable {

@@ -42,5 +42,10 @@ let package = Package(
         .executableTarget(name: "jog-reference", dependencies: ["ControllerBridgeRender", "ControllerBridgeCore"]),
         .executableTarget(name: "capture-to-profile", dependencies: ["ControllerBridgeDraft", "ControllerBridgeCapture"]),
         .testTarget(name: "ControllerBridgeDraftTests", dependencies: ["ControllerBridgeDraft", "ControllerBridgeCapture", "ControllerBridgeCore"]),
+        // scripts/syndicate_deck (#680): drives a Syndicate deck over OSC for on-hardware tests, with Core's own messages
+        // and encoder, so its bytes are the app's. Never MIDI, so it can't reach a controller; settings read only.
+        .target(name: "SyndicateDeck", dependencies: ["ControllerBridgeCore"]),
+        .executableTarget(name: "syndicate-deck", dependencies: ["SyndicateDeck"]),
+        .testTarget(name: "SyndicateDeckTests", dependencies: ["SyndicateDeck", "ControllerBridgeCore"]),
     ]
 )

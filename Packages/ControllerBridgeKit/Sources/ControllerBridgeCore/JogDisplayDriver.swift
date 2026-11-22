@@ -77,12 +77,12 @@ public enum JogDisplayEvent: Equatable, Sendable {
 }
 
 extension JogDisplayEvent {
-    /// The event's line in the Debug trace (#605); nil for the in-app preview's per-tick events (each deck's drawn state
-    /// and needle), which at the live cadence filled a 20 MB file in about a minute. What the unit gets is in the WD out
-    /// lines; mode changes have their own.
+    /// The event's line in the Debug trace (#605); nil for the per-tick events (each deck's drawn state and needle, and
+    /// the deck in front's needle, #637), which at the live cadence filled a 20 MB file in about a minute. What the unit
+    /// gets is in the WD out lines; mode changes have their own.
     public var traceLine: String? {
         switch self {
-        case .drawnPreview, .deckMarker: nil
+        case .drawnPreview, .deckMarker, .marker: nil
         default: "event \(self)"
         }
     }

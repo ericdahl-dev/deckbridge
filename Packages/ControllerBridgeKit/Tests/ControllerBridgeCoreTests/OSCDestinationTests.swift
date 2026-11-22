@@ -21,9 +21,12 @@ struct OSCDestinationTests {
         }
         var opened: [Sink] = []
         var refuse: Set<String> = []
+        /// New sockets fail their sends too, as while a host is off the network.
+        var failNew = false
         func open(_ host: String, _ port: Int) throws -> any DatagramSink {
             if refuse.contains(host) { throw POSIXError(.EADDRNOTAVAIL) }
             let sink = Sink("\(host):\(port)")
+            sink.fails = failNew
             opened.append(sink)
             return sink
         }
@@ -55,6 +58,28 @@ struct OSCDestinationTests {
         destination.send(Self.play)
         #expect(resolver.asked == [])
         #expect(sinks.sink("192.168.1.20:9090")?.sent == [Self.play.encoded()])
+    }
+
+    @Test("A bundle goes out as one datagram (#636)")
+    func bundleIsOneDatagram() async throws {
+        let sinks = FakeSinks(), resolver = FakeResolver()
+        let destination = Self.destination(sinks, resolver)
+        #expect(await destination.connect(host: "192.168.1.40", port: 9100) == nil)
+        let messages = [OSCMessage("/DeckBridge/Display/deck", [.int(1)]), OSCMessage("/DeckBridge/Display/loaded", [.int(1)])]
+        destination.send(bundle: messages)
+        #expect(sinks.sink("192.168.1.40:9100")?.sent == [OSCPacket.bundle(messages)])
+    }
+
+    @Test("A sender with no bundle of its own sends a bundle's messages one by one")
+    func bundleFallback() {
+        final class Plain: OSCSender, @unchecked Sendable {
+            var sent: [OSCMessage] = []
+            func send(_ message: OSCMessage) { sent.append(message) }
+        }
+        let plain = Plain()
+        let messages = [OSCMessage("/a", [.int(1)]), OSCMessage("/b", [.int(2)])]
+        plain.send(bundle: messages)
+        #expect(plain.sent == messages)
     }
 
     /// Holds each lookup until the test answers it, so the test can act while a name is resolving.

@@ -18,7 +18,7 @@ struct TraceTests {
     @Test("Each category's name, as os_log and the file use it")
     func categoryNames() {
         #expect(TraceCategory.allCases.map(\.rawValue) == [
-            "midi-in", "midi-out", "osc-in", "osc-out", "jog-display", "coordinator", "capture", "quantize",
+            "midi-in", "midi-out", "osc-in", "osc-out", "jog-display", "display-feed", "coordinator", "capture", "quantize",
             "subscriptions", "error", "heartbeat",
         ])
     }
@@ -26,8 +26,16 @@ struct TraceTests {
     @Test("The heartbeat (#595) keeps beating while the caller is stalled: it runs on no one's thread but its own")
     func heartbeatWhileStalled() {
         let beats = Beats()
-        let heartbeat = TraceHeartbeat(every: 0.02) { category, text in beats.add(category, text) }
-        Thread.sleep(forTimeInterval: 0.3)   // the engine, stalled in a call that doesn't return
+        let fifth = DispatchSemaphore(value: 0)
+        // A loaded runner (#657): the first beat is late, as when the timer's thread waits 0.25 s to be scheduled.
+        let heartbeat = TraceHeartbeat(every: 0.02) { category, text in
+            if text == "beat 1" { Thread.sleep(forTimeInterval: 0.25) }
+            beats.add(category, text)
+            if text == "beat 5" { fifth.signal() }
+        }
+        // The engine, stalled in a call that doesn't return: this thread is blocked until the fifth beat, so every beat
+        // came from elsewhere. Not a fixed window (#657): a slow runner only makes the stall longer, up to 10 s.
+        #expect(fifth.wait(timeout: .now() + 10) == .success)
         heartbeat.stop()
         let lines = beats.lines
         #expect(lines.count >= 5)

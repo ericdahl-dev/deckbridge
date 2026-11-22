@@ -77,6 +77,9 @@ final class BridgeModel {
     private var osc: OSCDestination?
     /// The display feed's destination (#616): the panel's host and port, by address or by name.
     private var displayFeedDestination: OSCDestination?
+    /// The deck panel's USB cable (#667) and the queue its frames go out on.
+    private var panelCable: PanelCable?
+    private var cableFeedQueue: DisplayFeedQueue?
     private let storage = UserDefaultsStorage()
     /// What Settings shows and changes (#19). Saved in user defaults.
     /// The running profile's deck layers (#79): empty for a controller without them.
@@ -191,6 +194,17 @@ final class BridgeModel {
         return DisplayFeedStatus(settings.displayFeed, displayFeedDestination)
     }
 
+    /// The USB cable's status line (#667): its switch, and the panel's port as last found.
+    var cableFeedStatus: CableFeedStatus {
+        CableFeedStatus(cable: settings?.displayFeed.cable ?? false, port: panelCable?.state ?? .noPanel)
+    }
+
+    /// The cable's switch (#667): the port opens while it's on, and lets go after the goodbye when it goes off.
+    private func setCable(_ on: Bool) {
+        guard let panelCable, let cableFeedQueue else { return }
+        panelCable.setEnabled(on) { cableFeedQueue.flush(timeout: 0.5) }
+    }
+
     /// Opens the display feed's host in the background (#616). A failure is logged; Settings shows it from #618.
     private func connectDisplayFeed(_ feed: DisplayFeedSettings) {
         guard let displayFeedDestination else { return }
@@ -275,6 +289,7 @@ final class BridgeModel {
                 connectDisplayFeed(new.displayFeed)
             }
             producer.send(.setDisplayFeed(new.displayFeed))
+            if new.displayFeed.cable != old.displayFeed.cable { setCable(new.displayFeed.cable) }
         }
         if new.feedbackPort != old.feedbackPort || new.feedbackListen != old.feedbackListen { listen(new) }
     }
@@ -354,10 +369,28 @@ final class BridgeModel {
         )
         let feedProducer = pipe.producer
         feedDestination.onReady = { feedProducer.send(.displayFeedReady) }
-        feedDestination.onSendFailure = { [weak feedDestination] in Task { await feedDestination?.reresolve() } }
+        feedDestination.onSendFailure = { [weak feedDestination] in
+            #if DEBUG
+            // Failing sends to the display (#636), at most once a second as the destination reports them.
+            DebugTrace.shared.sink(.displayFeed, "sends failing: \(feedDestination?.lastError ?? "unknown"), looking the host up again")
+            #endif
+            Task { await feedDestination?.reresolve() }
+        }
         displayFeedDestination = feedDestination
         let displayFeed = DisplayFeedQueue(feedDestination)
+        #if DEBUG
+        displayFeed.trace = DebugTrace.shared.sink
+        #endif
         if settings.displayFeed.enabled { connectDisplayFeed(settings.displayFeed) }
+        // The USB cable (#667): its own port and queue, so a slow cable never makes Wi-Fi's feed drop.
+        let cable = PanelCable()
+        cable.onOpen = { feedProducer.send(.cableFeedReady) }
+        let cableFeed = DisplayFeedQueue(CableFeedSender(cable))
+        #if DEBUG
+        cableFeed.trace = DebugTrace.shared.sink
+        #endif
+        panelCable = cable
+        cableFeedQueue = cableFeed
         producer = pipe.producer
         applier = SettingsApplier(
             settings: settings, storage: storage, connect: { [osc] host, port in await osc.connect(host: host, port: port) }
@@ -398,14 +431,14 @@ final class BridgeModel {
             await BridgeHost.run(
                 profiles: profiles, midi: queuedMIDI, osc: osc, log: log, status: status, diagnostics: diagnostics,
                 jogSimulator: jogSimulator, controllers: running, ledsEnabled: settings.ledsEnabled, jogDisplay: jogDisplay,
-                displayFeed: displayFeed, events: pipe.events
+                displayFeed: displayFeed, cableFeed: cableFeed, events: pipe.events
             )
         }
         // The saved deck colors (#123), queued behind the Coordinator's start.
         pipe.producer.send(.setDeckColors(followSyndicate: settings.followSyndicateDeckColors, custom: settings.customDeckColors))
         pipe.producer.send(.setRingColors(settings.ringColors))
         pipe.producer.send(.setColorMessages(settings.colorMessages))
-        // Shift + Needle Drop's fader (#609): the DJ's choice, else the profile's.
+        // Needle Drop's fader (#609; the plain layer since #729): the DJ's choice, else the profile's.
         pipe.producer.send(.setStripFader(settings.stripFader))
         pipe.producer.send(.setLightBrightness(LightBrightness.snapped(settings.lightBrightness)))
         // Profiles chosen by hand (#200): a device only they name connects now.
@@ -414,8 +447,15 @@ final class BridgeModel {
         pipe.producer.send(.setDisplayFirmware(settings.displayFirmware))
         // How the key is written (#590), before the first content is shown.
         pipe.producer.send(.setKeyDisplay(settings.keyDisplay))
+        // The jog display's beat lead (#720): a hidden default while it's tuned on video, no Settings control.
+        // `defaults write dev.ericdahl.ControllerBridge jogDisplayBeatLeadMs -float 70` sets it; unset, the Kit's 40 ms.
+        if let ms = UserDefaults.standard.object(forKey: "jogDisplayBeatLeadMs") as? Double {
+            pipe.producer.send(.setJogBeatLead(ms / 1000))
+        }
         pipe.producer.send(.setJogDisplay(enabled: settings.jogDisplay))
         pipe.producer.send(.setDisplayFeed(settings.displayFeed))
+        // After the setting, so the port's opening finds the cable's feed on.
+        setCable(settings.displayFeed.cable)
 
     }
 
@@ -464,7 +504,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model = Self.model else { return .terminateNow }
-        model.quit { sender.reply(toApplicationShouldTerminate: true) }
+        model.quit {
+            #if DEBUG
+            DebugTrace.shared.flush()  // the trace's last line is trustworthy (#653)
+            #endif
+            sender.reply(toApplicationShouldTerminate: true)
+        }
         return .terminateLater
     }
 }

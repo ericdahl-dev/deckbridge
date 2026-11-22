@@ -155,9 +155,18 @@ public final class OSCDestination: OSCSender {
     }
 
     public func send(_ message: OSCMessage) {
+        send(bytes: message.encoded())
+    }
+
+    /// One datagram for the whole bundle (#636).
+    public func send(bundle messages: [OSCMessage]) {
+        send(bytes: OSCPacket.bundle(messages))
+    }
+
+    private func send(bytes: [UInt8]) {
         guard let sink = state.withLock({ $0.sink }) else { return }
         do {
-            try sink.send(message.encoded())
+            try sink.send(bytes)
             state.withLock { $0.sendsFailing = false }
         } catch {
             let now = clock.now
