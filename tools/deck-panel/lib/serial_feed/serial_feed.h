@@ -49,6 +49,8 @@ private:
     size_t chunk_end_ = 0;
     /// The next byte read, or -1 if none waits.
     int next();
+    /// A cut frame being dropped: a whole "version" line inside it goes to the text sink.
+    void pass_version_line();
     uint8_t packet_[feed_drain::kMaxDatagram];
     size_t length_ = 0;
     bool complete_ = false;
