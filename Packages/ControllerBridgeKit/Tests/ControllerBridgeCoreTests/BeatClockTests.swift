@@ -60,4 +60,56 @@ struct BeatClockTests {
         clock.edge(2, at: Self.ms(1469))
         #expect(clock.beat(at: Self.ms(1938)) == 3)
     }
+
+    /// The first millisecond `clock` shows `beat` from `from` to `to` (both ms), scanning each; nil if it never does.
+    static func firstShows(_ clock: BeatClock, _ beat: Int, from: Int, to: Int) -> Int? {
+        (from...to).first { clock.beat(at: ms(Double($0))) == beat }
+    }
+
+    /// `beat` (1-4) `k` beats after `first`.
+    static func beat(_ k: Int, after first: Int = 1) -> Int { (first - 1 + k) % 4 + 1 }
+
+    @Test("Arrivals jitter up to 10 ms either way: after 16 edges at 128 BPM the next beat shows within 4 ms of due")
+    func jitteredEdgesLock() throws {
+        let jitter = [6, -9, 3, 10, -4, -10, 8, 0, -6, 9, -2, 5, -8, 2, 7, -7]
+        var clock = BeatClock()
+        for k in 0..<16 {
+            clock.edge(Self.beat(k), at: Self.ms((1000 + Double(k) * 468.75 + Double(jitter[k])).rounded()))
+        }
+        let shown = try #require(Self.firstShows(clock, Self.beat(16), from: 8300, to: 8700))
+        #expect(abs(shown - 8500) <= 4)
+    }
+
+    @Test("One message 30 ms late doesn't drag the next beat 30 ms late with it")
+    func oneLateMessage() throws {
+        var clock = BeatClock()
+        for k in 0..<8 {
+            clock.edge(Self.beat(k), at: Self.ms((1000 + Double(k) * 468.75).rounded() + (k == 7 ? 30 : 0)))
+        }
+        let shown = try #require(Self.firstShows(clock, Self.beat(8), from: 4600, to: 4900))
+        #expect(abs(shown - 4750) <= 10)
+    }
+
+    @Test("A quiet feed: the clock holds, never more than one beat past the last edge")
+    func quietFeedHolds() {
+        var clock = BeatClock()
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1469))
+        for t in stride(from: 1469, to: 20000, by: 50) {
+            #expect([2, 3].contains(clock.beat(at: Self.ms(Double(t)))))
+        }
+    }
+
+    @Test("Beats after a gap start the clock over: the first back shows as heard, not run on from before")
+    func gapStartsOver() {
+        var clock = BeatClock()
+        clock.edge(1, at: Self.ms(1000))
+        clock.edge(2, at: Self.ms(1469))
+        clock.edge(3, at: Self.ms(6000))  // the next value, but 4.5 s on
+        #expect(clock.beat(at: Self.ms(6000)) == 3)
+        #expect(clock.beat(at: Self.ms(6400)) == 3)
+        #expect(clock.beat(at: Self.ms(7000)) == 3)  // no tempo yet: one edge back
+        clock.edge(4, at: Self.ms(6469))
+        #expect(clock.beat(at: Self.ms(6938)) == 1)
+    }
 }

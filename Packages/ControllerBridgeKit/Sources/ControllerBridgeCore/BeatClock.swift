@@ -8,6 +8,14 @@ struct BeatClock {
     static let predictBeats = 1
     /// Tempos the clock believes, as a beat's length: 40-300 BPM.
     static let shortestBeat = 0.2, longestBeat = 1.5
+    /// The lock (#660): arrivals jitter by a few ms (USB, Syndicate), so each edge moves the clock only part of the way:
+    /// `phaseGain` of its error, and the tempo `tempoGain` of it, each error clipped to `maxError` so one late message
+    /// barely moves the next beat. The first `averagedEdges` beats set the tempo as an average since the first. The
+    /// panel's numbers, tuned in a simulation of +-10 ms jitter at 128 BPM.
+    static let phaseGain = 0.25, tempoGain = 0.05, maxError = 0.010
+    static let averagedEdges = 4
+    /// An edge more than this many beats after the last starts the clock over: a gap, not a beat.
+    static let gapBeats = 1.5
     /// A boundary hit exactly is the beat's: times are sums of seconds, so allow for their rounding.
     private static let epsilon = 1e-9
 
@@ -17,6 +25,9 @@ struct BeatClock {
     private var edgeAt = 0.0
     /// A beat's length; 0 until two edges in a row give it.
     private var period = 0.0
+    /// The first edge of this run of beats in a row, and how many beats in a row since.
+    private var firstAt = 0.0
+    private var edges = 0
 
     /// Syndicate's beat arrived at `at`: a new value is an edge; the same again is none.
     mutating func edge(_ beat: Int, at: Double) {
@@ -27,17 +38,31 @@ struct BeatClock {
         }
         guard beat != self.beat else { return }
         let sinceLast = at - edgeAt
-        if self.beat == 0 || beat != Self.next(self.beat) {
+        // Too long since the last for one beat: a gap (the master stopped, or the feedback went quiet), not a length.
+        let gap = sinceLast > (period > 0 ? Self.gapBeats * period : Self.longestBeat)
+        if self.beat == 0 || beat != Self.next(self.beat) || gap {
+            // A first beat, or not the next one: a new run starts here.
             self.beat = beat
             edgeAt = at
+            firstAt = at
+            edges = 0
             period = 0
             return
         }
         self.beat = beat
-        if period == 0, sinceLast >= Self.shortestBeat - Self.epsilon, sinceLast <= Self.longestBeat + Self.epsilon {
-            period = sinceLast
+        edges += 1
+        guard period > 0 else {
+            if sinceLast >= Self.shortestBeat - Self.epsilon, sinceLast <= Self.longestBeat + Self.epsilon { period = sinceLast }
+            edgeAt = at
+            return
         }
-        edgeAt = at
+        let error = min(max(sinceLast - period, -Self.maxError), Self.maxError)
+        edgeAt += period + Self.phaseGain * error
+        if edges <= Self.averagedEdges {
+            period = (at - firstAt) / Double(edges)
+        } else {
+            period += Self.tempoGain * error
+        }
     }
 
     /// The beat to show at `now`, 1-4; 0 for none.
