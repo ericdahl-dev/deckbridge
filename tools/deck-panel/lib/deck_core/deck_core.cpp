@@ -177,6 +177,7 @@ const Row kRows[] = {
 void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     static const char kBundle[8] = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0};
     bool alive = false;
+    datagram_deck_ = view_.deck;
     if (length >= 16 && std::memcmp(bytes, kBundle, 8) == 0) {
         // A bundle (#636): "#bundle", a timetag (ignored: the feed's are "immediately"), then elements, each a size
         // and that many bytes. One arrival for the whole bundle.
@@ -227,8 +228,11 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     if (alive && std::strcmp(message.name, "beat") == 0) clock_.edge(view_.beat, now_ms);
     if (alive && std::strcmp(message.name, "clockBpm") == 0) clock_.set_tempo(view_.clock_bpm);
     // The deck in front is the master and stopped: so did the master clock, at once (#660). Another deck's pause
-    // says nothing about it, and nor does `playing 0` again (DeckBridge's keepalive, #718): only 1 to 0 is a stop.
-    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && was_playing && !view_.playing)
+    // says nothing about it, and nor does `playing 0` again (DeckBridge's keepalive, #718): only 1 to 0 is a stop. And
+    // only on the same deck: when the front switched earlier in this datagram (deck comes before playing and master),
+    // the 1 was the old deck's and the 0 is the new one's, read while `master` is still the old deck's (#718).
+    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && was_playing && !view_.playing &&
+        view_.deck == datagram_deck_)
         clock_.stop();
     return alive;
 }

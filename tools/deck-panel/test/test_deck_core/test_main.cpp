@@ -979,6 +979,22 @@ void test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock() {
     TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[0]);  // 1, lit ahead of its message
 }
 
+// #718: the deck in front switches from the playing master (1) to a stopped deck (2) that isn't the master. The master
+// clock runs on, so the next beat still lights ahead. DeckBridge's snapshot puts deck and playing before master, so
+// deck 2's `playing 0` arrives while `master` is still deck 1's: it must not read as the master stopping.
+void test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 1), int_message(prefix + "playing", 1),
+                       int_message(prefix + "master", 1)}), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, bundle({int_message(prefix + "deck", 2), int_message(prefix + "playing", 0),
+                       int_message(prefix + "master", 0)}), 1500);
+    core.render(screen, 1938 - deck_core::BeatClock::kLeadMs / 2);  // beat 3 is due at 1938
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+}
+
 // Not the master: its pause says nothing about the master clock, which runs on.
 void test_a_deck_that_is_not_the_master_stopping_leaves_the_beat() {
     deck_core::DeckCore core;
@@ -1097,6 +1113,7 @@ int main(int, char**) {
     RUN_TEST(test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge);
     RUN_TEST(test_the_master_stopping_stops_the_beat_at_once);
     RUN_TEST(test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock);
+    RUN_TEST(test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock);
     RUN_TEST(test_a_deck_that_is_not_the_master_stopping_leaves_the_beat);
     RUN_TEST(test_the_waiting_screen_is_told_only_what_changed);
     RUN_TEST(test_the_waiting_screen_is_told_when_the_logo_changes);
