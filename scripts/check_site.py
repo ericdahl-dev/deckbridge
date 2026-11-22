@@ -33,6 +33,8 @@ ROOT_FILES = ["robots.txt", "sitemap.xml", "llms.txt"]
 NOT_FOUND = "404.html"
 NOT_FOUND_HEADING = "Track not found."
 NOT_FOUND_LINK = "Back to DeckBridge"
+# The owner's footer line (#753), after the footer lede on every page that has one.
+FOOTER_LINE = "Four decks, one Mac, every one of the 16,384 steps."
 SITE = "https://getdeckbridge.app/"
 LLMS_HEADING = "# DeckBridge"
 PRIVACY = "privacy/index.html"
@@ -315,6 +317,9 @@ def check_page(root, file, text):
         if not any(CAPTURE_URL in block for block in page.json_ld):
             out.append(f"{file}: its JSON-LD doesn't name {CAPTURE_URL}")
         out += check_price(file, page.json_ld)
+    lede = text.find('class="footer__lede"')
+    if lede >= 0 and text.find(FOOTER_LINE, lede) < 0:
+        out.append(f'{file}: the footer doesn\'t say "{FOOTER_LINE}" after its lede')
     if file == PRIVACY:
         said = " ".join(" ".join(page.text).split()).lower()
         out += [f'{file}: doesn\'t say "{words}"' for words in PRIVACY_STATEMENTS if words not in said]

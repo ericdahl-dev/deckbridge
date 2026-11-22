@@ -514,6 +514,18 @@ class CheckSiteTests(unittest.TestCase):
             self.assertEqual(len(found), 1, row)
             self.assertIn("Use Global", found[0], row)
 
+    def test_every_footer_has_the_sixteen_thousand_steps_line(self):
+        # #753: after the footer lede, on every page with one.
+        good = check_site.problems(self.site({"support/index.html": page(body='<a href="../">Home</a>', footer=FOOTER.replace(
+            "</footer>", '<p class="footer__lede">A Mac menu-bar app.</p><p class="footer__line">' + check_site.FOOTER_LINE + "</p></footer>"))}))
+        self.assertEqual(good, [])
+        bare = check_site.problems(self.site({"support/index.html": page(body='<a href="../">Home</a>', footer=FOOTER.replace(
+            "</footer>", '<p class="footer__lede">A Mac menu-bar app.</p></footer>'))}))
+        self.assertEqual(bare, [f'support/index.html: the footer doesn\'t say "{check_site.FOOTER_LINE}" after its lede'])
+
+    def test_the_footer_line_is_the_owners(self):
+        self.assertEqual(check_site.FOOTER_LINE, "Four decks, one Mac, every one of the 16,384 steps.")
+
     def test_the_404_page_says_track_not_found_and_links_home(self):
         # #753: a page the server sends for any path it doesn't have, in the site's own words.
         self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])
