@@ -277,6 +277,15 @@ void test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length() {
     TEST_ASSERT_UINT32_WITHIN(3, 6488, first_shows(clock, 4, 6019, 7500));
 }
 
+// Stopped, the master's BPM changes (120: 500 ms); the resume takes the new length from its first beat (firmware review).
+void test_a_bpm_change_while_stopped_times_the_resume() {
+    BeatClock clock = locked();  // 128 BPM from the edges; the last, beat 4, at 4281
+    clock.stop();
+    clock.set_tempo(120);
+    clock.edge(1, 5081);
+    TEST_ASSERT_UINT32_WITHIN(2, 5581, first_shows(clock, 2, 5081, 6500));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_no_beat_heard_is_none);
@@ -303,5 +312,6 @@ int main(int, char**) {
     RUN_TEST(test_a_lead_never_shows_more_than_predicting_allows);
     RUN_TEST(test_after_a_stop_a_quick_resume_takes_the_bpms_length_not_the_pause);
     RUN_TEST(test_after_a_stop_a_quick_resume_without_a_bpm_takes_the_edges_length);
+    RUN_TEST(test_a_bpm_change_while_stopped_times_the_resume);
     return UNITY_END();
 }
