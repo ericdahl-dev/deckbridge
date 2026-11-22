@@ -27,9 +27,9 @@ struct BlockBFlowTests {
         #expect(flow.confirmTitle == "Install block B on the LC6000's display chip?")
         #expect(flow.confirmButton == "Install block B")
         #expect(flow.confirmBody == flow.plan!.text + "\n\n" + """
-            Block B is the drawing DeckBridge's own code on the display chip calls. Block A checks B before it calls \
-            anything in it, so a bad or cut-off B leaves the display as stock. If the chip stops answering, follow the \
-            recovery guide. Your backup stays on this Mac. Quit DeckBridge first, and keep the LC6000 powered and \
+            Block B is the drawing DeckBridge's own code on the display chip calls. Block A checks B's header, CRC and \
+            layout before it calls anything in it, and stays silent for a B that fails them; a write cut off partway \
+            fails B's CRC. If the chip stops answering, follow the recovery guide. Your backup stays on this Mac. Quit DeckBridge first, and keep the LC6000 powered and \
             plugged in until it's done.
             """)
     }
@@ -39,7 +39,16 @@ struct BlockBFlowTests {
         let flow = try Self.flow(Self.chip(), app: BlockBCheckTests.app(hooked: false))
         #expect(!flow.canConfirm)
         #expect(flow.plan == nil)
-        #expect(flow.status?.hasPrefix("The display chip doesn't run DeckBridge's hook") == true)
+        #expect(flow.status?.hasPrefix("The display chip doesn't carry DeckBridge's block A") == true)
+    }
+
+    @Test("A read of B's area that isn't the whole 512 KB: no confirm, and the screen says why")
+    func shortRead() throws {
+        let chip = Self.chip()
+        let flow = BlockBFlow(b: try BlockBCheckTests.b(), app: BlockBCheckTests.app(), upper: chip.bytes(0x0808_0000, 0x1000),
+                              backupTakenThisSession: true, known: BlockBCheckTests.known, log: BlockBCheckTests.Lines())
+        #expect(!flow.canConfirm)
+        #expect(flow.status == "The read of block B's area was short, so block B can't be installed. Back the chip up again.")
     }
 
     @Test("No confirm without a backup of B's area taken this session")

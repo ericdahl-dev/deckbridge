@@ -50,7 +50,7 @@ struct BlockBCheckTests {
     @Test("No hook (stock, or another image): refused, nothing would ever call B")
     func noHook() throws {
         let result = BlockBCheck.check(app: Self.app(hooked: false), b: try Self.b(), known: Self.known, log: Lines())
-        #expect(result == .refused("The display chip doesn't run DeckBridge's hook and block A, so nothing would ever call block B. Install the display chip's image first."))
+        #expect(result == .refused("The display chip doesn't carry DeckBridge's block A, so nothing would ever call block B. Install the display chip's image first."))
     }
 
     @Test("An A this app doesn't know: refused, and its sha1 is shown and logged, for the table")

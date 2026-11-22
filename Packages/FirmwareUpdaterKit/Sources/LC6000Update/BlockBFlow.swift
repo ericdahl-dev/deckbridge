@@ -25,13 +25,14 @@ public struct BlockBFlow: Sendable {
     public var canConfirm: Bool { phase == .ready && fresh && plan.map { !$0.sectors.isEmpty } == true }
     public var confirmTitle: String { "Install block B on the LC6000's display chip?" }
     public var confirmButton: String { "Install block B" }
-    /// The risk, as the kit's tests show it (tools/lc6000-display-fw/arm/test/test_block.py): stock's render runs with
-    /// or without our code, and block A stays silent for a corrupted B or one of another layout.
+    /// The risk: the kit's tests (tools/lc6000-display-fw/arm/test/test_block.py) show stock's render runs with or
+    /// without our code, and block A stays silent for a corrupted B or one of another layout. A cut-off write fails
+    /// B's CRC because the header, with the CRC over B's whole length, is in sector 8, written first (inferred, untested).
     public var confirmBody: String {
         (plan?.text ?? "") + "\n\n" + "Block B is the drawing DeckBridge's own code on the display chip calls. Block A "
-            + "checks B before it calls anything in it, so a bad or cut-off B leaves the display as stock. If the chip "
-            + "stops answering, follow the recovery guide. Your backup stays on this Mac. Quit DeckBridge first, and keep "
-            + "the LC6000 powered and plugged in until it's done."
+            + "checks B's header, CRC and layout before it calls anything in it, and stays silent for a B that fails them; "
+            + "a write cut off partway fails B's CRC. If the chip stops answering, follow the recovery guide. Your backup "
+            + "stays on this Mac. Quit DeckBridge first, and keep the LC6000 powered and plugged in until it's done."
     }
 
     public var canRestore: Bool { if case .mismatch = phase { true } else { false } }
@@ -44,6 +45,7 @@ public struct BlockBFlow: Sendable {
         switch phase {
         case .ready:
             if case .refused(let reason) = check { return reason }
+            if plan == nil { return "The read of block B's area was short, so block B can't be installed. Back the chip up again." }
             if plan?.sectors.isEmpty == true { return "Up to date: this block B is already on the display chip." }
             return nil
         case .mismatch(let at):

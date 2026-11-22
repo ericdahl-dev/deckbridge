@@ -21,7 +21,8 @@ public struct KnownBlockA: Sendable, Equatable {
         self.from = from
     }
 
-    /// From the 11-19 image names (wd-upper-drawing-a9b985d, -5f7c0a13): block A is byte-identical at a9b985d1,
+    /// From the 11-19 image names (wd-upper-drawing-a9b985d, -5f7c0a13), before #573 made ARM_UPPER_PROVEN=1 the
+    /// default: block A is byte-identical at a9b985d1,
     /// 5f7c0a13 and main ef0e5e6c for the same flag, built locally with Homebrew's arm-none-eabi-gcc 16.2.0. Candidates,
     /// not facts: an A that isn't here is refused with its sha1 logged, and added after the owner's run reads it.
     public static let shipped = [
@@ -45,7 +46,7 @@ public enum BlockBCheck: Sendable, Equatable {
                              log: any LogSink) -> BlockBCheck {
         let from = Int(blockA.address - appAddress), to = from + blockA.length
         guard app.count >= to, Array(app[(to - 4)..<to]) == hookMarker else {
-            return .refused("The display chip doesn't run DeckBridge's hook and block A, so nothing would ever call block B. "
+            return .refused("The display chip doesn't carry DeckBridge's block A, so nothing would ever call block B. "
                             + "Install the display chip's image first.")
         }
         let sha1 = Insecure.SHA1.hash(data: Data(app[from..<to])).map { String(format: "%02x", $0) }.joined()
