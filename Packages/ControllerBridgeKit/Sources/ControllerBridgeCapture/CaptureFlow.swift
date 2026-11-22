@@ -30,6 +30,8 @@ public struct CaptureFlow: Sendable {
     private var sender = ProbeSender()
     /// The controller went away mid-capture (#229): nothing moves on until it's back or the capture is ended.
     public private(set) var isDisconnected = false
+    /// Unplugged on the done page (#353): no LED test until it's back.
+    private var unpluggedWhenDone = false
     /// A disconnect or reconnect to announce, ahead of anything else.
     private var connectionNote: String?
     /// The idle step whose Next became available, to be announced once.
@@ -162,6 +164,7 @@ public struct CaptureFlow: Sendable {
             connectionNote = "LED test ended: the controller was unplugged. \(ledAnswerCount) answers."
             return
         }
+        if phase == .done { unpluggedWhenDone = true }
         guard phase == .steps, !isDisconnected else { return }
         isDisconnected = true
         connectionNote = "Controller disconnected. Plug it back in to continue, or end the capture."
@@ -169,6 +172,7 @@ public struct CaptureFlow: Sendable {
 
     /// It's back: the same step starts again, its partial take thrown away.
     public mutating func reconnected(at time: Double) {
+        unpluggedWhenDone = false
         guard isDisconnected else { return }
         isDisconnected = false
         session?.redo(at: time)
@@ -247,7 +251,7 @@ public struct CaptureFlow: Sendable {
     public static let ledColors = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink", "white", "other"]
 
     /// Whether the LED test can start: from the done page, once (a second run would double the answers).
-    public var canStartLEDs: Bool { ledTest && phase == .done && !ledsTested && file != nil }
+    public var canStartLEDs: Bool { ledTest && phase == .done && !ledsTested && !unpluggedWhenDone && file != nil }
     /// Whether the current probe has lit: its message has gone out. Answers before that are ignored.
     public var canAnswerLED: Bool { ledProbe != nil && !sender.hasPending }
     /// "Same as last" needs an earlier color answer.

@@ -168,4 +168,20 @@ struct LEDPhaseTests {
         #expect(flow.takeAnnouncement() == nil)
         #expect(!flow.canStartLEDs)
     }
+
+    @Test("Unplugged on the done page (#353): no LED test until it's back; the replug changes nothing else")
+    func unpluggedOnDonePage() {
+        var flow = Self.captured()
+        _ = flow.takeAnnouncement()
+        let file = flow.file
+        flow.disconnected(at: 5)
+        #expect(!flow.canStartLEDs)
+        flow.startLEDs(scope: .full, at: 6)
+        #expect(flow.phase == .done)
+        #expect(!flow.hasPendingSends)
+        flow.reconnected(at: 7)
+        #expect(flow.canStartLEDs)
+        #expect(flow.file == file)
+        #expect(flow.takeAnnouncement() == nil)
+    }
 }
