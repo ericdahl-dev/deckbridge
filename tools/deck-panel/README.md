@@ -92,7 +92,8 @@ esptool.py --port /dev/cu.wchusbserial210 write_flash 0 <the backup file>
 The firmware's version is in `VERSION` (dotted digits, such as `1.0.0`), set by hand in the release's PR. A build is a release only when it is built from the tag `deck-panel-v<version>` with no uncommitted changes in `tools/deck-panel/`; every other build is local, and says so (#695).
 
 - At boot, on serial: `deck panel: boot, build <SHA>, version <version>`, with ` local` after the version of a local build (whose SHA may end in `-dirty`).
-- On request, without a reboot: send the line `version` at 115200 baud and the panel answers `deck panel: build <SHA>, version <version>[ local]`. Opening the port may reset the board through the CH340's DTR and RTS lines (not yet checked on the panel), so open it with both held low; `pio device monitor` needs `--dtr 0 --rts 0`.
+- On request, without a reboot: send the line `version` at 921600 baud (115200 before #667's cable feed) and the panel answers `deck panel: build <SHA>, version <version>[ local]`. Opening the port doesn't reset the board when DTR and RTS are held low (checked on the panel, #667); `pio device monitor` needs `--dtr 0 --rts 0`. The same port carries DeckBridge's feed as SLIP frames when its cable switch is on; the panel answers only text outside them.
+- **Serial runs at 921600 (#667).** The ESP32's ROM prints its own boot text at 115200 before our firmware sets 921600, so a monitor at 921600 shows a line of garbage at reset. That's expected, not a fault.
 - On every waiting screen, bottom right: `v<version>  <SHA>`, or `v<version> local  <SHA>`.
 
 ## What the deck view shows
@@ -183,7 +184,7 @@ Stack them on any env: `PLATFORMIO_BUILD_FLAGS="-DPANEL_PCLK_ACTIVE_NEG=0" pio r
 `crowpanel-perf` is the deck view plus a line on serial every 5 s. To read it, after flashing:
 
 ```sh
-pio device monitor -d tools/deck-panel -e crowpanel-perf -p /dev/cu.wchusbserial210 -b 115200
+pio device monitor -d tools/deck-panel -e crowpanel-perf -p /dev/cu.wchusbserial210 -b 921600
 ```
 
 ```text
@@ -197,7 +198,7 @@ perf: 30.0 frames/s, frame avg 22.0 ms max 31.5 ms (swap wait 18.0), draw_bitmap
 - **swap timeouts:** waits that hit 60 ms. Anything but 0 is a fault.
 - **scan lag, vsync, resyncs:** the scan-out's steadiness. The bounce driver finishes copying each frame at a fixed time after its vsync, and vsyncs come every 33.3 ms (12.3 MHz). A healthy panel shows one value for each, give or take a few µs, and 0 resyncs. A resync is a frame whose copy ended more than 0.5 ms off the last one: the scan-out fell behind or was restarted out of step. A jumping picture should show up here. (Bounce mode only.)
 - **copy:** the bounce copy against its deadline: the longest copy of a 10-line chunk out of PSRAM in the window, the chunk's time on the panel (666 µs at 12.3 MHz, 512 µs at 16), the margin left, and how many copies ran past it. A negative margin or any late copy is an underrun: stale rows every 10 lines. Timed in this build only, by wrapping `memcpy` at link time (`-Wl,--wrap=memcpy`); before raising the clock, this is the number to read.
-- **feed:** datagrams the frames drained in the window; those dropped for being too big for an intake slot; and those dropped because the intake was full (16 waiting, #664). The default build has no receive task (#713): the loop reads lwIP's 6-deep queue itself, and lwIP's drops past it can't be seen, so the line says `n/a dropped`. With the task (`FEED_RX_TASK=1`, env crowpanel-perf-rx-task) the count is the intake's, and the task empties lwIP's queue as datagrams come, so lwIP's own drops need a stall of their own.
+- **feed:** datagrams the frames drained in the window, Wi-Fi's and the USB cable's together (#667); those dropped for being too big for an intake slot; and those dropped because the intake was full (16 waiting, #664). The default build has no receive task (#713): the loop reads lwIP's 6-deep queue itself, and lwIP's drops past it can't be seen, so the line says `n/a dropped`. With the task (`FEED_RX_TASK=1`, env crowpanel-perf-rx-task) the count is the intake's, and the task empties lwIP's queue as datagrams come, so lwIP's own drops need a stall of their own. In the default build both sources are stamped for the ledger at the loop's read, Wi-Fi by FeedUdp and the cable by its drain (#667): the time a datagram sat in lwIP's mailbox or the UART's ring isn't included, so a lag spread compares the two the same way.
 - **internal free:** free internal RAM, in bytes.
 - A still screen prints `perf: no frames (nothing changed)`: LVGL draws only what changes.
 
@@ -208,6 +209,6 @@ Build and flash `crowpanel-test` (`-e crowpanel-test` in the commands above) for
 - Eight full-height bars across the whole 800 px. From left to right: red, green, blue, white, black, mid gray, dark gray, light gray. If red and blue are swapped, the bus order is wrong.
 - A black band across the middle. On it is the line `DeckBridge deck panel  800x480  V1.4  build <short SHA>` (with `-dirty` if built from uncommitted changes), and below it the last touch, as `Touch at x, y`.
 - The backlight comes on after the first frame is drawn, so nothing flashes at boot.
-- On serial (115200 baud): `deck panel: boot, build <SHA>, version <version>` (see Version), the companion chip and display lines, `touch: GT911 at 0x5D`, then `deck panel: test screen up`. The test screen has no Wi-Fi.
+- On serial (921600 baud): `deck panel: boot, build <SHA>, version <version>` (see Version), the companion chip and display lines, `touch: GT911 at 0x5D`, then `deck panel: test screen up`. The test screen has no Wi-Fi.
 
 **What only the panel can show:** colors, the full area, the backlight, touch, tearing, Wi-Fi and the feed. None of these has a host test.
