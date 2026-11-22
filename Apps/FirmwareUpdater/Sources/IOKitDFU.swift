@@ -12,8 +12,10 @@ enum IOKitDFU {
     }
 
     static func devices() -> [Found] {
+        // Interface matching needs bConfigurationValue with bInterfaceNumber: with nil it matches nothing (owner run, #709,
+        // cos: 0 matches with nil, 1 with 1). The ST ROM bootloader has one configuration, 1.
         let matching = IOUSBHostInterface.__createMatchingDictionary(
-            withVendorID: 0x0483, productID: 0xDF11, bcdDevice: nil, interfaceNumber: 0, configurationValue: nil,
+            withVendorID: 0x0483, productID: 0xDF11, bcdDevice: nil, interfaceNumber: 0, configurationValue: 1,
             interfaceClass: nil, interfaceSubclass: nil, interfaceProtocol: nil, speed: nil, productIDArray: nil)
             .takeRetainedValue()
         var iterator: io_iterator_t = 0
