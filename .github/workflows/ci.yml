@@ -100,7 +100,7 @@ jobs:
           pio run -d tools/deck-panel -e crowpanel-test
           pio run -d tools/deck-panel -e crowpanel-perf
           # The feed path's A/B builds (#664, PR #713), so a flash of each is of a build CI has compiled.
-          for ab in rx-off stamp-at-read rx-5ms; do pio run -d tools/deck-panel -e "crowpanel-perf-$ab"; done
+          for ab in rx-off stamp-at-read rx-5ms rx-1ms; do pio run -d tools/deck-panel -e "crowpanel-perf-$ab"; done
 
   display-firmware:
     name: Display firmware

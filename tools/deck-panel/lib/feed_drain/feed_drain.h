@@ -23,7 +23,7 @@ constexpr int kMaxPerFrame = 256;
 /// Milliseconds, any clock (millis on the board).
 using Clock = uint32_t (*)();
 
-/// A UDP socket, as the board layer has it (WiFiUDP).
+/// A UDP socket, as the board layer has it (FeedUdp, a raw lwIP socket).
 struct Socket {
     virtual ~Socket() = default;
     /// The next waiting datagram's size; 0 if none.
