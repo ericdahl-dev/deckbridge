@@ -26,14 +26,30 @@ struct VersionQuestionTests {
     /// The version question on the panel's port at 921600: the only write the finder may ever make.
     static let question = FakeSerial.Write(port: Screen.port, baud: 921_600, text: "version\n")
 
-    @Test("The only write is \"version\\n\", on the CH340K's port at 921600: another board's port and a panel at 115200 get nothing")
+    @Test("Today's firmware talks at 115200 (921600 comes with #711): asked at 921600, no answer, then asked at 115200")
+    func answersAt115200() async {
+        let rig = Rig()
+        Screen.panel(rig, printing: [])
+        rig.serial.oldAnswers[Screen.port] = ["deck panel: build d7f0f50a, version 1.0.0"]
+        #expect(await rig.finder.find().panel == .onSerial(build: PanelBuild(sha: "d7f0f50a", version: FirmwareVersion("1.0.0"))))
+    }
+
+    @Test("The only writes are \"version\\n\", one per speed, on the CH340K's port: another board's port gets nothing")
     func onlyTheQuestion() async {
         let rig = Rig()
         Screen.panel(rig, printing: [])
-        rig.serial.oldLines[Screen.port] = ["deck panel: boot, build 1d0683f"]  // flashed before #667: can't answer
         rig.usb.plugged.append(USBDevice(vendor: 0x0403, product: 0x6001, name: "FT232R", serialPort: "/dev/cu.usbserial-A1"))
-        #expect(await rig.finder.find().panel == .onSerial(build: PanelBuild(sha: "1d0683f")))
+        #expect(await rig.finder.find().panel == .onSerial(build: nil))
+        #expect(rig.serial.writes == [Self.question, FakeSerial.Write(port: Screen.port, baud: 115_200, text: "version\n")])
+    }
+
+    @Test("An answer at 921600 ends it: 115200 is neither opened nor asked")
+    func answerAt921600Stops() async {
+        let rig = Rig()
+        Self.runningPanel(rig, answering: "deck panel: build 1d0683f, version 1.2.0")
+        _ = await rig.finder.find()
         #expect(rig.serial.writes == [Self.question])
+        #expect(rig.serial.bauds == [921_600])
     }
 
     @Test("A panel that doesn't answer (before #702): found, with an honest \"Build not read\" and no advice")

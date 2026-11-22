@@ -23,8 +23,10 @@ final class FakeSerial: PanelSerial, @unchecked Sendable {
     var bauds: [Int] = []
     /// Ports another app holds exclusively (DeckBridge, TIOCEXCL): opening them fails busy.
     var busy: Set<String> = []
-    /// What a #702 panel answers at 921600 when asked "version\n" (#715); nothing unless asked.
+    /// What a #702 panel answers at 921600 (after #711) or 115200 (today's firmware) when asked "version\n" (#715);
+    /// nothing unless asked.
     var answers: [String: [String]] = [:]
+    var oldAnswers: [String: [String]] = [:]
     /// Everything written to any port, in order: the test checks it is only ever the version question, on the panel's.
     struct Write: Equatable {
         let port: String
@@ -39,7 +41,7 @@ final class FakeSerial: PanelSerial, @unchecked Sendable {
         if let question { writes.append(Write(port: port, baud: baud, text: question)) }
         switch baud {
         case 921_600: return .lines((lines[port] ?? []) + (question == "version\n" ? answers[port] ?? [] : []))
-        case 115_200: return .lines(oldLines[port] ?? [])
+        case 115_200: return .lines((oldLines[port] ?? []) + (question == "version\n" ? oldAnswers[port] ?? [] : []))
         default: return .lines([])
         }
     }

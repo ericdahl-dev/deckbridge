@@ -17,9 +17,9 @@ Needs Xcode 26 and XcodeGen (`brew install xcodegen`). The logic lives in `Packa
 ## What it reads
 
 - **Deck panel:** the CrowPanel's USB serial chip (CH340K, 1A86:7522) in the USB list. With WCH's CH34x driver it has a
-  serial port. The app opens it with DTR and RTS held off so the panel isn't reset, at 921600, writes `version` and
-  listens 3 s for the answer (#702's firmware) or a boot line. Nothing read: it listens 3 s more at 115200, writing
-  nothing, for a panel flashed before #667. A panel that answers neither shows "Build not read".
+  serial port. The app opens it with DTR and RTS held off so the panel isn't reset, at 921600 (#711's board wiring),
+  writes `version` and listens 3 s for the answer (#702's firmware) or a boot line. Nothing read: the same at 115200,
+  today's firmware's speed. A panel that answers at neither shows "Build not read".
 - **LC6000:** its MIDI port names ("LC6000 PRIME …"), and ST's bootloader (0483:DF11) for a unit in update mode.
   Nothing is sent to it; its firmware is checked in a later ticket (#692).
 

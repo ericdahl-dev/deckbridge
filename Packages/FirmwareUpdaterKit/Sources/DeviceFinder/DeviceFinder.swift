@@ -39,7 +39,7 @@ public struct DeviceFinder: Sendable {
     static let lc6000Ports = "LC6000 PRIME"
     /// ST's ROM DFU bootloader.
     static let stBootloader = (vendor: UInt16(0x0483), product: UInt16(0xDF11))
-    /// The panel's serial speeds, tried in turn: 921600 since #667, then 115200 for a panel flashed before it.
+    /// The panel's serial speeds, tried in turn: 921600 (#667, with #711's board wiring), then 115200 (today's firmware).
     public static let panelBauds = [921_600, 115_200]
 
     /// How long the finder listens to a panel's serial port for its boot line, at each speed.
@@ -47,8 +47,8 @@ public struct DeviceFinder: Sendable {
     static let bootLine = "deck panel: boot, build "
     /// #702's answer to the version question: the boot line's words without "boot, ".
     static let answerLine = "deck panel: build "
-    /// The version question (#695, #702): a whole line, answered without a reboot. Asked only at 921600: a panel at
-    /// 115200 was flashed before #667, so before #702, and can't answer.
+    /// The version question (#695, #702): a whole line, answered without a reboot. Asked once at each speed: today's
+    /// firmware answers at 115200, a panel with #711's wiring at 921600 (cos, checked on a #702 panel).
     public static let versionQuestion = "version\n"
     public static let dirty = "-dirty"
 
@@ -83,8 +83,7 @@ public struct DeviceFinder: Sendable {
                 var build: PanelBuild?
                 var busy = false
                 for baud in Self.panelBauds where build == nil && !busy {
-                    let question = baud == Self.panelBauds[0] ? Self.versionQuestion : nil
-                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: question) {
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: Self.versionQuestion) {
                     case .lines(let lines): build = Self.build(in: lines)
                     case .busy: busy = true
                     }
