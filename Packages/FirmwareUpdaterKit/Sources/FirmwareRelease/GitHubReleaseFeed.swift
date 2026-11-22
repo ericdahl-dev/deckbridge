@@ -28,7 +28,7 @@ public enum FeedError: Error, Equatable {
     case notPublished
     /// A URL the feed won't ask: not this repo's download URL, or a redirect off GitHub's asset hosts.
     case refusedURL(String)
-    /// The newest release has no manifest.json and manifest.sig: no signed firmware release is published.
+    /// No release is published, or the newest has no manifest.json and manifest.sig: no signed firmware release yet.
     case nothingPublished
 }
 
@@ -52,6 +52,8 @@ public actor GitHubReleaseFeed: ReleaseFeed {
 
     public func latest() async throws -> PublishedRelease {
         let answer = try await http.get(Self.latestURL, headers: Self.headers)
+        // GitHub answers 404 here exactly when no release is published.
+        if answer.status == 404 { throw FeedError.nothingPublished }
         guard answer.status == 200 else { throw FeedError.http(answer.status) }
         guard let release = try? JSONDecoder().decode(Release.self, from: answer.body) else { throw FeedError.notARelease }
         // GitHub's "latest" is never a draft or a pre-release; if it ever were, nothing of it is fetched.

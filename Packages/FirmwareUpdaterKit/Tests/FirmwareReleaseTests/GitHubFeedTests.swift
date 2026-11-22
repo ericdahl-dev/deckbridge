@@ -74,12 +74,11 @@ func aDraftOrPreReleaseIsNeverFetched(draft: Bool, prerelease: Bool) async throw
 
 /// GitHub can't be reached, answers with an error, or with something that isn't a release: the fetch is "unreachable",
 /// and the firmware built into the app stays in use.
-@Test(arguments: ["release 404", "release 500", "release timeout", "release not JSON", "asset 403", "asset 404", "asset timeout"])
+@Test(arguments: ["release 500", "release timeout", "release not JSON", "asset 403", "asset 404", "asset timeout"])
 func anythingWrongTalkingToGitHubIsUnreachableAndTheBuiltInStays(_ fault: String) async throws {
     let github = publishedGitHub()
     let stored = "https://objects.githubusercontent.com/github-production-release-asset/manifest.sig?sig=x"
     switch fault {
-    case "release 404": github.answers[latestURL] = HTTPResponse(status: 404, body: Data())
     case "release 500": github.answers[latestURL] = HTTPResponse(status: 500, body: Data())
     case "release timeout": github.timingOut = [latestURL]
     case "release not JSON": github.answers[latestURL] = HTTPResponse(status: 200, body: Data("<html>".utf8))

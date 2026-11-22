@@ -71,3 +71,13 @@ func aLatestReleaseWithoutASignedManifestSaysNoneIsPublishedYet(assets: [String]
     #expect(offer.source == "Firmware built into this app: deck panel 1.0.0")
     #expect(offer.reason == "No signed firmware release is published yet, so the firmware built into this app is offered.")
 }
+
+/// GitHub answers 404 for the latest release exactly when nothing is published: that's not "couldn't be reached".
+@Test func noPublishedReleaseAtAllSaysNoneIsPublishedYet() async throws {
+    let github = FakeGitHub()
+    github.answers[latestURL] = HTTPResponse(status: 404, body: Data(#"{"message": "Not Found"}"#.utf8))
+    let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
+        .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
+    #expect(outcome.refusal == .noFirmwareRelease)
+    #expect(github.asked.map(\.url) == [latestURL])
+}
