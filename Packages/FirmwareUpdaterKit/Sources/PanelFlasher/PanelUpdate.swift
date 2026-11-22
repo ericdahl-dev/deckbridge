@@ -38,7 +38,7 @@ public struct PanelUpdate: Sendable {
     }
 
     public func run(_ image: [UInt8], on port: String, wipeWiFi: Bool, boot: BootParts? = nil, makeDeckPanel: Bool = false,
-                    report: @Sendable (Step) -> Void) async {
+                    report: @escaping @Sendable (Step) -> Void) async {
         guard Self.isPanelApp(image) else { return report(.failed(.notAPanelImage)) }
         report(.connecting)
         let line: any BootloaderLine
@@ -58,21 +58,26 @@ public struct PanelUpdate: Sendable {
             try await bootloader.speedUp()
             // Said before the first erase, so the app stops offering Cancel before the app slot is touched (#744).
             report(.writing(0))
-            if let boot, !isDeckPanel {
-                try await bootloader.makeDeckPanel(image, bootloader: boot.bootloader, partitions: boot.partitions) {
-                    report(.writing($0))
+            // From the first erase on, a cancel would leave the single app slot half written, so the write, its check
+            // and the reset run to the end in a task the cancel doesn't reach (#744's live run).
+            let makeBoot = isDeckPanel ? nil : boot
+            try await Task.detached {
+                if let makeBoot {
+                    try await bootloader.makeDeckPanel(image, bootloader: makeBoot.bootloader, partitions: makeBoot.partitions) {
+                        report(.writing($0))
+                    }
+                } else {
+                    try await bootloader.flashApp(image, wipeWiFi: wipeWiFi) { report(.writing($0)) }
                 }
-            } else {
-                try await bootloader.flashApp(image, wipeWiFi: wipeWiFi) { report(.writing($0)) }
-            }
+            }.value
             report(.restarting)
             await bootloader.release()
             await line.close()
         } catch {
             await bootloader.release()
             await line.close()
-            let reason = Self.reason(error), written = await bootloader.hasWritten
-            return report(.failed(reason == .canceled && written ? .canceledWhileWriting : reason))
+            // A cancel only lands before the first erase: the write itself can't be canceled.
+            return report(.failed(Self.reason(error)))
         }
         if case .onSerial(let build) = await finder.find().panel { return report(.done(build)) }
         report(.done(nil))
@@ -119,7 +124,6 @@ extension PanelUpdate.Step {
         case .writeFailed(let address): return "Writing failed at 0x\(String(address, radix: 16, uppercase: true)). \(mayNotStart)"
         case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
         case .canceled: return "Canceled. The panel was restarted."
-        case .canceledWhileWriting: return "Canceled while writing. \(mayNotStart)"
         case .lineLost: return "The cable was lost. Plug the panel back in and try again."
         case .notAPanelImage: return "The firmware file isn't a deck panel image. Nothing was written."
         }

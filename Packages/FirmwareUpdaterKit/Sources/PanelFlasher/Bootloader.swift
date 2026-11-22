@@ -35,8 +35,6 @@ public enum FlashError: Error, Equatable {
     case portBusy
     /// The owner canceled; the panel was reset into its app.
     case canceled
-    /// The owner canceled after writing began: the panel was reset, but what it boots may be half written.
-    case canceledWhileWriting
     /// The line itself failed: the cable came out, or the port went away.
     case lineLost
     /// The image to write isn't an ESP32-S3 app image that fits app0.

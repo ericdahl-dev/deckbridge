@@ -66,7 +66,7 @@ final class WaitingFlasher: PanelFlashing, @unchecked Sendable {
         report(.writing(0.1))
         state.withLock { $0.writing = true }
         while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(5)) }
-        report(.failed(.canceledWhileWriting))
+        report(.failed(.canceled))
     }
 }
 
@@ -132,7 +132,7 @@ struct PanelUpdateFlowTests {
         #expect(waiting.updating)
         waiting.cancelUpdate()
         await run.value
-        #expect(waiting.screen.update == "Canceled while writing. The panel may not start: try again before unplugging it.")
+        #expect(waiting.screen.update == "Canceled. The panel was restarted.")
         #expect(deckBridge.posted == [.release, .done])
         #expect(!waiting.updating)
     }
