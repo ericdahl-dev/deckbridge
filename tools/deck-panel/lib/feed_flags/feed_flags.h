@@ -1,7 +1,8 @@
 // The feed path's build flags (#664, PR #713). The defaults are the panel's build: no receive task. The owner's call
 // from the A/B runs on #713 (A-F): with the deck playing, the task added late frames (0.61 % against 0.25 %) and took
-// about 27 KB of internal RAM, and no build dropped a datagram. The task stays behind FEED_RX_TASK=1 for a heavier
-// feed; env crowpanel-perf-rx-task builds it.
+// about 27 KB of internal RAM. Without it, lwIP's drops past its 6-deep mailbox can't be counted (the perf line says
+// n/a); the 2 s keepalive snapshot repairs lost state. The task stays behind FEED_RX_TASK=1 for a heavier feed; env
+// crowpanel-perf-rx-task builds it.
 //   FEED_RX_TASK=1        a receive task on core 0 reads the socket into the intake ring, stamped at arrival.
 //   FEED_RX_TASK=0        (default) no receive task: the loop drains the socket in the frame's read step
 //                         (feed_drain::Drain) and the chores poll it; the ledger is stamped at the drain.
