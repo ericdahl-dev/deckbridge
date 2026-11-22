@@ -114,6 +114,7 @@ DeckScreen g_screen;
 wifi_setup::HoldReset g_hold;
 uint32_t g_too_big = 0;
 uint32_t g_dropped = 0;
+bool g_seq_seen = false;  // the health line's last word on it, so it says again once a numbered feed comes (#750)
 uint32_t g_health_ms = 0;
 int g_read = 0;  // this frame's drain, for the perf build's count
 
@@ -367,10 +368,12 @@ class PanelBoard : public frame_clock::Board {
         // Read once: the receive task may count another meanwhile.
         const uint32_t too_big = feed_too_big();
         const uint32_t dropped = feed_dropped();
-        if (too_big != g_too_big || dropped != g_dropped) {
+        const bool seq_seen = g_core.seq_seen();
+        if (too_big != g_too_big || dropped != g_dropped || seq_seen != g_seq_seen) {
+            g_seq_seen = seq_seen;
             g_too_big = too_big;
             g_dropped = dropped;
-            if (g_core.seq_seen())
+            if (seq_seen)
                 Serial.printf("deck panel: feed datagrams since boot: %lu too big, %lu lost (sequence gaps)\n",
                               static_cast<unsigned long>(too_big), static_cast<unsigned long>(dropped));
             else
