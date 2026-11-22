@@ -120,7 +120,15 @@ struct BackupView: View {
             }
             if let result = model.result { Text(result).fixedSize(horizontal: false, vertical: true) }
             if let update = model.update { UpdateView(model: update) }
-            if let blockB = model.blockB { BlockBView(model: blockB) }
+            if let blockB = model.blockB {
+                // Block B's check was made from the read before that write: a new image may carry another block A.
+                if model.update?.wrote == true {
+                    Text("The display chip's image changed since its backup. Back it up again before installing block B.")
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    BlockBView(model: blockB)
+                }
+            }
         }
         .padding(.top, 4)
     }
