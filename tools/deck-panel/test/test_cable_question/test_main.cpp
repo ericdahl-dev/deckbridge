@@ -51,6 +51,10 @@ void test_a_version_line_between_two_frames_is_answered_once_and_both_frames_sti
     serial_feed::SerialFeed feed(cable, &question);
     cable.add(frame("/a") + "version\n" + frame("/b"));
     TEST_ASSERT_EQUAL(2, drain(feed));
+    // Not written during the drain (the frame's gap before the draw): the loop's chores write it (firmware review).
+    TEST_ASSERT_EQUAL(0, (int)g_answers.size());
+    question.answer();
+    question.answer();
     TEST_ASSERT_EQUAL(1, (int)g_answers.size());
     TEST_ASSERT_EQUAL_STRING("deck panel: build abc1234, version 1.2.0", g_answers[0].c_str());
 }
@@ -62,6 +66,7 @@ void test_the_word_version_inside_a_frame_is_never_answered() {
     serial_feed::SerialFeed feed(cable, &question);
     cable.add(frame("version\n"));
     TEST_ASSERT_EQUAL(1, drain(feed));
+    question.answer();
     TEST_ASSERT_EQUAL(0, (int)g_answers.size());
 }
 
@@ -73,6 +78,7 @@ void test_the_updaters_ask_with_a_newline_first_is_answered() {
     serial_feed::SerialFeed feed(cable, &question);
     cable.add("junk\nversion\n");
     drain(feed);
+    question.answer();
     TEST_ASSERT_EQUAL(1, (int)g_answers.size());
 }
 
