@@ -18,6 +18,16 @@ final class SlowUSB: USBDevices, @unchecked Sendable {
     }
 }
 
+/// A clock the test runs: a sleep moves its time on at once, and records how long it was asked for.
+final class FakeClock: UpdaterClock, @unchecked Sendable {
+    var now = 0.0
+    var sleeps: [Double] = []
+    func sleep(for seconds: Double) async {
+        sleeps.append(seconds)
+        now += seconds
+    }
+}
+
 /// The app's model (#688): it looks again by itself when USB changes, so a newly installed driver shows without a restart.
 @Suite("Updater: looks again when USB changes")
 @MainActor
@@ -31,8 +41,9 @@ struct UpdaterTests {
         let rig = Rig()
         rig.usb.plugged = [Self.noDriver]
         let (changes, change) = AsyncStream<Void>.makeStream()
-        let updater = Updater(finder: rig.finder, changes: changes)
+        let updater = Updater(finder: rig.finder, changes: changes, clock: FakeClock())
         await updater.refresh()
+        await updater.pendingLook?.value
         #expect(updater.screen.panel.guide != nil)
 
         rig.usb.plugged = [Self.withDriver]
@@ -73,5 +84,21 @@ struct UpdaterTests {
         #expect(updater.screen.lc6000.status == "Read the warning first")
         updater.acceptLC6000Warning()
         #expect(updater.screen.lc6000.status == "LC6000 found")
+    }
+
+    @Test("The panel on USB with no port yet: waiting for its port, no guide; still none 10 s on: the driver is missing")
+    func waitsForThePortBeforeDriverMissing() async {
+        let rig = Rig()
+        rig.usb.plugged = [Self.noDriver]
+        let clock = FakeClock()
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, clock: clock)
+        await updater.refresh()
+        #expect(updater.screen.panel.status == "Deck panel found")
+        #expect(updater.screen.panel.detail == "Waiting for its port")
+        #expect(updater.screen.panel.guide == nil)
+        await updater.pendingLook?.value
+        #expect(clock.sleeps == [10])
+        #expect(updater.screen.panel.detail == "The USB driver for its chip is missing")
+        #expect(updater.screen.panel.guide == .ch34x)
     }
 }

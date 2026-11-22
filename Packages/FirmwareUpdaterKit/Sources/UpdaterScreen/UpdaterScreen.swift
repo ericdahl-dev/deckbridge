@@ -50,9 +50,11 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
     public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
 
-    public init(found: Found, lc6000WarningAccepted: Bool) {
+    /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
+    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false) {
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
+        case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
         case .driverMissing: panel = DeviceSection(status: "Deck panel found", detail: "The USB driver for its chip is missing",
                                                     guide: .ch34x)
         case .onSerial(let build?):
