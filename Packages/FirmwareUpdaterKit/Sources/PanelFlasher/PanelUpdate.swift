@@ -56,6 +56,8 @@ public struct PanelUpdate: Sendable {
             let isDeckPanel = try await bootloader.isDeckPanel(boot?.partitions)
             guard isDeckPanel || (makeDeckPanel && boot != nil) else { throw FlashError.notADeckPanel }
             try await bootloader.speedUp()
+            // Said before the first erase, so the app stops offering Cancel before the app slot is touched (#744).
+            report(.writing(0))
             if let boot, !isDeckPanel {
                 try await bootloader.makeDeckPanel(image, bootloader: boot.bootloader, partitions: boot.partitions) {
                     report(.writing($0))

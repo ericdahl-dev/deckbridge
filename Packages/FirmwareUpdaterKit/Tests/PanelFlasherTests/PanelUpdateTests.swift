@@ -108,6 +108,17 @@ func anImageThatIsNotAPanelAppIsRefusedBeforeTheCableIsOpened(image: [UInt8]) as
     #expect(opener.opened.isEmpty)
 }
 
+/// The first erase is announced before it happens (#744's live run): `.writing(0)` comes before any write progress,
+/// so the app can stop offering Cancel before the app slot is touched.
+@Test func writingIsAnnouncedBeforeTheFirstErase() async throws {
+    let rom = await deckPanel()
+    let (steps, _) = await run(rom)
+    let writes = steps.seen.compactMap { if case .writing(let share) = $0 { share } else { nil } }
+    #expect(writes.first == 0)
+    #expect(steps.seen.first == .connecting)
+    #expect(steps.seen.dropFirst().first == .writing(0))
+}
+
 /// The owner cancels once writing has begun: app0 may be half written, so the owner is told the panel may not start,
 /// and it is still reset into whatever it boots.
 @Test func cancelingMidWriteSaysThePanelMayNotStart() async throws {
