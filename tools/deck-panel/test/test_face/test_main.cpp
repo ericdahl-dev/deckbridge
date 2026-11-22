@@ -219,6 +219,19 @@ void test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar() {
     TEST_ASSERT_EQUAL(-1, deck_core::face(v).phase_px);
 }
 
+// #721, the jog display's phase rule (#462) at panel size. No phase (-1, or any value below 0: the deck stopped, or no
+// offset since it loaded): the plain dark bar, no bar from the center and no tick, never anything that reads as locked.
+void test_no_phase_is_the_plain_dark_bar() {
+    DeckView v = loaded_deck();
+    for (float phase : {-1.0f, -0.5f}) {
+        v.phase = phase;
+        const Face f = deck_core::face(v);
+        TEST_ASSERT_EQUAL_HEX32(0x262626, f.phase_track_color);
+        TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+        TEST_ASSERT_EQUAL(0, f.phase_tick);
+    }
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -284,6 +297,7 @@ int main(int, char**) {
     RUN_TEST(test_the_loop_lamp_shows_whole_beats_or_fractions);
     RUN_TEST(test_texts_come_fitted_to_the_fonts);
     RUN_TEST(test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar);
+    RUN_TEST(test_no_phase_is_the_plain_dark_bar);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }

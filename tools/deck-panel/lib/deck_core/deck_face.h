@@ -33,6 +33,12 @@ struct Face {
     int32_t progress_px = 0;  ///< the bar's fill, 0 to layout::kWidth
     uint32_t progress_color = palette::kProgress;  ///< the fill: kWarning in the track's last seconds
     int32_t phase_px = kPhaseHidden;  ///< the marker's left edge, 0 to layout::kPhaseTravel; kPhaseHidden if unknown
+    /// The phase bar (#721, the jog display's rule, #462): its track, the bar from the center (left edge and width
+    /// from the bar's left, 0 wide for none) and the locked tick (1 shown).
+    uint32_t phase_track_color = palette::kTrack;
+    int32_t phase_bar_x = 0;
+    int32_t phase_bar_w = 0;
+    int32_t phase_tick = 0;
     int32_t level_px = 0;  ///< the meter's fill from the bottom, 0 to layout::kMeterH
     uint32_t beat_color[4] = {palette::kTrack, palette::kTrack, palette::kTrack, palette::kTrack};  ///< each block
     /// Play, cue, sync, master, loop: each lamp's box and text.
@@ -52,7 +58,7 @@ struct Face {
 /// Every field of Face, once: the parts below, what changed() compares and the check that none is left out all come
 /// from this list. A new field goes in Face and here; one left out of here fails to compile.
 #define DECK_FACE_FIELDS(ONE, MANY)                                                                                  \
-    ONE(deck_color) ONE(progress_px) ONE(progress_color) ONE(phase_px) ONE(level_px) MANY(beat_color, 4)            \
+    ONE(deck_color) ONE(progress_px) ONE(progress_color) ONE(phase_px) ONE(phase_track_color) ONE(phase_bar_x) ONE(phase_bar_w) ONE(phase_tick) ONE(level_px) MANY(beat_color, 4)            \
     MANY(lamp_color, kLamps) MANY(lamp_text_color, kLamps) ONE(deck) ONE(title) ONE(artist) ONE(key) ONE(bpm)       \
     ONE(tempo) ONE(elapsed) ONE(remaining) ONE(loop_label)
 
