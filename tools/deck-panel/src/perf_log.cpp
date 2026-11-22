@@ -8,7 +8,6 @@
 #include <lvgl.h>
 
 #include "display_driver.h"
-#include "feed_flags.h"
 #include "frame_ledger.h"
 #include "perf_line.h"
 
@@ -29,6 +28,7 @@ uint32_t g_datagrams = 0;
 uint32_t g_too_big_at_start = 0;
 uint32_t g_too_big = 0;
 uint32_t g_dropped_at_start = 0;
+bool g_drops_counted = false;
 uint32_t g_dropped = 0;
 
 // The frame ledger (#662): about 1 KB, so static, off the loop's stack. Fed by the hooks below, all on this task.
@@ -95,8 +95,9 @@ void begin() {
     Serial.println("perf: on, a line every 5 s");
 }
 
-void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bool may_print,
+void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bool drops_counted, bool may_print,
           frame_clock::Clock& clock) {
+    g_drops_counted = drops_counted;
     if (datagrams > 0) g_datagrams += static_cast<uint32_t>(datagrams);
     g_too_big = too_big;
     g_dropped = dropped;
@@ -116,7 +117,7 @@ void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bo
     w.datagrams = g_datagrams;
     w.too_big = g_too_big - g_too_big_at_start;
     w.dropped = g_dropped - g_dropped_at_start;
-    w.drops_counted = FEED_RX_TASK != 0;  // with no task, lwIP drops past its mailbox unseen (#713)
+    w.drops_counted = g_drops_counted;  // a numbered feed came (#750); else lost can't be told
     w.internal_free = static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     w.scan = display_take_scan();
     w.copy_budget_us = display_copy_budget_us();
@@ -165,7 +166,7 @@ void frame_on_glass(uint32_t release_us) { g_ledger.on_glass(release_us); }
 
 namespace perf_log {
 void begin() {}
-void tick(uint32_t, int, uint32_t, uint32_t, bool, frame_clock::Clock&) {}
+void tick(uint32_t, int, uint32_t, uint32_t, bool, bool, frame_clock::Clock&) {}
 }  // namespace perf_log
 
 #endif
