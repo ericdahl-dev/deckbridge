@@ -19,4 +19,34 @@ struct CableHandoffTests {
         #expect(handoff.releaseAsked(holding: false) == [.tellReleased])
         #expect(!handoff.mayLook)
     }
+
+    @Test("Done with the switch on: look again, so the port reopens and the full snapshot goes (its opening, #667)")
+    func doneReclaims() {
+        var handoff = CableHandoff()
+        _ = handoff.releaseAsked(holding: true)
+        #expect(handoff.doneAsked(cableOn: true) == [.lookAgain])
+        #expect(handoff.mayLook)
+    }
+
+    @Test("Done with the switch off: nothing to take back; done again, or never asked: nothing")
+    func doneWithSwitchOff() {
+        var handoff = CableHandoff()
+        _ = handoff.releaseAsked(holding: false)
+        #expect(handoff.doneAsked(cableOn: false) == [])
+        #expect(handoff.mayLook)
+        #expect(handoff.doneAsked(cableOn: true) == [])
+        var never = CableHandoff()
+        #expect(never.doneAsked(cableOn: true) == [])
+    }
+
+    @Test("The switch turned on while lent doesn't take the port; turned off, the lend ends (after an updater crash)")
+    func switchWhileLent() {
+        var handoff = CableHandoff()
+        _ = handoff.releaseAsked(holding: false)
+        handoff.switchChanged(on: true)
+        #expect(!handoff.mayLook)
+        handoff.switchChanged(on: false)
+        #expect(handoff.mayLook)
+        #expect(handoff.doneAsked(cableOn: false) == [])
+    }
 }

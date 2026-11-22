@@ -8,6 +8,8 @@ public struct CableHandoff: Sendable {
         case closePort
         /// Tell the updater the port is free.
         case tellReleased
+        /// Look for the port again: it opens, and the opening sends the full snapshot (cableFeedReady).
+        case lookAgain
     }
 
     /// Lent to the updater: until it's done, DeckBridge doesn't look for the port, so it never takes it mid-update.
@@ -22,5 +24,18 @@ public struct CableHandoff: Sendable {
     public mutating func releaseAsked(holding: Bool) -> [Action] {
         lent = true
         return holding ? [.closePort, .tellReleased] : [.tellReleased]
+    }
+
+    /// The updater is done with the port: take it back if the switch is on. Not lent, nothing.
+    public mutating func doneAsked(cableOn: Bool) -> [Action] {
+        guard lent else { return [] }
+        lent = false
+        return cableOn ? [.lookAgain] : []
+    }
+
+    /// The cable's switch changed. On while lent: still lent. Off: the lend ends, so turning it off and on takes the port
+    /// back even if the updater never said it was done (it crashed or was quit).
+    public mutating func switchChanged(on: Bool) {
+        if !on { lent = false }
     }
 }
