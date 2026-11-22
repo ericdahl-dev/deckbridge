@@ -155,3 +155,14 @@ func aFirstHopAnywhereButThisReposManifestIsRefusedAndNotFollowed(location: Stri
     await #expect(throws: FeedError.refusedURL(location)) { try await GitHubReleaseFeed(http: github).latest() }
     #expect(github.asked.map(\.url) == [latestURL])
 }
+
+/// A release asset's name is flat (release_draft.py makes it so): a name with a path in it is refused before it's asked.
+@Test(arguments: ["panel/deck-panel-1.1.0-bbbbbbb.bin", "../manifest.json", "..", ".", ""])
+func aFileNameThatIsntOneAssetNameIsRefusedAndNotAsked(name: String) async throws {
+    let github = publishedGitHub()
+    let feed = GitHubReleaseFeed(http: github)
+    _ = try await feed.latest()
+    let before = github.asked.count
+    await #expect(throws: FeedError.self) { try await feed.file(name) }
+    #expect(github.asked.count == before)
+}

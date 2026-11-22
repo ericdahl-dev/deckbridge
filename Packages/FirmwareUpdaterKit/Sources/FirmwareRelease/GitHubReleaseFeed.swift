@@ -70,6 +70,8 @@ public actor GitHubReleaseFeed: ReleaseFeed {
     /// refused before it is asked.
     public func file(_ name: String) async throws -> Data {
         guard let tag else { throw FeedError.missingAsset(name) }
+        // One flat asset name: nothing that would reach another path.
+        guard !name.isEmpty, name != ".", name != "..", !name.contains("/") else { throw FeedError.refusedURL(name) }
         let given = "https://github.com" + Self.downloadPrefix + tag + "/" + name
         guard let url = URL(string: given), Self.isDownload(url) else { throw FeedError.refusedURL(given) }
         let first = try await http.get(url, headers: Self.headers)
