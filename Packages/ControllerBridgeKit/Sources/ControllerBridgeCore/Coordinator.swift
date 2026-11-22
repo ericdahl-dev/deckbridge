@@ -197,7 +197,7 @@ public final class Coordinator {
         updateJogDisplay()
     }
 
-    /// How early the jog display's beat goes (#720), in seconds, kept to 0-200 ms; 60 ms until set.
+    /// How early the jog display's beat goes (#720), in seconds, kept to 0-200 ms; 40 ms until set.
     public func setJogBeatLead(_ seconds: Double) {
         jogController.setBeatLead(seconds)
     }

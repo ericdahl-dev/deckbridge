@@ -14,9 +14,9 @@ final class JogDisplayController {
     /// The master clock's beat on time (#720): from Syndicate's beat messages and master BPM, so the display's beat
     /// goes when it's due, not when a message happens to arrive.
     private var beatClock = BeatClock(lead: defaultBeatLead)
-    /// The jog display's beat lead until it's tuned (#720): the owner's 120 fps video of 2026-11-21 put the jog
-    /// display about 60 ms after Syndicate's metronome click with no lead. A hidden default, no Settings control yet.
-    static let defaultBeatLead = 0.060
+    /// The jog display's beat lead (#720): 40 ms, the owner's pick on the unit (2026-11-22). At 20 ms the 120 fps
+    /// metronome video still had the beat about 17 ms after Syndicate's click. A hidden default, no Settings control.
+    static let defaultBeatLead = 0.040
     /// The beat lead, in seconds; kept to 0-200 ms.
     func setBeatLead(_ seconds: Double) { beatClock.setLead(seconds) }
     /// The LC6000's jog display, when the app found its WD port.

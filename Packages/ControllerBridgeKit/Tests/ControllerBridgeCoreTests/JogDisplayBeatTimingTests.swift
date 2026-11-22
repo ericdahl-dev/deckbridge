@@ -120,11 +120,11 @@ struct JogDisplayBeatTimingTests {
         return nil
     }
 
-    @Test("The jog display's beat goes 60 ms early by default: the owner's video put it about 60 ms after the click")
+    @Test("The jog display's beat goes 40 ms early by default: the owner's lead on the unit, 2026-11-22")
     func defaultLead() throws {
         let (rig, port) = try Live.playing()
         let sent = try #require(Self.thirdBeatSent(rig, port))
-        #expect(abs(sent - 1.88) < 1e-6)
+        #expect(abs(sent - 1.90) < 1e-6)
     }
 
     @Test("The lead setting is kept to 0-200 ms (cos, #720)",
