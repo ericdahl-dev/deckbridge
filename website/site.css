@@ -200,3 +200,6 @@ i.db-wire { display: block; height: 2px; padding: 0; background: linear-gradient
   #why { min-height: 0; }
   main > :is(section, .section) > .wrap > :is(.fill, .db-split) { flex: none; }
 }
+
+/* #753: the owner's footer line, under the lede, in the footer's own muted ink */
+.footer__line { color: var(--muted, currentColor); font-size: var(--t-small, .9rem); max-width: 34ch; }
