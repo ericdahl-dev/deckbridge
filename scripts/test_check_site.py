@@ -526,6 +526,31 @@ class CheckSiteTests(unittest.TestCase):
     def test_the_footer_line_is_the_owners(self):
         self.assertEqual(check_site.FOOTER_LINE, "Four decks, one Mac, every one of the 16,384 steps.")
 
+    def test_the_home_page_says_hello_in_the_console_once(self):
+        # #753: one console.info, with the app's own default ports (ProfileKeys: osc.port 9090, osc.feedback_port 9096).
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        self.assertIn('<script type="module" src="assets/delight.js"></script>', home)
+        with open(os.path.join(site, "assets", "delight.js"), encoding="utf-8") as f:
+            script = f.read()
+        self.assertEqual(script.count("console.info("), 1)
+        self.assertIn('console.info("DeckBridge: OSC out on 9090, feedback in on 9096. Hello, fellow tinkerer.")', script)
+
+    def test_the_why_rows_draw_their_faders_as_an_illustration(self):
+        # #753: the 7-bit and 14-bit rows each get a fader, hidden from screen readers, moved by one scrub that obeys
+        # reduced motion; the pair is labelled as an illustration.
+        site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        with open(os.path.join(site, "index.html"), encoding="utf-8") as f:
+            home = f.read()
+        for steps in ("128", "16384"):
+            self.assertRegex(home, r'<span class="db-fader" aria-hidden="true" data-steps="' + steps + r'">')
+        self.assertIn("Illustration:", home)
+        with open(os.path.join(site, "assets", "delight.js"), encoding="utf-8") as f:
+            script = f.read()
+        for words in ("lib.scrub(", "lib.reduced()", ".db-fader"):
+            self.assertIn(words, script)
+
     def test_the_404_page_says_track_not_found_and_links_home(self):
         # #753: a page the server sends for any path it doesn't have, in the site's own words.
         self.assertEqual(check_site.problems(self.site(remove=["404.html"])), ["404.html: missing"])

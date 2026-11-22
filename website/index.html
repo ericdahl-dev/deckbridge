@@ -346,9 +346,10 @@
       <p class="t-label">Why DeckBridge</p>
       <p class="mo-wh__text">Syndicate’s own MIDI mapping (0.3.7) can’t read the LC6000’s 14‑bit jog wheel or pitch fader, and it lights only the DDJ-FLX4 and FLX10. DeckBridge sends both at full resolution and lights the LC6000 from Syndicate’s feedback.</p>
       <dl class="db-res" aria-label="Pitch fader positions">
-        <div class="db-res__row"><dt>Syndicate’s MIDI mapping, 7-bit</dt><dd><b>128</b> pitch fader positions</dd></div>
-        <div class="db-res__row"><dt>DeckBridge over OSC, 14-bit</dt><dd><b>16,384</b> pitch fader positions</dd></div>
+        <div class="db-res__row"><dt>Syndicate’s MIDI mapping, 7-bit</dt><dd><b>128</b> pitch fader positions</dd><span class="db-fader" aria-hidden="true" data-steps="128"><span class="db-fader__cap"></span></span></div>
+        <div class="db-res__row"><dt>DeckBridge over OSC, 14-bit</dt><dd><b>16,384</b> pitch fader positions</dd><span class="db-fader" aria-hidden="true" data-steps="16384"><span class="db-fader__cap"></span></span></div>
       </dl>
+      <p class="db-res__note">Illustration: the same move on both faders.</p>
     </div>
   </section>
 
@@ -483,5 +484,6 @@
 <script type="module" src="assets/system.js"></script>
 <script type="module" src="assets/motion/motion.js"></script>
 <script type="module" src="assets/layout/layout.js"></script>
+<script type="module" src="assets/delight.js"></script>
 </body>
 </html>
