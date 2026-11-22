@@ -7,7 +7,7 @@
 - Coming in v1.1: the jog-wheel display showing art in real time.
 - Requirements: macOS 26 or later; Syndicate with OSC input enabled (port 9090, feedback port 9096); a Denon LC6000 PRIME over USB. The LC6000 PRIME is the only supported controller today.
 - Does not need djay Pro or Engine DJ; works with Syndicate only.
-- Status: version 1.0.1 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Price: free.
+- Status: version 1.1.0 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Price: free.
 - Privacy: the app collects no data; no account, no analytics.
 - Contact: deckbridge@ericdahl.dev
 - DeckBridge is independent and not affiliated with or endorsed by Untitled Audio Syndicate Ltd. or Denon DJ.

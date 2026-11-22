@@ -306,14 +306,25 @@ final class CaptureController {
     }
 
     /// The picked controller went away or came back (#229). Back, it's listened to again, and the bridge pauses it
-    /// again: an unplug had ended that pause.
+    /// again: an unplug had ended that pause. Watched from the steps on (#353): gone during the LED test, the test ends
+    /// and its output closes (nothing more can reach it); back on the done page, its output is found again, so an LED
+    /// test started then never sends to the unplugged endpoint.
     private func devicesChanged() {
-        guard watched != nil, flow.phase == .steps else { return }
+        guard let watched, flow.phase != .ports else { return }
         let time = ProcessInfo.processInfo.systemUptime
         switch watch?.sourcesChanged(online: CaptureMIDIInput.onlineSourceIDs()) {
         case .disconnected:
             flow.disconnected(at: time)
+            // The test's own send loop only: closing's flush (end()) owns the output, and closes it itself.
+            if let output = ledOutput, let task = sendTask {
+                task.cancel()
+                sendTask = nil
+                output.close()
+                ledOutput = nil
+                apply(hold.sendsDrained(phase: flow.phase, pending: flow.hasPendingSends))
+            }
         case .reconnected:
+            if flow.phase == .done, let paired = CaptureMIDIOutput.destination(pairedWith: watched) { ledDestination = paired }
             input?.connect()
             apply(hold.reconnected())
             flow.reconnected(at: time)

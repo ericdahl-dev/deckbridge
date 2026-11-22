@@ -41,7 +41,7 @@ struct JogDisplayProtocolTests {
         #expect(JogDisplay.goodbye == [0xF0, 0x00, 0x20, 0x7F, 0x02, 0xF7])
     }
 
-    @Test("Show keeps the needle: element mask 0D (image and position marker), as djay sends; 01 hid the marker on hardware (#165)")
+    @Test("Show keeps the needle: element mask 0D (image and needle), as djay sends; 01 hid the needle on hardware (#165)")
     func showKeepsNeedle() {
         #expect(JogDisplay.show(slot: 2) == [0xF0, 0x00, 0x02, 0x0B, 0x7F, 0x10, 0x0A, 0x00, 0x04, 0x0D, 0x00, 0x02, 0x0D, 0xF7])
     }

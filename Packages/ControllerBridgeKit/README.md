@@ -179,8 +179,11 @@ equal to the table.
 - `needle.lsb_cc`: a whole number; 0–127; LC6000 `65`
 - `needle.touch_note`: a whole number; 0–127; LC6000 `70`
 - `needle.require_touch`: true or false; LC6000 `true`
-- `needle.shift_fader`: true or false; LC6000 `true`
-- `needle.shift_fader_mode`: text; one of `relative`, `jump`; LC6000 `"relative"`
+- `needle.shift_fader`: true or false; LC6000 `true`. The strip's channel fader (#609). Despite the name, since #729
+  it's the plain touch, and Shift + the strip seeks; false, the strip seeks with or without Shift. The name is kept so
+  existing profiles still load
+- `needle.shift_fader_mode`: text; one of `relative`, `jump`; LC6000 `"relative"`. How that fader moves: from its level
+  by the finger's travel, or to the finger
 - `browse`: an object
 - `browse.select_turn_cc`: a whole number; 0–127; LC6000 `6`
 - `browse.auto_loop_size_cc`: a whole number; 0–127; LC6000 `3`

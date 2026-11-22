@@ -5,12 +5,20 @@
 final class JogDisplayController {
     private let clock: any Clock
     /// Each entry's needle: its deck's own phase in the bar (#165).
-    private var needles: [Int: JogMarker] = [:]
+    private var needles: [Int: JogNeedle] = [:]
     /// What each entry's facts said last, to see a new BarRamp and a deck that stops.
     private var lastRamp: [Int: DeckFacts.BarRamp] = [:]
     private var lastPlaying: [Int: Bool] = [:]
     /// Syndicate's master tempo, for a deck whose own BPM isn't known yet.
     private(set) var masterBPM: Double?
+    /// The master clock's beat on time (#720): from Syndicate's beat messages and master BPM, so the display's beat
+    /// goes when it's due, not when a message happens to arrive.
+    private var beatClock = BeatClock(lead: defaultBeatLead)
+    /// The jog display's beat lead (#720): 40 ms, the owner's pick on the unit (2026-11-22). At 20 ms the 120 fps
+    /// metronome video still had the beat about 17 ms after Syndicate's click. A hidden default, no Settings control.
+    static let defaultBeatLead = 0.040
+    /// The beat lead, in seconds; kept to 0-200 ms.
+    func setBeatLead(_ seconds: Double) { beatClock.setLead(seconds) }
     /// The LC6000's jog display, when the app found its WD port.
     private var driver: JogDisplayDriver?
     /// Settings' "Show the deck on the jog display" (ADR-0005): while off, nothing goes to the display's ports, not
@@ -50,11 +58,21 @@ final class JogDisplayController {
             // On the meter's dB scale (#582), so the fall runs evenly down the drawn arc.
             meters[channel, default: MeterBallistics()].sample(MeterScale.position(level), at: clock.now)
         }
-        if address.hasSuffix("/header/bpm"), let bpm = message.arguments.first?.number, bpm > 0 { masterBPM = bpm }
+        if address.hasSuffix("/header/bpm"), let bpm = message.arguments.first?.number, bpm > 0 {
+            masterBPM = bpm
+            beatClock.setTempo(bpm)
+        }
         // The master clock is the lit ring segment, the same on every deck (the user's pick).
         if address.hasSuffix("/header/clock"), let beat = message.arguments.first?.wholeNumber, (1...4).contains(beat) {
-            driver?.masterBeat(beat)
+            beatClock.edge(beat, at: clock.now)
+            masterBeatTick()
         }
+    }
+
+    /// The beat clock's beat now to the display; the driver sends only a change.
+    private func masterBeatTick() {
+        let beat = beatClock.beat(at: clock.now)
+        if beat != 0 { driver?.masterBeat(beat) }
     }
 
     /// A deck's mixer meter as the drawn meter shows it, 0-1; 0 before its channel reports (#617).
@@ -163,14 +181,15 @@ final class JogDisplayController {
         for channel in meters.keys { meters[channel]?.step(at: clock.now) }
         guard let driver else { return }
         driver.tick()
+        masterBeatTick()
         let front = Self.front(entries, previewDeck: previewDeck)
         // The live cadence (#592): the needle, then the meter and the phase below, in the same tick.
         let live = nextLiveDue.map { clock.now >= $0 - 1e-9 } ?? true
         if live {
             for index in entries.indices where entries[index].facts.playing {
                 let needle = needle(index, at: clock.now)
-                driver.deckMarker(deck: entries[index].facts.deck, needle)
-                if index == front { driver.marker(needle) }
+                driver.deckNeedle(deck: entries[index].facts.deck, needle)
+                if index == front { driver.needle(needle) }
             }
             let period = 1 / Self.liveRate
             let next = (nextLiveDue ?? clock.now) + period
@@ -259,19 +278,24 @@ final class JogDisplayController {
     func observe(_ entries: [Entry]) {
         for (index, entry) in entries.enumerated() {
             let facts = entry.facts
-            if lastPlaying[index] == true, !facts.playing { needles[index]?.freeze(at: clock.now) }
+            if lastPlaying[index] == true, !facts.playing {
+                needles[index]?.freeze(at: clock.now)
+                // The master deck stopped: so did the master clock, at once (#720, as the panel's #660). Another
+                // deck's pause says nothing about it.
+                if facts.master { beatClock.stop() }
+            }
             lastPlaying[index] = facts.playing
             if let ramp = facts.barRamp, ramp != lastRamp[index] {
                 lastRamp[index] = ramp
                 let bpm = facts.playing ? facts.bpm ?? masterBPM ?? 120 : 0
-                needles[index, default: JogMarker()].ramp(ramp.phase, bpm: bpm, at: ramp.at)
+                needles[index, default: JogNeedle()].ramp(ramp.phase, bpm: bpm, at: ramp.at)
             }
         }
     }
 
     /// An entry's needle as pitch bend at `time`.
     func needle(_ index: Int, at time: Double) -> Int {
-        (needles[index] ?? JogMarker()).pitchBend(at: time)
+        (needles[index] ?? JogNeedle()).pitchBend(at: time)
     }
 
     /// What the controller knows of one controller entry, in the Coordinator's order.

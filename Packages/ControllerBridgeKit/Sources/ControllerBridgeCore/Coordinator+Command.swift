@@ -29,6 +29,9 @@ extension Coordinator {
         case setDisplayFirmware(DisplayFirmware)
         /// Settings' Key display (#590): the key as Syndicate sends it, or as Camelot codes.
         case setKeyDisplay(KeyNotation)
+        /// How early the jog display's beat goes, in seconds (#720): a hidden default (jogDisplayBeatLeadMs), no
+        /// Settings control until it's tuned.
+        case setJogBeatLead(Double)
         /// The deck the jog display preview follows with no controller connected (#221); nil, the first loaded.
         case setJogPreviewDeck(Int?)
         /// Settings' display feed (#616): on/off, host and port.
@@ -77,7 +80,7 @@ extension Coordinator {
             // The preview's deck (#221) holds for the real controller and the demo alike.
             case .setJogPreviewDeck: .realAndDemo
             case .setDeck, .setDevices, .setLEDs, .setDeckColors, .setRingColors, .setColorMessages, .setStripFader, .setLightBrightness, .resync, .setControllers, .setProfiles,
-                 .setProfileChoices, .setJogDisplay, .setDisplayFirmware, .setKeyDisplay, .setDisplayFeed:
+                 .setProfileChoices, .setJogDisplay, .setDisplayFirmware, .setKeyDisplay, .setDisplayFeed, .setJogBeatLead:
                 .waitsForDemo
             }
         }
@@ -103,6 +106,7 @@ extension Coordinator {
         case .setDisplayFirmware(let firmware): setDisplayFirmware(firmware)
         case .setKeyDisplay(let notation): setKeyDisplay(notation)
         case .setJogPreviewDeck(let deck): setJogPreviewDeck(deck)
+        case .setJogBeatLead(let seconds): setJogBeatLead(seconds)
         case .setDisplayFeed(let settings): setDisplayFeed(settings)
         case .displayFeedReady: displayFeedReady()
         case .cableFeedReady: cableFeedReady()
