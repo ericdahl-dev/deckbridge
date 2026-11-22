@@ -137,4 +137,57 @@ struct BeatClockTests {
         let shown = try #require(Self.firstShows(clock, 2, from: 4600, to: 5400))
         #expect(abs(shown - 5069) <= 3)
     }
+
+    @Test("With the master clock's BPM, one edge is enough: the next is due a beat length on")
+    func bpmOneEdge() {
+        var clock = BeatClock()
+        clock.setTempo(128)
+        clock.edge(1, at: Self.ms(1000))
+        #expect(clock.beat(at: Self.ms(1468)) == 1)
+        #expect(clock.beat(at: Self.ms(1469)) == 2)
+    }
+
+    @Test("The BPM gives the beat length: jittered edges move only the beat's place")
+    func bpmJitterKeepsLength() throws {
+        var clock = BeatClock()
+        clock.setTempo(128)
+        let jitter = [0, 9, 9, 9, 9, 9, 9, 9]  // late every time but the first
+        for k in 0..<8 { clock.edge(Self.beat(k), at: Self.ms((1000 + Double(k) * 468.75 + Double(jitter[k])).rounded())) }
+        let shown = try #require(Self.firstShows(clock, Self.beat(8), from: 4400, to: 5000))
+        #expect(abs(shown - 4759) <= 4)
+    }
+
+    @Test("A tempo change on the master applies at once: the next beat is due at the new length")
+    func bpmChangeAtOnce() throws {
+        var clock = Self.locked()  // 128 BPM from the edges; the last, beat 4, at 4281
+        clock.setTempo(120)        // 500 ms
+        let shown = try #require(Self.firstShows(clock, 1, from: 4281, to: 5000))
+        #expect(abs(shown - 4781) <= 2)
+    }
+
+    @Test("BPM 0 is none: the edges give the beat length again")
+    func bpm0LeavesItToEdges() {
+        var clock = BeatClock()
+        clock.setTempo(0)
+        clock.edge(1, at: Self.ms(1000))
+        #expect(clock.beat(at: Self.ms(1600)) == 1)  // one edge, no length
+        clock.edge(2, at: Self.ms(1469))
+        #expect(clock.beat(at: Self.ms(1938)) == 3)
+    }
+
+    @Test("The BPM just after the first edge times that beat too")
+    func bpmJustAfterFirstEdge() {
+        var clock = BeatClock()
+        clock.edge(1, at: Self.ms(1000))
+        clock.setTempo(128)
+        #expect(clock.beat(at: Self.ms(1469)) == 2)
+    }
+
+    @Test("Stopped, a BPM doesn't start the clock again: only beats do")
+    func bpmAfterStopDoesntRestart() {
+        var clock = Self.locked()
+        clock.stop()
+        clock.setTempo(120)
+        #expect(clock.beat(at: Self.ms(6000)) == 4)
+    }
 }

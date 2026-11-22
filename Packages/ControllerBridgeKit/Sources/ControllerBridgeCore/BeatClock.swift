@@ -30,6 +30,10 @@ struct BeatClock {
     /// The first edge of this run of beats in a row, and how many beats in a row since.
     private var firstAt = 0.0
     private var edges = 0
+    /// A beat's length from the master clock's BPM; 0 for none.
+    private var tempo = 0.0
+    /// stop() since the last edge: nothing ahead until beats come again.
+    private var stopped = false
 
     /// Syndicate's beat arrived at `at`: a new value is an edge; the same again is none.
     mutating func edge(_ beat: Int, at: Double) {
@@ -39,6 +43,7 @@ struct BeatClock {
             return
         }
         guard beat != self.beat else { return }
+        stopped = false
         let sinceLast = at - edgeAt
         // Too long since the last for one beat: a gap (the master stopped, or the feedback went quiet), not a length.
         let gap = sinceLast > (period > 0 ? Self.gapBeats * period : Self.longestBeat)
@@ -51,7 +56,7 @@ struct BeatClock {
             edgeAt = at
             firstAt = at
             edges = 0
-            period = 0
+            period = tempo  // known from the BPM, or 0 until the next edge
             return
         }
         self.beat = beat
@@ -66,11 +71,28 @@ struct BeatClock {
         }
         let error = min(max(sinceLast - period, -Self.maxError), Self.maxError)
         edgeAt += period + Self.phaseGain * error
-        if edges <= Self.averagedEdges {
+        if tempo > 0 {
+            period = tempo  // the BPM's, never the edges'
+        } else if edges <= Self.averagedEdges {
             period = (at - firstAt) / Double(edges)
         } else {
             period += Self.tempoGain * error
         }
+    }
+
+    /// The master clock's BPM (Syndicate's header BPM): with it, a beat's length is known from the first edge and only
+    /// the beat's place is locked; a change applies at once. 0 (or out of range) is none: the edges give it.
+    mutating func setTempo(_ bpm: Double) {
+        let length = bpm > 0 ? 60 / bpm : 0
+        tempo = length >= Self.shortestBeat && length <= Self.longestBeat ? length : 0
+        // A beat heard and not stopped: the new length from now, the first edge's too. Stopped, the next edge takes it.
+        if tempo > 0, beat != 0, !stopped { period = tempo }
+    }
+
+    /// The master stopped: show the beat heard, nothing ahead, until beats come again.
+    mutating func stop() {
+        period = 0
+        stopped = true
     }
 
     /// The beat as heard, from now; the tempo holds, and from here on only the lock moves it.
