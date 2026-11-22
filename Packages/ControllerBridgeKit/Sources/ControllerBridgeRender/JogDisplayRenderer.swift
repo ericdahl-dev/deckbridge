@@ -18,11 +18,11 @@ public enum JogDisplayRenderer {
     /// RGBA bytes, row by row, top first, upright: what `JogImage.forUnit` turns and encodes. `litBeat` (1–4) lights
     /// that beat's section; `marker` draws the marker that many turns clockwise from 12 o'clock.
     /// `phase` is the deck's offset from the master's beat in 1/16384 beats (#462), as op 0B carries it; nil is unknown.
-    public static func render(_ content: JogDisplayContent, litBeat: Int? = nil, marker: Double? = nil,
+    public static func render(_ content: JogDisplayContent, litBeat: Int? = nil, needle: Double? = nil,
                               meter: (level: Int, peak: Int)? = nil, phase: Int? = nil,
                               time: (elapsed: Int, length: Int)? = nil, look: JogTrackTime.Look = .normal) -> [UInt8] {
         drawing { context in
-            frame(content, litBeat: litBeat, marker: marker, meter: meter, phase: phase, time: time, look: look,
+            frame(content, litBeat: litBeat, needle: needle, meter: meter, phase: phase, time: time, look: look,
                   drawn: false, in: context)
         }
     }
@@ -36,7 +36,7 @@ public enum JogDisplayRenderer {
             context.setFillColor(rgb(0x000000))
             context.fill(CGRect(x: 0, y: 0, width: drawnSize, height: drawnSize))
             context.translateBy(x: inset, y: inset)
-            frame(content, litBeat: live.beat, marker: live.needle.map { Double($0) / 16384 },
+            frame(content, litBeat: live.beat, needle: live.needle.map { Double($0) / 16384 },
                   meter: live.meter.map { ($0.level, $0.peak) }, phase: live.phase,
                   time: live.time.map { ($0.elapsed, $0.length) }, look: live.look, drawn: true, in: context)
             // The band outside the frame (#524): the progress ring, in the frame's coordinates.
@@ -47,7 +47,7 @@ public enum JogDisplayRenderer {
     }
 
     /// The 198 frame and its live parts, in the frame's own coordinates.
-    private static func frame(_ content: JogDisplayContent, litBeat: Int?, marker: Double?, meter: (level: Int, peak: Int)?,
+    private static func frame(_ content: JogDisplayContent, litBeat: Int?, needle: Double?, meter: (level: Int, peak: Int)?,
                               phase: Int?, time: (elapsed: Int, length: Int)?, look: JogTrackTime.Look,
                               drawn: Bool, in context: CGContext) {
         let layout = drawn ? Layout.drawn : Layout.image
@@ -57,7 +57,7 @@ public enum JogDisplayRenderer {
             drawTime(elapsed: time.elapsed, length: time.length, look: look, deck: content.color, layout: layout,
                      in: context)
         }
-        if let marker { drawMarker(turns: marker, in: context) }
+        if let needle { drawNeedle(turns: needle, in: context) }
     }
 
     /// RGBA rows of a `size`×`size` image, drawn with a top-left origin and y down, as the rows are stored and the
@@ -132,10 +132,10 @@ public enum JogDisplayRenderer {
     /// draw over it. With neither, it is the upload's exactly (a test pins it).
     /// `meter` is the front deck's mixer level and held peak, 0–127 each (#461), as the drawn display shows them.
     /// `phase` is the deck's offset from the master's beat (#462), in 1/16384 beats as op 0B carries it; nil is unknown.
-    public static func simulatorImage(_ content: JogDisplayContent, litBeat: Int?, marker: Double?,
+    public static func simulatorImage(_ content: JogDisplayContent, litBeat: Int?, needle: Double?,
                                       meter: (level: Int, peak: Int)? = nil, phase: Int? = nil,
                                       time: (elapsed: Int, length: Int)? = nil, look: JogTrackTime.Look = .normal) -> [UInt8] {
-        render(content, litBeat: litBeat, marker: marker, meter: meter, phase: phase, time: time, look: look)
+        render(content, litBeat: litBeat, needle: needle, meter: meter, phase: phase, time: time, look: look)
     }
 
     /// The Geist faces the design uses, bundled with this target (#221) so the image is the same in the app and under
@@ -388,7 +388,7 @@ public enum JogDisplayRenderer {
     }
 
     /// The marker: a white wedge with a black keyline riding the ring's edge, pointing in.
-    private static func drawMarker(turns: Double, in context: CGContext) {
+    private static func drawNeedle(turns: Double, in context: CGContext) {
         let degrees = turns.truncatingRemainder(dividingBy: 1) * 360
         func point(_ radius: CGFloat, _ deg: Double) -> CGPoint {
             let a: Double = deg * Double.pi / 180

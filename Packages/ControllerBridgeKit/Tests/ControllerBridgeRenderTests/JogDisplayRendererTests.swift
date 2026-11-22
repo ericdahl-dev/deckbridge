@@ -27,15 +27,15 @@ struct JogDisplayRendererTests {
     @Test("The simulator, with no lit beat or marker, shows exactly the image prepared for the upload, before its turn")
     func simulatorIsTheUpload() {
         for content in Self.contents {
-            #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, marker: nil) == JogDisplayRenderer.uploadImage(content))
+            #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: nil) == JogDisplayRenderer.uploadImage(content))
         }
     }
 
     @Test("The simulator's lit beat and marker draw over that image: with them it differs, so they really show")
     func simulatorOverlays() {
         let content = Self.contents[1]
-        #expect(JogDisplayRenderer.simulatorImage(content, litBeat: 2, marker: nil) != JogDisplayRenderer.uploadImage(content))
-        #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, marker: 0.25) != JogDisplayRenderer.uploadImage(content))
+        #expect(JogDisplayRenderer.simulatorImage(content, litBeat: 2, needle: nil) != JogDisplayRenderer.uploadImage(content))
+        #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: 0.25) != JogDisplayRenderer.uploadImage(content))
     }
 
     @Test("Each beat slot's upload (#215) is the simulator's image for that beat, without the marker; the four differ")
@@ -43,7 +43,7 @@ struct JogDisplayRendererTests {
         let content = Self.contents[1]
         let images = (1...4).map { JogDisplayRenderer.uploadImage(content, litBeat: $0) }
         for beat in 1...4 {
-            #expect(images[beat - 1] == JogDisplayRenderer.simulatorImage(content, litBeat: beat, marker: nil))
+            #expect(images[beat - 1] == JogDisplayRenderer.simulatorImage(content, litBeat: beat, needle: nil))
         }
         #expect(Set(images).count == 4)
     }
@@ -83,7 +83,7 @@ struct JogDisplayRendererTests {
     /// arc, (17, 98) at half, (24, 65) at nine tenths, (19, 81) at peak 90's place (282.5°).
     static func meterImage(level: Int, peak: Int, stale: Bool = false) -> [UInt8] {
         JogDisplayRenderer.simulatorImage(JogDisplayContent(deck: 4, color: [0, 128, 255], stale: stale), litBeat: nil,
-                                          marker: nil, meter: (level: level, peak: peak))
+                                          needle: nil, meter: (level: level, peak: peak))
     }
 
     static func near(_ pixel: [UInt8], _ rgb: UInt32, by tolerance: Int = 24) -> Bool {
@@ -127,7 +127,7 @@ struct JogDisplayRendererTests {
     /// The phase rule (#462), the user's pick: the rule under the artist (x 50–147, y 127–128, centered on x 99) shows
     /// the deck's phase against the master, in 1/16384 beats as op 0B carries it.
     static func phaseImage(_ phase: Int?) -> [UInt8] {
-        JogDisplayRenderer.simulatorImage(JogDisplayContent(deck: 4, color: [0, 128, 255]), litBeat: nil, marker: nil,
+        JogDisplayRenderer.simulatorImage(JogDisplayContent(deck: 4, color: [0, 128, 255]), litBeat: nil, needle: nil,
                                           phase: phase)
     }
 

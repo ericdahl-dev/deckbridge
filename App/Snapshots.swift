@@ -189,8 +189,8 @@ enum Snapshots {
             // As the simulator would show the unit: beat 2 lit and the marker at 126°.
             ("deck4-beat2-marker-simulated", ten, 2, 126.0 / 360),
         ]
-        for (name, content, beat, marker) in cases {
-            let rgba = JogDisplayRenderer.render(content, litBeat: beat, marker: marker)
+        for (name, content, beat, needle) in cases {
+            let rgba = JogDisplayRenderer.render(content, litBeat: beat, needle: needle)
             let png = JogImage.png(rgba: rgba, width: JogImage.size, height: JogImage.size)
             do { try Data(png).write(to: URL(fileURLWithPath: "\(directory)/jog-display-\(name).png")) } catch { print("Couldn't write: \(error)") }
         }

@@ -167,7 +167,7 @@ private struct JogDeckPreview: View, Equatable {
     let onUnit: Bool
     let card: String
     let litBeat: Int?
-    let marker: Double
+    let needle: Double
     let playing: Bool
     /// The drawn layout's inputs while the jog display would draw (#465); nil for today's image preview.
     let drawn: DrawnPreviewImage?
@@ -179,7 +179,7 @@ private struct JogDeckPreview: View, Equatable {
         onUnit = sim.onUnit(deck: deck)
         card = sim.card(deck: deck)
         litBeat = sim.litBeat(deck: deck)
-        marker = sim.needleTurns(deck: deck)
+        needle = sim.needleTurns(deck: deck)
         playing = sim.playing(deck: deck)
     }
 
@@ -195,7 +195,7 @@ private struct JogDeckPreview: View, Equatable {
                     .frame(width: 153, height: 153)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(Theme.hairline, lineWidth: 1))
-            } else if let image = Self.image(JogDisplayRenderer.simulatorImage(content, litBeat: litBeat, marker: marker)) {
+            } else if let image = Self.image(JogDisplayRenderer.simulatorImage(content, litBeat: litBeat, needle: needle)) {
                 Image(decorative: image, scale: 1)
                     .interpolation(.high)
                     .resizable()
