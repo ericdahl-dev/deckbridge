@@ -57,14 +57,33 @@ void test_lag_counts_from_the_newest_arrival_before_the_read() {
     TEST_ASSERT_EQUAL_UINT32(20200, ledger.take().lag_worst_us);
 }
 
-void test_a_vsync_between_arrival_and_read_marks_the_frame_skipped() {
+// Under the frame clock (#663) every datagram waits for a latch: the one that wakes the frame that reads it. Arrival
+// is stamped where it happens (#664), so the ledger may hear of it after that latch: it goes by the latches' times.
+void test_arrival_right_before_the_waking_latch_and_read_after_it_is_not_skipped() {
     frame_ledger::Ledger ledger;
-    ledger.arrived(500);
-    ledger.vsync(3000);  // the datagram sat on the socket across a boundary
-    ledger.read(4000);
-    ledger.swapped(9000);
-    ledger.vsync(21000);
-    ledger.on_glass(21000);
+    ledger.vsync(0);
+    ledger.vsync(33000);   // the waking latch
+    ledger.arrived(32000); // heard of after it, arrived just before it
+    ledger.read(34000);
+    ledger.swapped(40000);
+    ledger.vsync(66000);
+    ledger.on_glass(66000);
+    const frame_ledger::Report r = ledger.take();
+    TEST_ASSERT_EQUAL_UINT32(1, r.frames);
+    TEST_ASSERT_EQUAL_UINT32(0, r.skipped);
+    TEST_ASSERT_EQUAL_UINT32(34000, r.lag_worst_us);
+}
+
+void test_arrival_before_the_previous_latch_is_skipped() {
+    frame_ledger::Ledger ledger;
+    ledger.vsync(0);
+    ledger.vsync(33000);   // a frame that could have taken it
+    ledger.vsync(66000);   // the waking latch
+    ledger.arrived(20000);
+    ledger.read(67000);
+    ledger.swapped(70000);
+    ledger.vsync(99000);
+    ledger.on_glass(99000);
     TEST_ASSERT_EQUAL_UINT32(1, ledger.take().skipped);
 }
 
@@ -120,15 +139,34 @@ void test_a_window_with_more_frames_than_the_store_still_counts_them_all_and_its
     TEST_ASSERT_EQUAL_UINT32(20000, r.lag_typical_us);
 }
 
+// Two arrivals read together: the older one waited across a frame that could have taken it, so the frame is skipped
+// even though the newer one came just in time. Lag still counts from the newest (#662).
+void test_the_oldest_arrival_since_the_last_read_decides_the_skip() {
+    frame_ledger::Ledger ledger;
+    ledger.arrived(20000);  // before the latch at 33000
+    ledger.vsync(33000);
+    ledger.vsync(66000);    // the waking latch
+    ledger.arrived(65000);
+    ledger.read(67000);
+    ledger.swapped(70000);
+    ledger.vsync(99000);
+    ledger.on_glass(99000);
+    const frame_ledger::Report r = ledger.take();
+    TEST_ASSERT_EQUAL_UINT32(1, r.skipped);
+    TEST_ASSERT_EQUAL_UINT32(34000, r.lag_worst_us);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_a_read_swapped_and_shown_at_the_next_vsync_is_one_frame_with_its_lag);
     RUN_TEST(test_a_read_after_the_swap_is_not_in_that_frame_but_the_next);
     RUN_TEST(test_a_vsync_that_passes_before_the_read_is_handed_over_marks_its_frame_skipped);
     RUN_TEST(test_lag_counts_from_the_newest_arrival_before_the_read);
-    RUN_TEST(test_a_vsync_between_arrival_and_read_marks_the_frame_skipped);
+    RUN_TEST(test_arrival_right_before_the_waking_latch_and_read_after_it_is_not_skipped);
+    RUN_TEST(test_arrival_before_the_previous_latch_is_skipped);
     RUN_TEST(test_the_typical_lag_is_the_median_of_the_window_and_take_starts_a_new_one);
     RUN_TEST(test_a_read_whose_refresh_drew_nothing_is_no_frame_and_not_a_skip);
     RUN_TEST(test_a_window_with_more_frames_than_the_store_still_counts_them_all_and_its_worst);
+    RUN_TEST(test_the_oldest_arrival_since_the_last_read_decides_the_skip);
     return UNITY_END();
 }

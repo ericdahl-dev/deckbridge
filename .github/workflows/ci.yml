@@ -102,6 +102,8 @@ jobs:
           pio run -d tools/deck-panel -e crowpanel
           pio run -d tools/deck-panel -e crowpanel-test
           pio run -d tools/deck-panel -e crowpanel-perf
+          # The receive task, off by default (#664, PR #713): built so it keeps compiling.
+          pio run -d tools/deck-panel -e crowpanel-perf-rx-task
 
   display-firmware:
     name: Display firmware

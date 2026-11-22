@@ -23,12 +23,12 @@ struct Screen {
     virtual void show_deck(const Face& face, const Changes& changes) = 0;
 };
 
-/// Not thread-safe: feed() and render() must run on one task. On the board, the UDP task copies each payload into a
-/// fixed-size queue item (dropped if the queue is full) and the loop task drains the queue into feed(), then calls
-/// render() every frame. No heap, no exceptions, no RTTI.
 /// Where a datagram came from: Wi-Fi's UDP, or the USB cable (#667), which needs no Wi-Fi.
 enum class Source { wifi, cable };
 
+/// Not thread-safe: feed() and render() must run on one task, the loop's. The receive side stamps each datagram as it
+/// arrives into feed_intake's fixed queue (dropped and counted when it's full); each frame, the loop drains it into
+/// feed(), each datagram at its arrival time, then calls render(). No heap, no exceptions, no RTTI.
 class DeckCore {
 public:
     DeckCore() = default;

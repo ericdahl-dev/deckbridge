@@ -13,10 +13,11 @@ namespace perf_log {
 void begin();
 
 // Every frame, in the chores (#673), after the frame's render and refresh: `datagrams` read by this frame's drain,
-// `too_big` the drain's running count. Prints the line when a 5 s window is up and `may_print` (the frame has time
+// `too_big` and `dropped` the intake's running counts (#664: too big for a slot, and the intake full). Prints the line when a 5 s window is up and `may_print` (the frame has time
 // left), else at a later frame; `clock`'s report goes in it. The print goes into Serial's TX buffer, so it costs the
 // loop only the formatting while the buffer has room; the ledger can't see that time.
-void tick(uint32_t now_ms, int datagrams, uint32_t too_big, bool may_print, frame_clock::Clock& clock);
+void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bool may_print,
+          frame_clock::Clock& clock);
 
 #ifdef PANEL_PERF_LOG
 // The frame ledger's hooks (#662), perf build only, all on the loop's task (LVGL's too); times are esp_timer
