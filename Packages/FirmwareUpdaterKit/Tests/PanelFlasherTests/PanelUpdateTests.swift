@@ -21,7 +21,7 @@ final class Plugged: USBDevices, MIDIPorts, PanelSerial, LogSink, @unchecked Sen
     var bootLine = "deck panel: boot, build 1d0683f, version 1.1.0"
     func devices() async -> [USBDevice] { [USBDevice(vendor: 0x1A86, product: 0x7522, name: "USB Serial", serialPort: "/dev/cu.panel")] }
     func names() async -> [String] { [] }
-    func listen(on port: String, baud: Int, for seconds: Double) async -> Listened { .lines([bootLine]) }
+    func listen(on port: String, baud: Int, for seconds: Double, asking question: String?) async -> Listened { .lines([bootLine]) }
     func log(_ line: String) {}
 }
 

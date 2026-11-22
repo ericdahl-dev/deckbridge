@@ -55,6 +55,7 @@ public struct UpdaterScreen: Sendable, Equatable {
                 panelUpdate: PanelUpdateOffer? = nil) {
         self.update = update
         self.panelUpdate = panelUpdate
+        firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
         switch found.panel {
         case nil: panel = DeviceSection(status: "Nothing connected")
         case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
@@ -62,7 +63,8 @@ public struct UpdaterScreen: Sendable, Equatable {
                                                     guide: .ch34x)
         case .onSerial(let build?):
             let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
-            panel = DeviceSection(status: "Deck panel found", detail: "Build \(build.sha)\(development)")
+            let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"
+            panel = DeviceSection(status: "Deck panel found", detail: shown + development)
         case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: Self.portBusy)
         case .onSerial(nil):
             panel = DeviceSection(status: "Deck panel found",
@@ -83,4 +85,24 @@ public struct UpdaterScreen: Sendable, Equatable {
     public let update: String?
     /// The update offered for the panel over its cable (#687); nil when there's none.
     public let panelUpdate: PanelUpdateOffer?
+
+    /// The log's first look (#734): what each section found, in status words only, never a build, serial number or
+    /// port, so the launch smoke check can match it exactly. The LC6000's words don't wait for its warning.
+    public let firstLookLine: String
+
+    static func firstLook(_ found: Found, panelWaiting: Bool) -> String {
+        let panel = switch found.panel {
+        case nil: "not found"
+        case .driverMissing where panelWaiting: "found (waiting for its port)"
+        case .driverMissing: "found (driver missing)"
+        case .portBusy: "found (port busy)"
+        case .onSerial(let build): build == nil ? "found (build not read)" : "found (build read)"
+        }
+        let lc6000 = switch found.lc6000 {
+        case nil: "not found"
+        case .onMIDI: "found"
+        case .updateMode: "in update mode"
+        }
+        return "first look: deck panel \(panel), LC6000 \(lc6000)"
+    }
 }

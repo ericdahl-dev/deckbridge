@@ -41,12 +41,19 @@ public struct DeviceFinder: Sendable {
     static let lc6000Ports = "LC6000 PRIME"
     /// ST's ROM DFU bootloader.
     static let stBootloader = (vendor: UInt16(0x0483), product: UInt16(0xDF11))
-    /// The panel's serial speeds, tried in turn: 921600 since #667, then 115200 for a panel flashed before it.
+    /// The panel's serial speeds, tried in turn: 921600 (#667, with #711's board wiring), then 115200 (today's firmware).
     public static let panelBauds = [921_600, 115_200]
 
     /// How long the finder listens to a panel's serial port for its boot line, at each speed.
     public static let listenSeconds = 3.0
     static let bootLine = "deck panel: boot, build "
+    /// #702's answer to the version question: the boot line's words without "boot, ".
+    static let answerLine = "deck panel: build "
+    /// The version question (#695, #702): a whole line, answered without a reboot. Asked once at each speed: today's
+    /// firmware answers at 115200, a panel with #711's wiring at 921600 (cos, checked on a #702 panel).
+    /// It starts with a newline: a question at the panel's other speed lands in its console's line buffer as junk, and
+    /// without one the next question reads "<junk>version" and goes unanswered (the owner run, #726).
+    public static let versionQuestion = "\nversion\n"
     public static let dirty = "-dirty"
 
     let usb: any USBDevices
@@ -80,7 +87,7 @@ public struct DeviceFinder: Sendable {
                 var build: PanelBuild?
                 var busy = false
                 for baud in Self.panelBauds where build == nil && !busy {
-                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds) {
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: Self.versionQuestion) {
                     case .lines(let lines): build = Self.build(in: lines)
                     case .busy: busy = true
                     }
@@ -90,7 +97,7 @@ public struct DeviceFinder: Sendable {
                     log.log("deck panel: on USB \(usbID), serial port busy (another app has it)")
                 } else {
                     found.panel = .onSerial(build: build)
-                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" } ?? "build not read"))
+                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" + ($0.version.map { ", version \($0.description)" } ?? "") } ?? "build not read"))
                 }
             } else {
                 found.panel = .driverMissing
@@ -117,8 +124,9 @@ public struct DeviceFinder: Sendable {
     /// Reads "deck panel: boot, build <sha>" and #695's "deck panel: boot, build <sha>, version <v>[ local]".
     /// A local or development ("-dirty") build gives no version, so its SHA decides.
     static func build(in lines: [String]) -> PanelBuild? {
-        for line in lines where line.hasPrefix(bootLine) {
-            let tail = line.dropFirst(bootLine.count)
+        for line in lines {
+            guard let prefix = [bootLine, answerLine].first(where: line.hasPrefix) else { continue }
+            let tail = line.dropFirst(prefix.count)
             let parts = tail.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
             let printed = parts[0]
             let sha = printed.hasSuffix(dirty) ? printed.dropLast(dirty.count) : printed

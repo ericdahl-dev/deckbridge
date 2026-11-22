@@ -36,9 +36,11 @@ targets:
       - package: FirmwareUpdaterKit
         product: PanelFlasher
       - package: FirmwareUpdaterKit
-        product: PortHandoff
+        product: UnitCheck
       - package: FirmwareUpdaterKit
         product: FirmwareCatalog
+      - package: FirmwareUpdaterKit
+        product: PortHandoff
     info:
       path: Sources/Info.plist
       properties:

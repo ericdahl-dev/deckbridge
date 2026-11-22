@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "DeviceFinder", targets: ["DeviceFinder"]),
         .library(name: "UpdaterScreen", targets: ["UpdaterScreen"]),
         .library(name: "PanelFlasher", targets: ["PanelFlasher"]),
+        .library(name: "UnitCheck", targets: ["UnitCheck"]),
         .library(name: "FirmwareRelease", targets: ["FirmwareRelease"]),
         .library(name: "PortHandoff", targets: ["PortHandoff"]),
         .executable(name: "firmware-release", targets: ["firmware-release"]),
@@ -41,9 +42,13 @@ let package = Package(
         .target(name: "PortHandoff"),
         .testTarget(name: "PortHandoffTests", dependencies: ["PortHandoff"]),
         .testTarget(name: "UpdaterScreenTests", dependencies: ["UpdaterScreen", "DeviceFinder", "FirmwareModel", "PortHandoff", "PanelFlasher", "FirmwareCatalog"]),
-        // Flashing a deck panel over its USB cable (#687): the ESP32-S3 ROM's serial bootloader protocol, spoken over a
+                // Flashing a deck panel over its USB cable (#687): the ESP32-S3 ROM's serial bootloader protocol, spoken over a
         // line the app opens. Tested against a fake bootloader; the real port is the app's adapter.
         .target(name: "PanelFlasher", dependencies: ["DeviceFinder", "FirmwareModel"]),
         .testTarget(name: "PanelFlasherTests", dependencies: ["PanelFlasher", "DeviceFinder", "FirmwareModel"]),
+        // The LC6000 unit check and backup (#692): reads a chip in ST's update mode (DFU) and writes nothing to it. A
+        // port of tools/lc6000-firmware's read-only steps (flash-day.sh, dfupatch.py, drawn_plan.py), the reference.
+        .target(name: "UnitCheck", dependencies: ["FirmwareModel", "DeviceFinder"]),
+        .testTarget(name: "UnitCheckTests", dependencies: ["UnitCheck", "FirmwareModel", "DeviceFinder"]),
     ]
 )

@@ -1,5 +1,5 @@
-/// The ports the device finder looks through (#685). Each only reads: none has a way to send to a device, so finding
-/// can't write. The app's adapters are IOKit, CoreMIDI and a serial port opened with DTR and RTS held off.
+/// The ports the device finder looks through (#685). Each only reads, but for one question to our own deck panel: the
+/// text line "version" (#715). The app's adapters are IOKit, CoreMIDI and a serial port opened with DTR and RTS held off.
 
 /// A USB device on the Mac, as the finder needs it. No serial number: it is never read.
 public struct USBDevice: Sendable, Hashable {
@@ -34,11 +34,11 @@ public enum Listened: Sendable, Equatable {
     case busy
 }
 
-/// A panel's serial lines. Listening only: the port opens with DTR and RTS held off, so the panel isn't reset, and
-/// nothing is written to it. A later ticket may add a version question here (#695).
+/// A panel's serial lines. The port opens with DTR and RTS held off, so the panel isn't reset. The only thing ever
+/// written is the finder's `question`.
 public protocol PanelSerial: Sendable {
-    /// The lines the panel printed on `port` at `baud` within `seconds`.
-    func listen(on port: String, baud: Int, for seconds: Double) async -> Listened
+    /// The lines the panel printed on `port` at `baud` within `seconds`, after `question` (if any) was written.
+    func listen(on port: String, baud: Int, for seconds: Double, asking question: String?) async -> Listened
 }
 
 /// Where the finder writes what it found: a file the owner can send.
