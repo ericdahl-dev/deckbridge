@@ -146,6 +146,24 @@ public final class RollingLogFile: @unchecked Sendable {
     }
 }
 
+/// The trace file's writer (#395, #653): lines go to the file on its own queue, so the caller never waits on the disk;
+/// `flush()` waits until every line so far is in the file, so a quit leaves the trace's last line trustworthy.
+public final class TraceWriter: @unchecked Sendable {
+    private let file: RollingLogFile
+    private let queue = DispatchQueue(label: "dev.ericdahl.ControllerBridge.trace")
+
+    public init(_ file: RollingLogFile) { self.file = file }
+
+    public func append(_ line: String) {
+        queue.async { self.file.append(line) }
+    }
+
+    /// Runs `work` on the writer's queue, in order with the lines.
+    public func async(_ work: @escaping @Sendable () -> Void) { queue.async(execute: work) }
+
+    public func flush() { queue.sync {} }
+}
+
 /// A LogSink that also writes each line to the trace, as a coordinator line (#395): connects, ports, problems.
 struct TracingLog: LogSink {
     let base: any LogSink

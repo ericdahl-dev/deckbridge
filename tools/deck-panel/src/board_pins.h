@@ -71,9 +71,8 @@ constexpr int LCD_HEIGHT = 480;
 // their three driver files. This single fact reconciles most of the
 // contradictory advice in circulation.
 //
-// -DPANEL_PCLK_HZ=<Hz> overrides it, to try a lower clock against display glitches (phrasedeck #170): the
-// scan-out reads the framebuffer from PSRAM at 2 bytes a pixel, so 16 MHz needs 32 MB/s and 14 MHz
-// 28 MB/s. A frame is 820 x 500 clocks with these porches, so 16 MHz is 39 Hz and 14 MHz 34 Hz.
+// -DPANEL_PCLK_HZ=<Hz> overrides it (phrasedeck #170, #635): 2 bytes a pixel, so 16 MHz reads 32 MB/s out of PSRAM
+// and 12.3 MHz 24.6 MB/s. A frame is 820 x 500 clocks with these porches: 16 MHz is 39 Hz, 14 MHz 34 Hz, 12.3 30 Hz.
 #if defined(PANEL_PCLK_HZ)
 constexpr uint32_t LCD_PCLK_HZ = PANEL_PCLK_HZ;
 // The floor is 30 Hz (820 x 500 x 30); below it the panel flickers. The ceiling is what Elecrow
@@ -81,7 +80,12 @@ constexpr uint32_t LCD_PCLK_HZ = PANEL_PCLK_HZ;
 static_assert(LCD_PCLK_HZ >= 12300000 && LCD_PCLK_HZ <= 16000000,
               "PANEL_PCLK_HZ: 12.3 to 16 MHz (30 to 39 Hz refresh)");
 #elif CROWPANEL_ADVANCE_REV >= 130
-constexpr uint32_t LCD_PCLK_HZ = 16000000;
+// 12.3 MHz, 30 Hz, not Elecrow's 16 (#635). With two framebuffers the panel is fed through bounce buffers: an
+// interrupt copies each next 10 lines (16 KB) out of PSRAM while the DMA sends the other 10. At 16 MHz a chunk goes
+// out in 512.5 us (10 x 820 clocks) and the copy didn't keep up: the owner saw a stale end on every 10th row, from
+// 20 rows back. At 12.3 MHz a chunk takes 666.7 us, 30% more, and the panel was clean, still and playing (#635).
+// 14 MHz (585.7 us) is untried: the perf build's copy margin says whether it would hold.
+constexpr uint32_t LCD_PCLK_HZ = 12300000;
 #else
 constexpr uint32_t LCD_PCLK_HZ = 21000000;
 #endif
@@ -98,7 +102,8 @@ constexpr int LCD_VSYNC_FRONT_PORCH = 8;
 constexpr int LCD_VSYNC_PULSE_WIDTH = 4;
 constexpr int LCD_VSYNC_BACK_PORCH  = 8;
 
-constexpr bool LCD_PCLK_IDLE_HIGH = true;
+// Elecrow's LovyanGFX driver sets pclk_idle_high = true, which in LovyanGFX picks the clock edge the data changes
+// on. Since #635 that's esp_lcd's pclk_active_neg = 1, in display_driver.cpp (PANEL_PCLK_ACTIVE_NEG).
 
 // ---------------------------------------------------------------------------
 // Backlight: NOT A GPIO.

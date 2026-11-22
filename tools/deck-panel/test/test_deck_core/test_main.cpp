@@ -8,6 +8,7 @@
 
 #include "deck_core.h"
 #include "deck_face.h"
+#include "hold_reset.h"
 #include "json_mini.h"
 #include "osc_bytes.h"
 #include "screen_stub.h"
@@ -123,17 +124,6 @@ void test_an_address_outside_the_prefix_is_ignored() {
     assert_ignored(int_message("/DeckBridge/Displayx/deck", 1));
 }
 
-void test_a_bundle_is_ignored() {
-    Bytes b;
-    put_string(b, "#bundle");
-    put_int(b, 0);
-    put_int(b, 1);
-    Bytes inner = int_message(prefix + "deck", 1);
-    put_int(b, static_cast<int32_t>(inner.size()));
-    b.insert(b.end(), inner.begin(), inner.end());
-    assert_ignored(b);
-}
-
 void test_text_that_is_not_utf8_is_ignored() {
     assert_ignored(string_message(prefix + "title", "Caf\xE9"));  // Latin-1, not UTF-8
     assert_ignored(string_message(prefix + "title", "\xC3"));  // a sequence cut short
@@ -237,7 +227,7 @@ static std::string title_shown(const std::string& title) {
     ScreenStub screen;
     feed(core, string_message(prefix + "title", title), 100);
     core.render(screen, 100);
-    return screen.last().title;
+    return core.view().title;  // the core's cut; the face then fits it to the fonts
 }
 
 static std::string artist_shown(const std::string& artist) {
@@ -245,7 +235,7 @@ static std::string artist_shown(const std::string& artist) {
     ScreenStub screen;
     feed(core, string_message(prefix + "artist", artist), 100);
     core.render(screen, 100);
-    return screen.last().artist;
+    return core.view().artist;
 }
 
 static const std::string ellipsis = "\xE2\x80\xA6";  // …
@@ -313,9 +303,17 @@ void test_each_shared_example_shows_its_deck_state() {
     for (const json_mini::Value& example : file["cases"].array) {
         ++walked;
         const char* name = example["name"].string.c_str();
+        // Each case twice: as single messages (an older DeckBridge), and as one bundle (#636); both must show it.
+      for (int as_bundle = 0; as_bundle < 2; ++as_bundle) {
         deck_core::DeckCore core;
         ScreenStub screen;
-        for (const json_mini::Value& m : example["messages"].array) feed(core, example_message(m), 100);
+        std::vector<Bytes> messages;
+        for (const json_mini::Value& m : example["messages"].array) messages.push_back(example_message(m));
+        if (as_bundle) {
+            feed(core, bundle(messages), 100);
+        } else {
+            for (const Bytes& m : messages) feed(core, m, 100);
+        }
         core.render(screen, 100);
         // A key this walker doesn't know (a later field, #617) is left for its own test.
         const json_mini::Value& state = example["state"];
@@ -324,14 +322,14 @@ void test_each_shared_example_shows_its_deck_state() {
                          static_cast<uint32_t>(rgb[2].number);
         TEST_ASSERT_FALSE_MESSAGE(screen.last().waiting, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(state["deck"].number), screen.last().deck, name);
-        TEST_ASSERT_EQUAL_HEX32_MESSAGE(color, screen.last().color, name);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(color, core.view().color, name);
         // A missing title or artist is "", as in the Swift walker.
         std::string title = state.has("title") ? state["title"].string : "";
         std::string artist = state.has("artist") ? state["artist"].string : "";
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(title.c_str(), screen.last().title.c_str(), name);
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(artist.c_str(), screen.last().artist.c_str(), name);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(title.c_str(), core.view().title, name);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(artist.c_str(), core.view().artist, name);
         // #617's fields. A state leaves out what's off or 0; phase left out is -1, unknown.
-        const deck_core::DeckView& v = screen.last().view;
+        const deck_core::DeckView& v = core.view();
         auto flag = [&](const char* key) { return state.has(key) && state[key].boolean; };
         auto number = [&](const char* key, double otherwise) { return state.has(key) ? state[key].number : otherwise; };
         TEST_ASSERT_EQUAL_MESSAGE(!state.has("loaded") || state["loaded"].boolean, v.loaded, name);
@@ -344,6 +342,7 @@ void test_each_shared_example_shows_its_deck_state() {
         TEST_ASSERT_EQUAL_MESSAGE(flag("master"), v.master, name);
         TEST_ASSERT_EQUAL_MESSAGE(flag("loop"), v.loop, name);
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("loopLength", 0)), v.loop_length, name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("clockBpm", 0)), v.clock_bpm, name);  // #674
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(number("beat", 0)), v.beat, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("elapsed", 0)), v.elapsed, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("remaining", 0)), v.remaining, name);
@@ -356,10 +355,13 @@ void test_each_shared_example_shows_its_deck_state() {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(deck_core::kNoTrack, f.title, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.elapsed, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.bpm, name);
-            TEST_ASSERT_FALSE_MESSAGE(f.phase_shown, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_bar_w, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_tick, name);
+            TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x262626, f.phase_track_color, name);
         } else {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(title.c_str(), f.title, name);
         }
+      }
     }
     TEST_ASSERT_EQUAL(file["cases"].array.size(), walked);
     TEST_ASSERT_TRUE(walked >= 3);
@@ -397,19 +399,93 @@ void test_control_characters_show_as_spaces() {
 void test_the_waiting_screen_says_why() {
     deck_core::DeckCore core;
     ScreenStub screen;
-    core.set_network(deck_core::Network::not_set, "");
+    // No saved Wi-Fi (#622): the panel's own setup network, and how to reach the page on it.
+    core.set_setup("DeckPanel-1A2B", "abcd2345");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
     core.render(screen, 0);
-    TEST_ASSERT_EQUAL_STRING("Wi-Fi isn't set", screen.last().headline.c_str());
-    TEST_ASSERT_EQUAL_STRING("Build the panel with your Wi-Fi's name and password: see its README",
+    TEST_ASSERT_EQUAL_STRING("Set up the panel's Wi-Fi", screen.last().headline.c_str());
+    TEST_ASSERT_EQUAL_STRING("Join DeckPanel-1A2B, password abcd2345, then open 192.168.4.1",
                              screen.last().detail.c_str());
     core.set_network(deck_core::Network::joining, "");
     core.render(screen, 0);
     TEST_ASSERT_EQUAL_STRING("Joining Wi-Fi…", screen.last().headline.c_str());
-    TEST_ASSERT_EQUAL_STRING("", screen.last().detail.c_str());
+    // A wrong password looks like joining forever: the way out is on the screen.
+    TEST_ASSERT_EQUAL_STRING("Hold the screen 5 s to set up Wi-Fi again", screen.last().detail.c_str());
     core.set_network(deck_core::Network::connected, "192.168.1.40");
     core.render(screen, 0);
     TEST_ASSERT_EQUAL_STRING("Waiting for DeckBridge", screen.last().headline.c_str());
     TEST_ASSERT_EQUAL_STRING("192.168.1.40  port 9100", screen.last().detail.c_str());
+}
+
+// The feed over the USB cable (#667) needs no Wi-Fi: in setup mode or joining, the cable's deck shows. Wi-Fi's feed off
+// Wi-Fi is still the waiting screen at once.
+void test_the_cables_feed_shows_the_deck_off_wifi() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_setup("DeckPanel-1A2B", "abcd2345");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    const osc_bytes::Bytes deck3 = int_message(prefix + "deck", 3);
+    core.feed(deck3.data(), deck3.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(3, screen.last().deck);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1100);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    // Quiet on the cable for the usual 3 s: waiting, as for Wi-Fi.
+    core.render(screen, 1000 + deck_core::DeckCore::kWaitAfterMs);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+}
+
+// Both feeds on (#667): Wi-Fi's datagram last when Wi-Fi drops, the cable's deck still shows; it doesn't hang on which
+// of the two came last.
+void test_with_both_feeds_losing_wifi_keeps_the_cables_deck() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.feed(deck2.data(), deck2.size(), 1010, deck_core::Source::wifi);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1020);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(2, screen.last().deck);
+}
+
+// Hold-to-reset (#622) counts only on the waiting screen, as before #667: a 5 s hold on the cable's deck while Wi-Fi is
+// joining doesn't forget the network (the owner's decision). To set up Wi-Fi, turn off the cable feed or unplug, then hold.
+void test_a_hold_on_the_cables_deck_while_joining_doesnt_reset_wifi() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    wifi_setup::HoldReset hold;
+    core.set_network(deck_core::Network::joining, "");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    bool reset = false;
+    for (uint32_t now = 1000; now <= 1000 + wifi_setup::HoldReset::kHoldMs + 500; now += 100) {
+        core.feed(deck2.data(), deck2.size(), now, deck_core::Source::cable);
+        core.render(screen, now);
+        reset = hold.update(true, core.waiting(), now) || reset;
+    }
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_FALSE(reset);
+}
+
+// The cable heard once, then Wi-Fi only for longer than the clock's signed range (24.8 days): losing Wi-Fi is still the
+// waiting screen at once, the old cable time doesn't come round as recent.
+void test_a_cable_heard_long_ago_doesnt_come_round_as_recent() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    const osc_bytes::Bytes deck2 = int_message(prefix + "deck", 2);
+    core.feed(deck2.data(), deck2.size(), 1000, deck_core::Source::cable);
+    core.render(screen, 1000);
+    core.feed(deck2.data(), deck2.size(), 5000, deck_core::Source::wifi);
+    core.render(screen, 5000);
+    const uint32_t later = 1000u + 0x80000000u + 5u;
+    core.feed(deck2.data(), deck2.size(), later, deck_core::Source::wifi);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, later);
+    TEST_ASSERT_TRUE(screen.last().waiting);
 }
 
 // Off Wi-Fi the feed can't be coming: waiting at once, not 3 s later; back on, the next message brings the deck.
@@ -433,14 +509,30 @@ void test_losing_wifi_is_the_waiting_screen_at_once() {
     TEST_ASSERT_EQUAL(2, screen.last().deck);
 }
 
+// What the last render showed, for hold-to-reset (#622): the waiting screen (joining and setup too), not the deck.
+void test_waiting_says_what_the_last_render_showed() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    TEST_ASSERT_TRUE(core.waiting());  // nothing heard yet
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    feed(core, int_message(prefix + "deck", 2), 1000);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(core.waiting());
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 1100);
+    TEST_ASSERT_TRUE(core.waiting());
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    core.render(screen, 1200);
+    TEST_ASSERT_TRUE(core.waiting());
+}
+
 // #617's fields (ADR 0011): one address-table row each.
-static const deck_core::DeckView& after(std::initializer_list<Bytes> messages) {
-    static deck_core::DeckCore core;
-    static ScreenStub screen;
-    core = deck_core::DeckCore();
+static deck_core::DeckView after(std::initializer_list<Bytes> messages) {
+    deck_core::DeckCore core;
+    ScreenStub screen;
     for (const Bytes& m : messages) feed(core, m, 100);
     core.render(screen, 100);
-    return screen.last().view;
+    return core.view();
 }
 
 void test_every_field_of_the_feed_has_its_row() {
@@ -451,7 +543,7 @@ void test_every_field_of_the_feed_has_its_row() {
         int_message(prefix + "master", 1), int_message(prefix + "loop", 1), float_message(prefix + "loopLength", 0.25f),
         int_message(prefix + "beat", 3), int_message(prefix + "elapsed", 95), int_message(prefix + "remaining", 212),
         float_message(prefix + "progress", 0.3125f), float_message(prefix + "phase", 0.75f),
-        float_message(prefix + "level", 0.5f),
+        float_message(prefix + "level", 0.5f), float_message(prefix + "clockBpm", 128.0f),
     });
     TEST_ASSERT_TRUE(v.loaded);
     TEST_ASSERT_EQUAL_STRING("11B", v.key);
@@ -465,6 +557,7 @@ void test_every_field_of_the_feed_has_its_row() {
     TEST_ASSERT_EQUAL_FLOAT(0.3125f, v.progress);
     TEST_ASSERT_EQUAL_FLOAT(0.75f, v.phase);
     TEST_ASSERT_EQUAL_FLOAT(0.5f, v.level);
+    TEST_ASSERT_EQUAL_FLOAT(128.0f, v.clock_bpm);
 }
 
 void test_flags_go_off_with_0_and_phase_takes_minus_1() {
@@ -476,8 +569,8 @@ void test_flags_go_off_with_0_and_phase_takes_minus_1() {
     TEST_ASSERT_EQUAL_FLOAT(-1.0f, v.phase);
 }
 
-// Fast fields (phase, level, progress) come at up to 30 a second: each change is one show_deck, the same value again
-// none.
+// Fast fields (phase, level, progress) come at up to 30 a second: each change that shows is one show_deck, the same
+// value again none.
 void test_a_fast_field_change_is_one_redraw_and_the_same_value_none() {
     deck_core::DeckCore core;
     ScreenStub screen;
@@ -491,21 +584,231 @@ void test_a_fast_field_change_is_one_redraw_and_the_same_value_none() {
         feed(core, float_message(prefix + field, 0.25f), 120);
         core.render(screen, 120);
     }
-    const char* ints[] = {"loaded", "playing", "cue", "sync", "master", "loop", "beat", "elapsed", "remaining"};
+    const char* ints[] = {"playing", "cue", "sync", "master", "loop", "beat", "elapsed", "remaining"};
     for (const char* field : ints) {
-        feed(core, int_message(prefix + field, field == std::string("loaded") ? 0 : 2), 130);
+        feed(core, int_message(prefix + field, 2), 130);
         core.render(screen, 130);
     }
     feed(core, string_message(prefix + "key", "11B"), 140);
     core.render(screen, 140);
+    // Last: an empty deck shows none of the above, so a change after it would show nothing.
+    feed(core, int_message(prefix + "loaded", 0), 150);
+    core.render(screen, 150);
     TEST_ASSERT_EQUAL(before + 6 + 9 + 1, screen.shown.size());
+}
+
+// #636: what a fresh panel shows from a clipped stream after boot (a playing deck's fast fields, a keepalive burst cut
+// to its first messages). "No track loaded" comes only from a received loaded 0, never from what's missing.
+void test_a_clipped_stream_after_boot_never_says_no_track_loaded() {
+    const Bytes fast[] = {
+        float_message(prefix + "level", 0.6f), float_message(prefix + "progress", 0.4f),
+        float_message(prefix + "phase", 0.5f), float_message(prefix + "bpm", 126.0f),
+        float_message(prefix + "tempo", 0.8f), int_message(prefix + "beat", 2),
+        int_message(prefix + "elapsed", 95), int_message(prefix + "remaining", 212),
+    };
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    for (const Bytes& m : fast) feed(core, m, 1000);
+    core.render(screen, 1000);
+    deck_core::Face f = screen.last().face;
+    TEST_ASSERT_EQUAL_STRING("", f.deck);  // no deck yet
+    TEST_ASSERT_EQUAL_STRING("", f.title);
+    TEST_ASSERT_EQUAL_STRING("126.0", f.bpm);
+
+    feed(core, int_message(prefix + "deck", 1), 1010);
+    feed(core, int_message(prefix + "color", 0xFF0000), 1010);
+    core.render(screen, 1010);
+    f = screen.last().face;
+    TEST_ASSERT_EQUAL_STRING("1", f.deck);
+    TEST_ASSERT_EQUAL_STRING("", f.title);
+
+    feed(core, int_message(prefix + "loaded", 1), 1020);
+    core.render(screen, 1020);
+    f = screen.last().face;
+    TEST_ASSERT_EQUAL_STRING("", f.title);  // blank until a title arrives, not "No track loaded"
+
+    feed(core, int_message(prefix + "loaded", 0), 1030);
+    core.render(screen, 1030);
+    TEST_ASSERT_EQUAL_STRING(deck_core::kNoTrack, screen.last().face.title);
+}
+
+// #636: the feed sends each update tick and each full snapshot as one bundle, so a burst is one datagram.
+void test_a_bundle_applies_all_its_messages_as_one_arrival() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 3), string_message(prefix + "title", "Night Drive"),
+                       string_message(prefix + "artist", "Example Artist"), float_message(prefix + "bpm", 126.0f)}),
+         1000);
+    core.render(screen, 1000);
+    TEST_ASSERT_EQUAL(1, screen.shown.size());
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(3, screen.last().deck);
+    TEST_ASSERT_EQUAL_STRING("Night Drive", screen.last().title.c_str());
+    TEST_ASSERT_EQUAL_STRING("Example Artist", screen.last().artist.c_str());
+    TEST_ASSERT_EQUAL_FLOAT(126.0f, core.view().bpm);
+    core.render(screen, 3999);
+    TEST_ASSERT_FALSE(screen.last().waiting);  // the bundle's arrival keeps it alive 3 s
+    core.render(screen, 4000);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+}
+
+// A bad message in a bundle is skipped and the rest kept; a bad element size (past the end, not a multiple of 4)
+// stops the bundle there, since nothing after it can be found, keeping what came before.
+void test_a_bad_element_does_not_lose_the_good_ones() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    Bytes wrong_type = int_message(prefix + "title", 7);
+    feed(core, bundle({int_message(prefix + "deck", 2), wrong_type, string_message(prefix + "artist", "Kept")}), 100);
+    core.render(screen, 100);
+    TEST_ASSERT_EQUAL(2, screen.last().deck);
+    TEST_ASSERT_EQUAL_STRING("Kept", screen.last().artist.c_str());
+
+    Bytes cut = bundle({int_message(prefix + "deck", 3), string_message(prefix + "title", "Lost")});
+    cut.resize(cut.size() - 4);  // the last element's size now runs past the end
+    feed(core, cut, 200);
+    Bytes odd = bundle({int_message(prefix + "deck", 4)});
+    odd[16 + 3] = 30;  // a size that isn't a multiple of 4
+    feed(core, odd, 200);
+    core.render(screen, 200);
+    TEST_ASSERT_EQUAL(3, screen.last().deck);  // the cut bundle's first element counted
+    TEST_ASSERT_EQUAL_STRING("", screen.last().title.c_str());
+}
+
+// The feed never nests bundles: one inside is skipped, its messages unread; the bundle's own messages still count.
+void test_a_nested_bundle_is_skipped() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({bundle({int_message(prefix + "deck", 4)}), int_message(prefix + "deck", 2)}), 100);
+    core.render(screen, 100);
+    TEST_ASSERT_EQUAL(2, screen.last().deck);
+    deck_core::DeckCore only_nested;
+    feed(only_nested, bundle({bundle({int_message(prefix + "deck", 4)})}), 100);
+    only_nested.render(screen, 100);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+}
+
+// #636, the panel as it boots, not a fresh core: joining, joined with the waiting screen up, time passing, then a
+// clipped stream. Neither the network nor leaving the waiting screen resets the deck: "No track loaded" still comes
+// only from a received loaded 0.
+static std::string title_after_boot_then(std::initializer_list<Bytes> stream) {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 0);
+    core.render(screen, 2500);
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 3000);
+    core.render(screen, 20000);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+    for (const Bytes& m : stream) feed(core, m, 20500);
+    core.render(screen, 20500);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_TRUE(core.view().loaded);
+    return screen.last().face.title;
+}
+
+void test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded() {
+    const Bytes level = float_message(prefix + "level", 0.6f), phase = float_message(prefix + "phase", 0.5f),
+                elapsed = int_message(prefix + "elapsed", 95);
+    const Bytes deck = int_message(prefix + "deck", 1), color = int_message(prefix + "color", 0xFF0000),
+                loaded = int_message(prefix + "loaded", 1);
+    TEST_ASSERT_EQUAL_STRING("", title_after_boot_then({level, phase, elapsed}).c_str());
+    TEST_ASSERT_EQUAL_STRING("", title_after_boot_then({deck, color, level, phase, elapsed}).c_str());
+    TEST_ASSERT_EQUAL_STRING("", title_after_boot_then({deck, color, loaded, level}).c_str());
+}
+
+// And a deck that went to the waiting screen comes back as it was, loaded included: waiting never empties it.
+void test_coming_back_from_waiting_keeps_the_deck_loaded() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 1), int_message(prefix + "loaded", 1),
+                       string_message(prefix + "title", "Night Drive")}), 1000);
+    core.render(screen, 1000);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 2000);
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 9000);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+    feed(core, float_message(prefix + "level", 0.5f), 9500);
+    core.render(screen, 9500);
+    TEST_ASSERT_EQUAL_STRING("Night Drive", screen.last().face.title);
+}
+
+// For the perf env's capture (#636): what the core holds now, read without a render.
+void test_the_core_says_what_it_holds() {
+    deck_core::DeckCore core;
+    TEST_ASSERT_TRUE(core.view().loaded);
+    feed(core, bundle({int_message(prefix + "deck", 2), int_message(prefix + "loaded", 0),
+                       string_message(prefix + "title", "")}), 100);
+    TEST_ASSERT_EQUAL(2, core.view().deck);
+    TEST_ASSERT_FALSE(core.view().loaded);
+    feed(core, string_message(prefix + "title", "Night Drive"), 110);
+    TEST_ASSERT_EQUAL_STRING("Night Drive", core.view().title);
+}
+
+// #651: every waiting screen shows the DeckBridge logo, with its reason and address beneath.
+void test_every_waiting_screen_shows_the_logo() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    const deck_core::Network states[] = {deck_core::Network::setup, deck_core::Network::joining,
+                                         deck_core::Network::connected};
+    for (deck_core::Network state : states) {
+        core.set_network(state, "192.168.1.40");
+        core.render(screen, 0);
+        TEST_ASSERT_TRUE(screen.last().waiting);
+        TEST_ASSERT_TRUE(screen.last().logo);
+        TEST_ASSERT_TRUE(screen.last().headline.size() > 0);
+    }
+    TEST_ASSERT_EQUAL_STRING("192.168.1.40  port 9100", screen.last().detail.c_str());
+}
+
+// A quit DeckBridge sends nothing more: within 3 s the panel shows the logo, never a frozen deck (#651).
+void test_a_quit_deckbridge_is_the_logo_within_3_seconds() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    feed(core, bundle({int_message(prefix + "deck", 1), int_message(prefix + "loaded", 1),
+                       string_message(prefix + "title", "Night Drive"), int_message(prefix + "playing", 1)}), 1000);
+    core.render(screen, 1000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    core.render(screen, 3999);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    core.render(screen, 4000);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+    TEST_ASSERT_TRUE(screen.last().logo);
+    TEST_ASSERT_EQUAL_STRING("Waiting for DeckBridge", screen.last().headline.c_str());
+}
+
+// DeckBridge's goodbye (ADR 0011, #651): the logo at once, the deck kept for when the feed comes back.
+void test_a_goodbye_is_the_logo_at_once_and_the_next_message_brings_the_deck_back() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 2), string_message(prefix + "title", "Night Drive")}), 1000);
+    core.render(screen, 1000);
+    feed(core, bundle({int_message(prefix + "goodbye", 1)}), 1100);
+    core.render(screen, 1100);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+    TEST_ASSERT_TRUE(screen.last().logo);
+    feed(core, int_message(prefix + "deck", 2), 9000);
+    core.render(screen, 9000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL_STRING("Night Drive", screen.last().title.c_str());
+}
+
+void test_a_goodbye_of_another_value_is_ignored() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 2), 1000);
+    feed(core, int_message(prefix + "goodbye", 0), 1100);
+    core.render(screen, 1100);
+    TEST_ASSERT_FALSE(screen.last().waiting);
 }
 
 // A screen that keeps nothing, so the count is the core's own.
 struct QuietScreen : deck_core::Screen {
     int calls = 0;
-    void show_waiting(const deck_core::WaitingView&) override { ++calls; }
-    void show_deck(const deck_core::DeckView&) override { ++calls; }
+    void show_waiting(const deck_core::WaitingView&, const deck_core::WaitingChanges&) override { ++calls; }
+    void show_deck(const deck_core::Face&, const deck_core::Changes&) override { ++calls; }
 };
 
 void test_reading_packets_and_rendering_use_no_heap() {
@@ -513,10 +816,12 @@ void test_reading_packets_and_rendering_use_no_heap() {
     Bytes title = string_message(prefix + "title", repeat("\xC3\xA9 long title ", 20));
     Bytes artist = string_message(prefix + "artist", "Example Artist with a name past the inline size");
     Bytes other_title = string_message(prefix + "title", "Night Drive, the extended mix of it");
+    Bytes snapshot = bundle({deck, title, artist, float_message(prefix + "phase", 0.5f)});
     deck_core::DeckCore core;
     QuietScreen screen;
     size_t before = allocations;
     for (uint32_t t = 0; t < 50; ++t) {
+        core.feed(snapshot.data(), snapshot.size(), t * 100);  // the title it sets is overwritten next
         core.feed(deck.data(), deck.size(), t * 100);
         const Bytes& this_title = t % 2 ? title : other_title;
         core.feed(this_title.data(), this_title.size(), t * 100);
@@ -526,6 +831,240 @@ void test_reading_packets_and_rendering_use_no_heap() {
     core.render(screen, 50 * 100 + 5000);
     TEST_ASSERT_EQUAL(0, allocations - before);
     TEST_ASSERT_TRUE(screen.calls > 2);
+}
+
+
+// #665: the screen is told the face and only the parts that changed. The first deck it sees is every part.
+void test_the_first_deck_is_every_part_then_only_what_changed() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 100);
+    core.render(screen, 100);
+    TEST_ASSERT_EQUAL(static_cast<int>(deck_core::Part::count), screen.last().changes.count());
+    feed(core, int_message(prefix + "playing", 1), 110);
+    core.render(screen, 110);
+    TEST_ASSERT_EQUAL(2, screen.last().changes.count());  // the play lamp's box and its text
+    TEST_ASSERT_TRUE(screen.last().changes.has(deck_core::Part::lamp_color, 0));
+    TEST_ASSERT_TRUE(screen.last().changes.has(deck_core::Part::lamp_text_color, 0));
+    TEST_ASSERT_EQUAL_HEX32(0x30D158, screen.last().face.lamp_color[0]);
+}
+
+// A fast field that moves no whole pixel is no redraw: the level meter is 310 px, so 0.5 and 0.501 are both 155 px.
+void test_a_change_that_moves_no_pixel_tells_the_screen_nothing() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 100);
+    feed(core, float_message(prefix + "level", 0.5f), 100);
+    core.render(screen, 100);
+    const size_t before = screen.shown.size();
+    feed(core, float_message(prefix + "level", 0.501f), 110);
+    core.render(screen, 110);
+    TEST_ASSERT_EQUAL(before, screen.shown.size());
+    feed(core, float_message(prefix + "level", 0.51f), 120);  // 158 px
+    core.render(screen, 120);
+    TEST_ASSERT_EQUAL(before + 1, screen.shown.size());
+    TEST_ASSERT_TRUE(screen.last().changes.has(deck_core::Part::level_px));
+    TEST_ASSERT_EQUAL(158, screen.last().face.level_px);
+}
+
+// Back from waiting, the deck page shows what its objects already hold: only what changed meanwhile redraws.
+void test_back_from_waiting_only_what_changed_meanwhile_redraws() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 100);
+    core.render(screen, 100);
+    core.render(screen, 100 + deck_core::DeckCore::kWaitAfterMs);
+    TEST_ASSERT_TRUE(screen.last().waiting);
+    feed(core, int_message(prefix + "beat", 2), 5000);
+    core.render(screen, 5000);
+    TEST_ASSERT_FALSE(screen.last().waiting);
+    TEST_ASSERT_EQUAL(1, screen.last().changes.count());
+    TEST_ASSERT_TRUE(screen.last().changes.has(deck_core::Part::beat_color, 1));
+}
+
+
+// #665: the waiting screen is told what changed too: the first time both texts, then only the one that changed.
+void test_the_waiting_screen_is_told_only_what_changed() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 0);
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.headline && screen.last().waiting_changes.detail);
+    core.set_network(deck_core::Network::connected, "192.168.1.41");
+    core.render(screen, 10);
+    TEST_ASSERT_FALSE(screen.last().waiting_changes.headline);
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.detail);
+    TEST_ASSERT_EQUAL_STRING("192.168.1.41  port 9100", screen.last().detail.c_str());
+}
+
+// #651 in #665's shape: the logo is a part of the waiting screen too. The first waiting screen shows it (the board's
+// logo starts hidden), and a view that differs only in the logo says so.
+void test_the_waiting_screen_is_told_when_the_logo_changes() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 0);
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.logo);
+    deck_core::WaitingView with, without;
+    with.logo = true;
+    const deck_core::WaitingChanges c = deck_core::changed(without, with);
+    TEST_ASSERT_TRUE(c.logo);
+    TEST_ASSERT_FALSE(c.headline || c.detail);
+    TEST_ASSERT_TRUE(c.any());
+}
+
+// Its texts come fitted to the fonts, as the deck's do.
+void test_the_waiting_texts_come_fitted_to_the_fonts() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::connected, "\xE6\x9D\xB1");  // 東, not in the fonts
+    core.render(screen, 0);
+    TEST_ASSERT_EQUAL_STRING("?  port 9100", screen.last().detail.c_str());
+}
+
+
+// #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives. #718:
+// the build's lead early (DECK_PANEL_BEAT_LEAD_MS).
+void test_the_next_beat_box_lights_the_lead_before_its_beat_is_due() {
+    const uint32_t lit = 1938 - deck_core::BeatClock::kLeadMs;  // beat 3 is due at 1938
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, lit - 1);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    core.render(screen, lit);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, lit the lead early
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[1]);
+}
+
+
+// #660: the deck in front is the master and stops. The beats stop with it at once: the box shows the last beat heard,
+// never the one the clock had lit ahead of its message.
+void test_the_master_stopping_stops_the_beat_at_once() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "master", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+    feed(core, int_message(prefix + "playing", 0), 1950);
+    core.render(screen, 1950);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // 2, the last heard
+    core.render(screen, 3000);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);
+}
+
+// #718: the master stopped, but the master clock runs on (Syndicate's metronome), and DeckBridge's 2 s keepalive sends
+// `playing 0` again. Only the master's playing going from 1 to 0 stops the clock; a repeat doesn't, so the beat
+// clock keeps lighting each box ahead.
+void test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "master", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, int_message(prefix + "playing", 0), 1600);  // the master stops
+    feed(core, int_message(prefix + "beat", 3), 1938);     // the clock runs on: a new run
+    feed(core, int_message(prefix + "beat", 4), 2407);     // 469 ms: the length again
+    feed(core, int_message(prefix + "playing", 0), 2500);  // the keepalive
+    core.render(screen, 2876 - deck_core::BeatClock::kLeadMs / 2);  // beat 1 is due at 2876
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[0]);  // 1, lit ahead of its message
+}
+
+// #718: the deck in front switches from the playing master (1) to a stopped deck (2) that isn't the master. The master
+// clock runs on, so the next beat still lights ahead. DeckBridge's snapshot puts deck and playing before master, so
+// deck 2's `playing 0` arrives while `master` is still deck 1's: it must not read as the master stopping.
+void test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 1), int_message(prefix + "playing", 1),
+                       int_message(prefix + "master", 1)}), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, bundle({int_message(prefix + "deck", 2), int_message(prefix + "playing", 0),
+                       int_message(prefix + "master", 0)}), 1500);
+    core.render(screen, 1938 - deck_core::BeatClock::kLeadMs / 2);  // beat 3 is due at 1938
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+}
+
+// Not the master: its pause says nothing about the master clock, which runs on.
+void test_a_deck_that_is_not_the_master_stopping_leaves_the_beat() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, int_message(prefix + "playing", 0), 1500);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);
+}
+
+
+// #660 with #674: the feed's clockBpm is the master clock's BPM; with it, the first beat heard is enough.
+void test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, float_message(prefix + "clockBpm", 128.0f), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    core.render(screen, 1469);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // beat 2, due
+}
+
+// #677: the setup screen's logo is half size, so the join instructions have the room; every other waiting screen's is
+// full size. The first screen and a change between them say so.
+void test_the_setup_screen_has_the_small_logo_and_no_other() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    core.render(screen, 0);
+    TEST_ASSERT_TRUE(screen.last().logo && screen.last().logo_small);
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.logo_small);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 10);
+    TEST_ASSERT_TRUE(screen.last().logo);
+    TEST_ASSERT_FALSE(screen.last().logo_small);
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.logo_small);
+    TEST_ASSERT_FALSE(screen.last().waiting_changes.logo);
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 20);
+    TEST_ASSERT_FALSE(screen.last().logo_small);
+    TEST_ASSERT_FALSE(screen.last().waiting_changes.logo_small);
+}
+
+// #695: every waiting screen shows the firmware's version beside its SHA, as the board gives it, so the owner can
+// tell which firmware runs. It's drawn with the first screen and doesn't count as a change between waiting screens.
+void test_every_waiting_screen_shows_the_build() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_build("v1.2.0  abc1234");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    core.render(screen, 0);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.build);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 10);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    TEST_ASSERT_FALSE(screen.last().waiting_changes.build);
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 20);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    // A new label alone is a change of the build and nothing else.
+    core.set_build("v1.3.0  def5678");
+    core.render(screen, 30);
+    TEST_ASSERT_EQUAL_STRING("v1.3.0  def5678", screen.last().build.c_str());
+    const deck_core::WaitingChanges c = screen.last().waiting_changes;
+    TEST_ASSERT_TRUE(c.build && c.any());
+    TEST_ASSERT_FALSE(c.headline || c.detail || c.logo || c.logo_small);
 }
 
 int main(int, char**) {
@@ -541,7 +1080,6 @@ int main(int, char**) {
     RUN_TEST(test_more_than_one_value_is_ignored);
     RUN_TEST(test_a_length_that_is_not_a_multiple_of_4_is_ignored);
     RUN_TEST(test_an_address_outside_the_prefix_is_ignored);
-    RUN_TEST(test_a_bundle_is_ignored);
     RUN_TEST(test_text_that_is_not_utf8_is_ignored);
     RUN_TEST(test_a_deck_outside_1_to_4_is_ignored);
     RUN_TEST(test_3_seconds_without_the_feed_is_the_waiting_screen);
@@ -558,10 +1096,40 @@ int main(int, char**) {
     RUN_TEST(test_the_shared_examples_prefix_is_the_panels);
     RUN_TEST(test_each_shared_example_shows_its_deck_state);
     RUN_TEST(test_reading_packets_and_rendering_use_no_heap);
+    RUN_TEST(test_every_waiting_screen_shows_the_logo);
+    RUN_TEST(test_a_quit_deckbridge_is_the_logo_within_3_seconds);
+    RUN_TEST(test_a_goodbye_is_the_logo_at_once_and_the_next_message_brings_the_deck_back);
+    RUN_TEST(test_a_goodbye_of_another_value_is_ignored);
+    RUN_TEST(test_waiting_says_what_the_last_render_showed);
+    RUN_TEST(test_a_bundle_applies_all_its_messages_as_one_arrival);
+    RUN_TEST(test_the_core_says_what_it_holds);
+    RUN_TEST(test_a_bad_element_does_not_lose_the_good_ones);
+    RUN_TEST(test_a_nested_bundle_is_skipped);
+    RUN_TEST(test_a_clipped_stream_after_boot_never_says_no_track_loaded);
+    RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
+    RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);
     RUN_TEST(test_every_field_of_the_feed_has_its_row);
+    RUN_TEST(test_the_next_beat_box_lights_the_lead_before_its_beat_is_due);
+    RUN_TEST(test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge);
+    RUN_TEST(test_the_master_stopping_stops_the_beat_at_once);
+    RUN_TEST(test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock);
+    RUN_TEST(test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock);
+    RUN_TEST(test_a_deck_that_is_not_the_master_stopping_leaves_the_beat);
+    RUN_TEST(test_the_waiting_screen_is_told_only_what_changed);
+    RUN_TEST(test_the_waiting_screen_is_told_when_the_logo_changes);
+    RUN_TEST(test_the_setup_screen_has_the_small_logo_and_no_other);
+    RUN_TEST(test_every_waiting_screen_shows_the_build);
+    RUN_TEST(test_the_waiting_texts_come_fitted_to_the_fonts);
+    RUN_TEST(test_the_first_deck_is_every_part_then_only_what_changed);
+    RUN_TEST(test_a_change_that_moves_no_pixel_tells_the_screen_nothing);
+    RUN_TEST(test_back_from_waiting_only_what_changed_meanwhile_redraws);
     RUN_TEST(test_flags_go_off_with_0_and_phase_takes_minus_1);
     RUN_TEST(test_a_fast_field_change_is_one_redraw_and_the_same_value_none);
     RUN_TEST(test_the_waiting_screen_says_why);
+    RUN_TEST(test_the_cables_feed_shows_the_deck_off_wifi);
+    RUN_TEST(test_with_both_feeds_losing_wifi_keeps_the_cables_deck);
+    RUN_TEST(test_a_hold_on_the_cables_deck_while_joining_doesnt_reset_wifi);
+    RUN_TEST(test_a_cable_heard_long_ago_doesnt_come_round_as_recent);
     RUN_TEST(test_losing_wifi_is_the_waiting_screen_at_once);
     RUN_TEST(test_control_characters_show_as_spaces);
     RUN_TEST(test_a_render_a_moment_before_the_last_packet_still_shows_the_deck);

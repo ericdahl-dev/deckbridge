@@ -217,14 +217,14 @@ struct SettingsView: View {
         return (model.profiles.first { $0.name == inUse } ?? model.profiles.first)?.mapping.needle
     }
 
-    /// Shift + Needle Drop on the deck's channel fader (#609): on or off, and relative or jump, each the profile's until
-    /// changed here. A strip without a touch note shows neither.
+    /// Needle Drop on the deck's channel fader (#609), its plain layer since #729 (Shift seeks): on or off, and relative
+    /// or jump, each the profile's until changed here. A strip without a touch note shows neither.
     @ViewBuilder
     private func stripFaderRows(_ settings: Binding<BridgeSettings>) -> some View {
         if let shown = settings.wrappedValue.stripFader.shown(for: stripFaderNeedle) {
-            switchRow("Shift + Needle Drop moves the channel fader",
+            switchRow("Needle Drop moves the channel fader",
                       hint: shown.enabled
-                          ? "Hold Shift and slide the strip to move the deck's fader in Syndicate's mixer"
+                          ? "Slide the strip to move the deck's fader in Syndicate's mixer; hold Shift to move through the track"
                           : "The strip always moves through the track",
                       isOn: Binding(get: { shown.enabled }, set: { settings.wrappedValue.stripFader.enabled = $0 }))
             if shown.enabled {
@@ -269,7 +269,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func displayFeedSection(_ settings: Binding<BridgeSettings>) -> some View {
         section("Display feed") {
-            hint("Sends the deck in front to a deck panel on your network.")
+            hint("Sends the deck in front to a deck panel on your network, or plugged into this Mac.")
             switchRow("Send the display feed", isOn: settings.displayFeed.enabled)
             if settings.wrappedValue.displayFeed.enabled {
                 row("Host", hint: "The panel's IP address, shown on its waiting screen") {
@@ -283,6 +283,14 @@ struct SettingsView: View {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let status = model.displayFeedStatus
                 note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+            }
+            // The USB cable (#667): no Wi-Fi setup on the panel. Off by default, apart from the switch above.
+            switchRow("Send over the USB cable", isOn: settings.displayFeed.cable)
+            if settings.wrappedValue.displayFeed.cable {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    let status = model.cableFeedStatus
+                    note(status.text, color: status.isProblem ? Theme.error : Theme.caption)
+                }
             }
         }
     }

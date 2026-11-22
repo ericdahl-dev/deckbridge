@@ -105,6 +105,8 @@ public struct Engine {
             case .stop:
                 // Releases are sent synchronously, so they have all gone out once run() returns. Quit, not stop: a
                 // drawing jog display keeps our logo (#600).
+                // The demo's Coordinator holds the display feed while it runs: it says the goodbye (#651).
+                demo?.coordinator.displayFeedGoodbye()
                 demo?.stop()
                 coordinator.quit()
                 return

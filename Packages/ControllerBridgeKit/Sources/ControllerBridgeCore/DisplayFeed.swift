@@ -34,6 +34,8 @@ final class DisplayFeed {
         var loopLength = 0.0
         /// Syndicate's master clock beat, 1-4, the same on every deck; 0 for none.
         var beat = 0
+        /// Syndicate's master clock BPM, the clock `beat` follows (#674); 0 whenever `beat` is 0.
+        var clockBpm = 0.0
         /// The track time in whole seconds, as the drawn display counts it; remaining is 0 with no known length.
         var elapsed = 0
         var remaining = 0
@@ -51,9 +53,9 @@ final class DisplayFeed {
                 OSCMessage(DisplayFeed.prefix + "deck", [.int(Int32(number))]),
                 OSCMessage(DisplayFeed.prefix + "color", [.int(rgb[0] << 16 | rgb[1] << 8 | rgb[2])]),
                 OSCMessage(DisplayFeed.prefix + "loaded", [.int(loaded ? 1 : 0)]),
-                OSCMessage(DisplayFeed.prefix + "title", [.string(title)]),
-                OSCMessage(DisplayFeed.prefix + "artist", [.string(artist)]),
-                OSCMessage(DisplayFeed.prefix + "key", [.string(key)]),
+                OSCMessage(DisplayFeed.prefix + "title", [.string(DisplayFeed.capped(title))]),
+                OSCMessage(DisplayFeed.prefix + "artist", [.string(DisplayFeed.capped(artist))]),
+                OSCMessage(DisplayFeed.prefix + "key", [.string(DisplayFeed.capped(key))]),
                 // To 2 decimals, so a BPM wobbling in Syndicate's last digits isn't a change.
                 OSCMessage(DisplayFeed.prefix + "bpm", [.float(Float((bpm * 100).rounded() / 100))]),
                 OSCMessage(DisplayFeed.prefix + "tempo", [.float(Float((tempo * 100).rounded() / 100))]),
@@ -64,6 +66,7 @@ final class DisplayFeed {
                 OSCMessage(DisplayFeed.prefix + "loop", [.int(loop ? 1 : 0)]),
                 OSCMessage(DisplayFeed.prefix + "loopLength", [.float(Float(loopLength))]),
                 OSCMessage(DisplayFeed.prefix + "beat", [.int(Int32(beat))]),
+                OSCMessage(DisplayFeed.prefix + "clockBpm", [.float(Float((clockBpm * 100).rounded() / 100))]),
                 OSCMessage(DisplayFeed.prefix + "elapsed", [.int(Int32(elapsed))]),
                 OSCMessage(DisplayFeed.prefix + "remaining", [.int(Int32(remaining))]),
                 OSCMessage(DisplayFeed.prefix + "progress", [.float(Float(progress))]),
@@ -90,12 +93,19 @@ final class DisplayFeed {
     /// each (#617): a change inside it waits, and the next
     /// update after it sends the value then, so the latest wins and nothing queues. A snapshot sends them at once.
     static let fastAddresses: Set<String> = [
-        prefix + "bpm", prefix + "tempo", prefix + "progress", prefix + "phase", prefix + "level",
+        prefix + "bpm", prefix + "tempo", prefix + "progress", prefix + "phase", prefix + "level", prefix + "clockBpm",
     ]
+    /// clockBpm coming from 0, the clock starting, goes at once (#674): with the clock's first beat, so a display
+    /// times its first beat right, not a slot later.
+    static func waitsForSlot(_ message: OSCMessage, after sent: [OSCArgument]?) -> Bool {
+        guard fastAddresses.contains(message.address) else { return false }
+        return !(message.address == prefix + "clockBpm" && (sent == nil || sent == [.float(0)]))
+    }
     static let fastInterval = 1.0 / 30
-    /// When each fast field may next go out: a slot every `fastInterval`, kept on its cadence so updates that land
-    /// between slots still average about 30 a second, never bursting to catch up.
-    private var fastDue: [String: Double] = [:]
+    /// When the fast fields may next go out: one slot every `fastInterval` that they all share (#636), so a playing
+    /// deck sends one bundle of them per slot, about 30 a second, not one per field drifting onto every tick. Kept on
+    /// its cadence so updates that land between slots still average about 30 a second, never bursting to catch up.
+    private var fastDue: Double?
     /// What each address carried last, as sent; empty means the next update is a full snapshot.
     private var sent: [String: [OSCArgument]] = [:]
     /// The deck number the last update was for: another deck in front is a full snapshot.
@@ -107,12 +117,80 @@ final class DisplayFeed {
     /// The hold's line went out for this hold.
     private var holdSaid = false
 
-    private func say(_ text: String) { trace?(.displayFeed, text) }
+    /// The USB cable's feed (#667): its trace lines start "cable: ", and it has a port, not a host and port.
+    let overTheCable: Bool
+
+    init(overTheCable: Bool = false) {
+        self.overTheCable = overTheCable
+    }
+
+    private func say(_ text: String) { trace?(.displayFeed, overTheCable ? "cable: " + text : text) }
 
     /// Where the feed's OSC goes. The app's sender is the display's own UDP destination, off the event path.
     func attach(_ sender: any OSCSender) {
         self.sender = sender
         sent = [:]
+    }
+
+    /// Title, artist and key are at most this many UTF-8 bytes (#636), so even a snapshot of all three fits one
+    /// bundle under `bundleCeiling`. A panel shows far fewer characters anyway.
+    static let textCap = 255
+
+    /// `text` cut to `textCap` UTF-8 bytes at a character boundary, never inside one.
+    static func capped(_ text: String) -> String {
+        guard text.utf8.count > textCap else { return text }
+        var out = "", bytes = 0
+        for character in text {
+            let size = String(character).utf8.count
+            guard bytes + size <= textCap else { break }
+            out.append(character)
+            bytes += size
+        }
+        return out
+    }
+
+    /// A bundle at most this many bytes (#636), well under Wi-Fi's MTU, so one never goes out in IP fragments.
+    static let bundleCeiling = 1200
+
+    /// The messages as bundles of at most `bundleCeiling` bytes each, in order. With text capped at `textCap`, no one
+    /// message comes near the ceiling, so it holds for every bundle.
+    static func bundles(_ messages: [OSCMessage]) -> [[OSCMessage]] {
+        let header = 16, sizeField = 4
+        var out: [[OSCMessage]] = [], current: [OSCMessage] = [], size = header
+        for message in messages {
+            let added = sizeField + message.encoded().count
+            if !current.isEmpty, size + added > bundleCeiling {
+                out.append(current)
+                current = []
+                size = header
+            }
+            current.append(message)
+            size += added
+        }
+        if !current.isEmpty { out.append(current) }
+        return out
+    }
+
+    /// The goodbye (#651): DeckBridge is quitting or the feed was turned off; a display shows its own idle look.
+    static let goodbye = OSCMessage(prefix + "goodbye", [.int(1)])
+    /// A datagram has gone out since the destination opened: there's a display to say goodbye to.
+    private var greeted = false
+
+    /// Says goodbye, as the last datagram, if anything went out since the destination opened; nothing follows it until
+    /// the destination opens again or the feed is turned on.
+    func goodbye() {
+        guard greeted, let sender else { return }
+        sender.send(bundle: [Self.goodbye])
+        say("goodbye")
+        greeted = false
+        open = false
+        sent = [:]
+        lastSnapshot = .greatestFiniteMagnitude
+    }
+
+    /// Waits for the sends to leave (the app exits after a quit).
+    func flush() {
+        (sender as? any OSCFlushing)?.flush(timeout: 0.5)
     }
 
     /// Seconds as a trace line writes them: 1, not 1.0.
@@ -122,11 +200,17 @@ final class DisplayFeed {
 
     /// Gives up the sender and the setting, for another Coordinator to take (the demo, #625); this one sends nothing
     /// until it gets them back.
-    func release() -> (sender: any OSCSender, settings: DisplayFeedSettings)? {
+    func release() -> (sender: any OSCSender, settings: DisplayFeedSettings, greeted: Bool)? {
         guard let sender else { return nil }
         self.sender = nil
         sent = [:]
-        return (sender, settings)
+        defer { greeted = false }
+        return (sender, settings, greeted)
+    }
+
+    /// The display heard from whoever had the feed before (#651): it gets the goodbye even if this one sent nothing yet.
+    func carryGreeting(_ greeted: Bool) {
+        self.greeted = self.greeted || greeted
     }
 
     /// The setting. Turning it on, or a new host or port, waits for the destination to open.
@@ -135,9 +219,10 @@ final class DisplayFeed {
             sent = [:]
             open = false
             lastSnapshot = now
-            say("on: \(new.host):\(new.port), waiting for its destination")
+            say(overTheCable ? "on, waiting for its port" : "on: \(new.host):\(new.port), waiting for its destination")
         } else if !new.enabled && settings.enabled {
             say("off")
+            goodbye()
         }
         settings = new
     }
@@ -185,20 +270,27 @@ final class DisplayFeed {
         sentDeck = deck.number
         let snapshot = sent.isEmpty
         if snapshot { lastSnapshot = now }
-        var count = 0
+        var changes: [OSCMessage] = []
+        // A hair of slack, so an update on the slot isn't lost to rounding.
+        let fastOpen = snapshot || fastDue.map { now >= $0 - 1e-9 } ?? true
+        var fastSent = false
         for message in deck.messages where sent[message.address] != message.arguments {
-            if Self.fastAddresses.contains(message.address) {
-                let due = fastDue[message.address]
-                // A hair of slack, so an update on the slot isn't lost to rounding.
-                if !snapshot, let due, now < due - 1e-9 { continue }
-                fastDue[message.address] = (due.map { max($0, now - Self.fastInterval) } ?? now) + Self.fastInterval
+            if Self.waitsForSlot(message, after: sent[message.address]) {
+                guard fastOpen else { continue }
+                fastSent = true
             }
-            sender.send(message)
+            changes.append(message)
             sent[message.address] = message.arguments
-            count += 1
         }
+        // One datagram for the update (#636): a panel drains a few a frame, and one per address was about 111 a second
+        // with a deck playing, each snapshot a burst of 20.
+        if fastSent { fastDue = (fastDue.map { max($0, now - Self.fastInterval) } ?? now) + Self.fastInterval }
+        let bundles = Self.bundles(changes)
+        for bundle in bundles { sender.send(bundle: bundle) }
+        if !bundles.isEmpty { greeted = true }
+        let count = changes.count
         if snapshot {
-            say("snapshot (\(snapshotReason)): deck \(deck.number), loaded \(deck.loaded ? 1 : 0), \"\(deck.title)\", \(count) messages")
+            say("snapshot (\(snapshotReason)): deck \(deck.number), loaded \(deck.loaded ? 1 : 0), \"\(deck.title)\", clockBpm \(Self.format((deck.clockBpm * 100).rounded() / 100)), \(count) messages in \(bundles.count) bundle\(bundles.count == 1 ? "" : "s")")
         }
     }
 }

@@ -61,7 +61,8 @@ check: do the action, then confirm the expected result. If any line fails, file 
 | 5.1 | Turn the jog while deck 1 plays | Phase bends while turning, and stops about 80 ms after the wheel stops |
 | 5.2 | Turn the jog while deck 1 is paused | Seeks through the track |
 | 5.3 | Move the pitch fader slowly over its full range | Tempo follows smoothly, in fine steps; the top is slower |
-| 5.4 | Touch and slide on the Needle Drop strip | Seeks to that point while touched |
+| 5.4 | Touch and slide on the Needle Drop strip | Deck 1's channel fader in Syndicate follows the slide; the track doesn't move |
+| 5.5 | Hold Shift, touch and slide on the Needle Drop strip | Seeks to that point while touched |
 
 ## 6. Layers 1-4
 

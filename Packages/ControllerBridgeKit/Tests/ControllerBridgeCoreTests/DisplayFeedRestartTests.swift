@@ -72,11 +72,13 @@ struct DisplayFeedRestartTests {
         for sink in sinks.opened { sink.fails = false }
         let before = sinks.opened.map(\.sent.count)
         await step(13)
-        let after = zip(sinks.opened, before + Array(repeating: 0, count: sinks.opened.count - before.count))
+        // Each datagram, a bundle since #636, read back as its messages.
+        let after = try zip(sinks.opened, before + Array(repeating: 0, count: sinks.opened.count - before.count))
             .flatMap { Array($0.0.sent.dropFirst($0.1)) }
-        let loaded1 = OSCMessage("/DeckBridge/Display/loaded", [.int(1)]).encoded()
-        let loaded0 = OSCMessage("/DeckBridge/Display/loaded", [.int(0)]).encoded()
-        let daybreak = OSCMessage("/DeckBridge/Display/title", [.string("Daybreak")]).encoded()
+            .flatMap { try OSCPacket(decoding: $0).messages }
+        let loaded1 = OSCMessage("/DeckBridge/Display/loaded", [.int(1)])
+        let loaded0 = OSCMessage("/DeckBridge/Display/loaded", [.int(0)])
+        let daybreak = OSCMessage("/DeckBridge/Display/title", [.string("Daybreak")])
         #expect(after.contains(loaded1))
         #expect(after.contains(daybreak))
         #expect(!after.contains(loaded0))

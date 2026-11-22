@@ -22,7 +22,7 @@ struct DisplayFeedTraceTests {
         #expect(lines.of(.displayFeed) == [
             "on: 192.168.1.40:9100, waiting for its destination",
             "destination open",
-            #"snapshot (destination open): deck 1, loaded 1, "Daybreak", 20 messages"#,
+            #"snapshot (destination open): deck 1, loaded 1, "Daybreak", clockBpm 0, 21 messages in 1 bundle"#,
         ])
     }
 
@@ -37,12 +37,26 @@ struct DisplayFeedTraceTests {
             MainCueTests.position(rig, Float(step) / 10)
             rig.coordinator.tick()
         }
-        #expect(lines.of(.displayFeed) == [#"snapshot (keepalive): deck 1, loaded 1, "Daybreak", 20 messages"#])
+        #expect(lines.of(.displayFeed) == [#"snapshot (keepalive): deck 1, loaded 1, "Daybreak", clockBpm 0, 21 messages in 1 bundle"#])
         lines.list.removeAll()
         var off = DisplayFeedCoordinatorTests.on
         off.enabled = false
         rig.coordinator.setDisplayFeed(off)
-        #expect(lines.of(.displayFeed) == ["off"])
+        #expect(lines.of(.displayFeed) == ["off", "goodbye"])
+    }
+
+    @Test("A snapshot's line says the clockBpm it sent, so a trace shows what a display times its beats by (#674)")
+    func clockBpm() throws {
+        let (rig, lines) = try Self.traced()
+        DisplayFeedCoordinatorTests.load(rig)
+        DisplayFeedCoordinatorTests.turnOn(rig)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(127.5)]))
+        lines.list.removeAll()
+        for step in 1...4 {
+            rig.clock.now = Double(step) * 0.5
+            rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(Int32(step))]))
+        }
+        #expect(lines.of(.displayFeed) == [#"snapshot (keepalive): deck 1, loaded 1, "Daybreak", clockBpm 127.5, 21 messages in 1 bundle"#])
     }
 
     @Test("The hold, and an empty deck's snapshot: what the panel was told is in the line")
@@ -55,7 +69,7 @@ struct DisplayFeedTraceTests {
             "on: 192.168.1.40:9100, waiting for its destination",
             "destination open",
             "holding the first snapshot until Syndicate answers for deck 1, at most 1 s",
-            #"snapshot (no answer from Syndicate in 1 s): deck 1, loaded 0, "", 20 messages"#,
+            #"snapshot (no answer from Syndicate in 1 s): deck 1, loaded 0, "", clockBpm 0, 21 messages in 1 bundle"#,
         ])
     }
 
@@ -66,6 +80,6 @@ struct DisplayFeedTraceTests {
         DisplayFeedCoordinatorTests.turnOn(rig)
         lines.list.removeAll()
         rig.coordinator.setDeck(2, controller: 0)
-        #expect(lines.of(.displayFeed) == [#"snapshot (deck 2 in front): deck 2, loaded 0, "", 20 messages"#])
+        #expect(lines.of(.displayFeed) == [#"snapshot (deck 2 in front): deck 2, loaded 0, "", clockBpm 0, 21 messages in 1 bundle"#])
     }
 }

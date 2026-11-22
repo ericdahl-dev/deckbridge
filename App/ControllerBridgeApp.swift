@@ -4,6 +4,8 @@ import SwiftUI
 @main
 enum Entry {
     static func main() {
+        // First: the log's print to stdout must not kill the app when stdout is a pipe nobody reads (#653).
+        ProcessSignals.ignoreBrokenPipe()
         Theme.registerFonts()
         #if DEBUG
         // Debug builds only: renders the panel to PNGs for PR screenshots and exits (#34). Not in Release.

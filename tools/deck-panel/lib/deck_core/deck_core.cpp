@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "font_fallback.h"
+
 namespace deck_core {
 
 namespace {
@@ -154,6 +156,7 @@ const Row kRows[] = {
          return true;
      }},
     {"bpm", 'f', [](DeckView& v, const Message& m) { return set(v.bpm, m.f); }},
+    {"clockBpm", 'f', [](DeckView& v, const Message& m) { return set(v.clock_bpm, m.f); }},
     {"tempo", 'f', [](DeckView& v, const Message& m) { return set(v.tempo, m.f); }},
     {"playing", 'i', [](DeckView& v, const Message& m) { return set(v.playing, m.i != 0); }},
     {"cue", 'i', [](DeckView& v, const Message& m) { return set(v.cue, m.i != 0); }},
@@ -171,18 +174,67 @@ const Row kRows[] = {
 
 }  // namespace
 
-void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms) {
+void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
+    static const char kBundle[8] = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0};
+    bool alive = false;
+    datagram_deck_ = view_.deck;
+    if (length >= 16 && std::memcmp(bytes, kBundle, 8) == 0) {
+        // A bundle (#636): "#bundle", a timetag (ignored: the feed's are "immediately"), then elements, each a size
+        // and that many bytes. One arrival for the whole bundle.
+        size_t at = 16;
+        while (at + 4 <= length) {
+            const uint32_t size = uint32_t(bytes[at]) << 24 | uint32_t(bytes[at + 1]) << 16 |
+                                  uint32_t(bytes[at + 2]) << 8 | uint32_t(bytes[at + 3]);
+            at += 4;
+            if (size == 0 || size % 4 != 0 || size > length - at) break;  // the framing can't be trusted past here
+            alive = apply(bytes + at, size, now_ms) || alive;
+            at += size;
+        }
+    } else {
+        alive = apply(bytes, length, now_ms);
+    }
+    if (goodbye_) {
+        // The waiting screen at once; the deck is kept for the next snapshot.
+        goodbye_ = false;
+        heard_ = false;
+        return;
+    }
+    if (!alive) return;
+    heard_ = true;
+    if (source == Source::cable) {
+        cable_heard_ = true;
+        last_cable_ms_ = now_ms;
+    }
+    last_heard_ms_ = now_ms;
+}
+
+bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms) {
     Message message;
-    if (!parse(bytes, length, message)) return;
+    if (!parse(bytes, length, message)) return false;
+    // DeckBridge's goodbye (ADR 0011, #651): not the deck's state but the feed's end, so not a table row. 1 is the
+    // only value; anything else is ignored like a bad value.
+    if (std::strcmp(message.name, "goodbye") == 0) {
+        if (message.type == 'i' && message.i == 1) goodbye_ = true;
+        return false;
+    }
     // An address this panel doesn't know is a newer DeckBridge's (ADR 0011): ignored, but the feed is alive.
     bool alive = true;
+    const bool was_playing = view_.playing;
     for (const Row& row : kRows) {
         if (std::strcmp(row.name, message.name) != 0) continue;
         alive = row.type == message.type && row.apply(view_, message);
     }
-    if (!alive) return;
-    heard_ = true;
-    last_heard_ms_ = now_ms;
+    // The master clock's beat also sets the panel's beat clock (#660), at the time it arrived.
+    if (alive && std::strcmp(message.name, "beat") == 0) clock_.edge(view_.beat, now_ms);
+    if (alive && std::strcmp(message.name, "clockBpm") == 0) clock_.set_tempo(view_.clock_bpm);
+    // The deck in front is the master and stopped: so did the master clock, at once (#660). Another deck's pause
+    // says nothing about it, and nor does `playing 0` again (DeckBridge's keepalive, #718): only 1 to 0 is a stop. And
+    // only on the same deck: when the front switched earlier in this datagram (deck comes before playing and master),
+    // the 1 was the old deck's and the 0 is the new one's, read while `master` is still the old deck's (#718).
+    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && was_playing && !view_.playing &&
+        view_.deck == datagram_deck_)
+        clock_.stop();
+    return alive;
 }
 
 void DeckCore::set_network(Network state, const char* ip) {
@@ -190,23 +242,47 @@ void DeckCore::set_network(Network state, const char* ip) {
     std::snprintf(ip_, sizeof ip_, "%s", ip);
 }
 
+void DeckCore::set_build(const char* label) { std::snprintf(build_, sizeof build_, "%s", label); }
+
+void DeckCore::set_setup(const char* name, const char* password) {
+    std::snprintf(setup_name_, sizeof setup_name_, "%s", name);
+    std::snprintf(setup_password_, sizeof setup_password_, "%s", password);
+}
+
 void DeckCore::render(Screen& screen, uint32_t now_ms) {
     // The time since, signed: a clock that wraps round still counts it, and a render that read the clock a moment
     // before the packet's time sees a little under 0, not 49 days.
     const int32_t since = static_cast<int32_t>(now_ms - last_heard_ms_);
-    // Off Wi-Fi the feed can't be coming: waiting at once.
-    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || network_ != Network::connected;
+    // Off Wi-Fi the feed can't be coming, unless it comes on the cable (#667): waiting at once.
+    const bool cable = cable_heard_ && static_cast<int32_t>(now_ms - last_cable_ms_) < static_cast<int32_t>(kWaitAfterMs);
+    // Stale once, forgotten: an old time would come round as recent when the clock's signed range wraps (24.8 days).
+    if (!cable) cable_heard_ = false;
+    const bool waiting = !heard_ || since >= static_cast<int32_t>(kWaitAfterMs) || (network_ != Network::connected && !cable);
     // Waiting holds until the next message: the old deck never comes back by itself, even when the clock comes round.
     if (waiting) heard_ = false;
     if (waiting) {
         const WaitingView view = waiting_view();
         if (shown_ && shown_waiting_ && view == shown_waiting_view_) return;
-        screen.show_waiting(view);
+        const WaitingChanges changes = drawn_waiting_ ? changed(shown_waiting_view_, view) : WaitingChanges::all();
         shown_waiting_view_ = view;
+        drawn_waiting_ = true;
+        screen.show_waiting(shown_waiting_view_, changes);
     } else {
-        if (shown_ && !shown_waiting_ && view_ == shown_view_) return;
-        screen.show_deck(view_);
+        // The beat as the panel's clock has it at this frame's time (#660); everything else as received.
+        const int beat = clock_.beat_at(now_ms);
+        // Every frame: the view compare is the cheap way out; the face is built only when the view or beat changed.
+        if (shown_ && !shown_waiting_ && view_ == shown_view_ && beat == shown_beat_) return;
         shown_view_ = view_;
+        shown_beat_ = beat;
+        DeckView timed = view_;
+        timed.beat = beat;
+        const Face now = face(timed);
+        const Changes changes = drawn_ ? changed(shown_face_, now) : Changes::all();
+        // Back from waiting with nothing changed, the page needs showing even so: the board shows it on any call.
+        if (drawn_ && !changes.any() && !shown_waiting_) return;
+        shown_face_ = now;
+        drawn_ = true;
+        screen.show_deck(shown_face_, changes);
     }
     shown_ = true;
     shown_waiting_ = waiting;
@@ -214,14 +290,19 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
 
 WaitingView DeckCore::waiting_view() const {
     WaitingView view;
+    view.logo = true;  // every waiting screen: the logo, the reason and the address beneath (#651)
+    std::snprintf(view.build, sizeof view.build, "%s", build_);  // and the firmware's version (#695)
     switch (network_) {
-        case Network::not_set:
-            std::snprintf(view.headline, sizeof view.headline, "Wi-Fi isn't set");
-            std::snprintf(view.detail, sizeof view.detail,
-                          "Build the panel with your Wi-Fi's name and password: see its README");
+        case Network::setup:
+            std::snprintf(view.headline, sizeof view.headline, "Set up the panel's Wi-Fi");
+            std::snprintf(view.detail, sizeof view.detail, "Join %s, password %s, then open %s", setup_name_,
+                          setup_password_, ip_);
+            view.logo_small = true;  // the join instructions take more lines (#677)
             break;
         case Network::joining:
             std::snprintf(view.headline, sizeof view.headline, "Joining Wi-Fi\xE2\x80\xA6");
+            // A wrong password looks like this forever: the way out is on the screen.
+            std::snprintf(view.detail, sizeof view.detail, "Hold the screen 5 s to set up Wi-Fi again");
             break;
         case Network::connected:
             // What to type into DeckBridge's Settings, Display feed: host and port.
@@ -229,7 +310,11 @@ WaitingView DeckCore::waiting_view() const {
             std::snprintf(view.detail, sizeof view.detail, "%s  port %u", ip_, unsigned(kFeedPort));
             break;
     }
-    return view;
+    // Fitted to the fonts, as the deck's texts are: the address and names come from outside.
+    WaitingView fitted = view;  // every field; the texts then fitted over
+    font_fallback::fit(view.headline, fitted.headline, sizeof fitted.headline);
+    font_fallback::fit(view.detail, fitted.detail, sizeof fitted.detail);
+    return fitted;
 }
 
 }  // namespace deck_core

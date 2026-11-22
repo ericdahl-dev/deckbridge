@@ -52,6 +52,19 @@ inline Bytes float_message(const std::string& address, float v) {
     return out;
 }
 
+/// An OSC bundle: "#bundle", a timetag (1, "immediately"), then each element as its size and its bytes.
+inline Bytes bundle(const std::vector<Bytes>& elements) {
+    Bytes out;
+    put_string(out, "#bundle");
+    put_int(out, 0);
+    put_int(out, 1);
+    for (const Bytes& e : elements) {
+        put_int(out, static_cast<int32_t>(e.size()));
+        out.insert(out.end(), e.begin(), e.end());
+    }
+    return out;
+}
+
 inline const std::string prefix = "/DeckBridge/Display/";
 
 }  // namespace osc_bytes

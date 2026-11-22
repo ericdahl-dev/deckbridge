@@ -1,6 +1,6 @@
 #!/bin/sh
 # Checks what App Store Connect refuses a Mac build for, before any upload: the bundle id and display name, version and build numbers, the export
-# compliance and category keys, no Dock icon, the privacy manifest, the app icon, and the sandbox entitlements.
+# compliance and category keys, no Dock icon, the privacy manifest, the app icon, and the sandbox entitlements (network, and the serial port for the deck panel's cable).
 # Ported from ShowRecorder's preflight, Mac only.
 #   scripts/preflight.sh path/to/ControllerBridge.xcarchive   (or path/to/ControllerBridge.app)
 # Tested by scripts/test-preflight.sh.
@@ -85,7 +85,8 @@ else bad "no compiled app icon (CFBundleIconName or Assets.car missing)"; fi
 # A signed bundle is sealed (_CodeSignature); an executable signed on its own, as the linker does, isn't enough.
 if [ -d "$app/Contents/_CodeSignature" ] && codesign -d "$app" >/dev/null 2>&1; then
   entitlements=$(codesign -d --entitlements - --xml "$app" 2>/dev/null || true)
-  for key in app-sandbox network.client network.server; do
+  # device.serial: the display feed over the USB cable opens the deck panel's serial port (#667).
+  for key in app-sandbox network.client network.server device.serial; do
     printf '%s' "$entitlements" | grep -q "com.apple.security.$key</key><true/>" \
       && ok "signed with com.apple.security.$key" || bad "signed without com.apple.security.$key"
   done

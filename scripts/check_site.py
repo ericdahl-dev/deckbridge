@@ -77,6 +77,7 @@ class Page(HTMLParser):
         self.images = []  # (src, alt) of every <img>
         self.no_alt = []  # src of every <img> without an alt attribute
         self.json_ld = []  # the text of each <script type="application/ld+json">
+        self.controllers = []  # (data-controller, data-status) of each element that names one (#201), in order
         self._in = None
         self._ld = None
         self.footer_text = []  # the text inside <footer>
@@ -106,6 +107,8 @@ class Page(HTMLParser):
             self._ld = []
         if tag == "img":
             self.images.append((attrs.get("src") or "", attrs.get("alt") or ""))
+        if attrs.get("data-controller") is not None:
+            self.controllers.append((attrs["data-controller"], attrs.get("data-status") or ""))
         if tag == "img" and "alt" not in attrs:
             self.no_alt.append(attrs.get("src") or "")
         if attrs.get("src") is not None:
@@ -180,6 +183,25 @@ BARE_COMPANY = re.compile(r"Untitled Audio(?! Syndicate Ltd\.)")
 def company_problems(file, text):
     """A file that names Syndicate's maker any other way than "Untitled Audio Syndicate Ltd."."""
     return [f'{file}: names "Untitled Audio" without "Syndicate Ltd."'] if BARE_COMPANY.search(text) else []
+
+
+# The version the site says is on TestFlight: CHANGELOG.md's newest release, in the text and the JSON-LD.
+# DeckBridge's version as a statement ("Version 1.1.0 is in beta", "DeckBridge 1.1.0 on TestFlight"), not Syndicate's.
+STATED_VERSION = re.compile(r'(?:\b(?:[Vv]ersion|DeckBridge)\s+(\d+\.\d+\.\d+)(?=\**\s+(?:is|on)\b)'
+                            r'|"softwareVersion":\s*"(\d+\.\d+\.\d+)")')
+RELEASE_HEADING = re.compile(r"^## (\d+\.\d+(?:\.\d+)?)\s*$", re.MULTILINE)
+
+
+def latest_release(changelog):
+    """CHANGELOG.md's newest release: its first "## x.y.z" heading."""
+    found = RELEASE_HEADING.search(changelog)
+    return found.group(1) if found else None
+
+
+def version_problems(file, text, release):
+    """Each place the file states a version other than the latest release."""
+    return [f"{file}: says version {v}, not the latest release {release}"
+            for v in ("".join(m) for m in STATED_VERSION.findall(text)) if v != release]
 
 
 def json_ld_nodes(blocks):
@@ -441,15 +463,96 @@ def app_version(root):
     return None
 
 
-def problems(root, app_prompts=None):
+CONTROLLERS = "controllers.json"
+CONTROLLER_STATUSES = ["supported", "in progress"]
+
+
+def load_controllers(root):
+    """controllers.json (#201): the one list of controllers the page and its JSON-LD show. Each has a name and a maker,
+    and an optional status, "supported" (the default) or "in progress". Returns (entries, problems)."""
+    path = os.path.join(root, CONTROLLERS)
+    if not os.path.isfile(path):
+        return [], [f"{CONTROLLERS}: missing"]
+    try:
+        with open(path, encoding="utf-8") as f:
+            entries = json.load(f)
+    except ValueError as e:
+        return [], [f"{CONTROLLERS}: doesn't parse as JSON: {e}"]
+    if not isinstance(entries, list):
+        return [], [f"{CONTROLLERS}: should be a list"]
+    out = []
+    for n, entry in enumerate(entries):
+        entry = entry if isinstance(entry, dict) else {}
+        if not (isinstance(entry.get("name"), str) and entry["name"] and isinstance(entry.get("maker"), str) and entry["maker"]):
+            out.append(f"{CONTROLLERS}[{n}]: needs a name and a maker")
+        status = entry.get("status", "supported")
+        if status not in CONTROLLER_STATUSES:
+            out.append(f'{CONTROLLERS}[{n}]: status "{status}" isn\'t one of {", ".join(CONTROLLER_STATUSES)}')
+    if not any(isinstance(e, dict) and e.get("name") and e.get("status", "supported") == "supported" for e in entries):
+        out.append(f"{CONTROLLERS}: lists no supported controller")
+    return entries, out
+
+
+def described(pairs):
+    return ", ".join(f"{name}: {status}" for name, status in pairs) or "none"
+
+
+def check_home_controllers(root, controllers):
+    """The home page lists exactly controllers.json, in order, with each status (#201)."""
+    wanted = [(f"{c['maker']} {c['name']}", c.get("status", "supported")) for c in controllers]
+    page = Page()
+    with open(os.path.join(root, HOME), encoding="utf-8") as f:
+        page.feed(f.read())
+    out = []
+    if page.controllers != wanted:
+        out.append(f"{HOME}: its controller list ({described(page.controllers)}) isn't {CONTROLLERS}'s ({described(wanted)})")
+    # The FAQPage JSON-LD's answer names every supported controller, so search and answer engines read the same list.
+    answer = None
+    for block in page.json_ld:
+        try:
+            answer = answer or questions(json.loads(block)).get(CONTROLLERS_QUESTION)
+        except ValueError:
+            pass  # reported by check_page
+    if answer is None:
+        out.append(f'{HOME}: the JSON-LD has no "{CONTROLLERS_QUESTION}" question')
+    else:
+        for c in controllers:
+            if c.get("status", "supported") == "supported" and c["name"] not in answer:
+                out.append(f'{HOME}: the JSON-LD answer to "{CONTROLLERS_QUESTION}" doesn\'t name {c["name"]}')
+    return out
+
+
+CONTROLLERS_QUESTION = "Which controllers does DeckBridge support?"
+
+
+def questions(node):
+    """Every JSON-LD Question's name and its accepted answer's text, anywhere in the block."""
+    found = {}
+    if isinstance(node, dict):
+        if node.get("@type") == "Question" and isinstance(node.get("acceptedAnswer"), dict):
+            found[node.get("name")] = str(node["acceptedAnswer"].get("text", ""))
+        for value in node.values():
+            found.update(questions(value))
+    elif isinstance(node, list):
+        for value in node:
+            found.update(questions(value))
+    return found
+
+
+def problems(root, app_prompts=None, release=None):
     """`app_prompts`: the app's capture prompt list (#190), which the site's capture/prompts.json must equal byte for
-    byte; None skips the check (a site checked on its own)."""
+    byte; None skips the check (a site checked on its own). `release`: CHANGELOG.md's newest, the version the site must
+    state; None skips it."""
     files = sorted(os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/")
                    for d, _, names in os.walk(root) for f in names)
     out = [f"{page}: missing" for page in PAGES + ROOT_FILES if page not in files]
     app_version = globals()["app_version"](root)
     if HOME in files and not app_version:
         out.append(f"{HOME}: the JSON-LD has no SoftwareApplication softwareVersion")
+    controllers, controller_problems = load_controllers(root)
+    out += controller_problems
+    if not controller_problems and HOME in files:
+        out += check_home_controllers(root, controllers)
     size = 0
     for file in files:
         path = os.path.join(root, file)
@@ -466,6 +569,8 @@ def problems(root, app_prompts=None):
             if file in NEW_IN_1_1_FILES and app_version and version_tuple(app_version) >= (1, 1):
                 said = plain_words(text, file.endswith(".html"))
                 out += [f'{file}: doesn\'t name 1.1\'s "{words}"' for words in NEW_IN_1_1 if words not in said]
+            if release:
+                out += version_problems(file, text, release)
             if PLACEHOLDER.search(text):
                 out.append(f"{file}: still has a TODO(user) TestFlight placeholder")
             if app_version:
@@ -505,7 +610,12 @@ def main():
     root = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
     # The app's prompt list, when this repo has it (on the site branch before main is merged in, it may not).
     app = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", APP_PROMPTS)
-    found = problems(root, app_prompts=app if os.path.isfile(app) else None)
+    changelog = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "CHANGELOG.md")
+    release = None
+    if os.path.isfile(changelog):
+        with open(changelog, encoding="utf-8") as f:
+            release = latest_release(f.read())
+    found = problems(root, app_prompts=app if os.path.isfile(app) else None, release=release)
     for problem in found:
         print("FAIL:", problem)
     print("== Site check passed" if not found else f"== {len(found)} site problem(s)")

@@ -1,40 +1,26 @@
 #include "deck_view.h"
 
-#include <cmath>
-#include <cstdio>
-#include <cstring>
 
 #include "board_pins.h"
-#include "font_fallback.h"
 
 // Geist (OFL), converted by fonts/make_fonts.sh into src/fonts/.
 LV_FONT_DECLARE(geist_semibold_36)
 LV_FONT_DECLARE(geist_regular_24)
 LV_FONT_DECLARE(geist_mono_medium_32)
 LV_FONT_DECLARE(geist_mono_semibold_64)
+// The logo (#651), made from the icon's SVG by deck_logo.py into src/deck_logo.c.
+LV_IMAGE_DECLARE(deck_logo);
+// Half size, for the setup screen's longer text (#677). Swapped in whole: no scaling, so still a plain copy.
+LV_IMAGE_DECLARE(deck_logo_small);
 
 namespace {
 
-// The deck screen, in pixels (#490's layout). Everything below the header has a fixed place and size, so a change
-// redraws only its own box and never moves a neighbor.
-constexpr int kMargin = 40;  // the waiting screen's
-constexpr int kLeft = 24;
-constexpr int kWidth = 704;  // the rows under the header, left of the meter
-constexpr int kHeaderX = 100, kHeaderY = 16;
-constexpr int kInfoY = 146;  // key, BPM, tempo
-constexpr int kTimeY = 190;
-constexpr int kProgressY = 280, kProgressH = 36;
-constexpr int kBeatY = 328, kBeatH = 24, kBeatGap = 8;
-constexpr int kPhaseY = 366, kPhaseH = 28, kMarkerW = 10;
-constexpr int kLampY = 410, kLampH = 46, kLampGap = 12;
-constexpr int kMeterX = 748, kMeterW = 28, kMeterY = kInfoY, kMeterH = kLampY + kLampH - kInfoY;
+using namespace deck_core::layout;
 
-const lv_color_t kGray = lv_color_hex(0xA0A0A0);
-const lv_color_t kDim = lv_color_hex(0x5A5A5A);  // an unlit lamp's text
-const lv_color_t kTrack = lv_color_hex(0x262626);  // bars, unlit blocks and lamps
-constexpr uint32_t kProgress = 0xE0E0E0;
-constexpr uint32_t kWarning = 0xFF3B30;
-constexpr uint32_t kLevel = 0x30D158;
+namespace palette = deck_core::palette;
+const lv_color_t kGray = lv_color_hex(palette::kGray);
+const lv_color_t kDim = lv_color_hex(palette::kDim);
+const lv_color_t kTrack = lv_color_hex(palette::kTrack);
 
 /// A full-screen page with no style of its own on the black screen, hidden.
 lv_obj_t* page(lv_obj_t* parent) {
@@ -95,11 +81,6 @@ void set_hidden(lv_obj_t* obj, bool hidden) {
     else lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
 }
 
-/// `fraction` (0-1) of `span`, in whole pixels.
-int32_t pixels(float fraction, int span) { return static_cast<int32_t>(std::lround(fraction * span)); }
-
-/// Black is the background: a deck without a color shows white.
-lv_color_t deck_color(uint32_t color) { return lv_color_hex(color == 0 ? 0xFFFFFF : color); }
 
 }  // namespace
 
@@ -109,9 +90,9 @@ void DeckScreen::build() {
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    // The deck. Every object starts as a default Face draws it: no text, bars empty, blocks and lamps off.
+    // The deck. The objects only: the first show_deck is every part, and sets them all.
     deck_page_ = page(screen);
-    deck_number_ = field(deck_page_, kLeft, 12, 70, &geist_mono_semibold_64, deck_color(0));
+    deck_number_ = field(deck_page_, kLeft, 12, 70, &geist_mono_semibold_64, lv_color_white());
 
     // Title (up to two lines) and artist across the top; the artist follows the title's height, inside this box.
     lv_obj_t* header = lv_obj_create(deck_page_);
@@ -143,7 +124,7 @@ void DeckScreen::build() {
 
     // The progress bar: a fill on a track, its width the progress.
     lv_obj_t* progress = box(deck_page_, kLeft, kProgressY, kWidth, kProgressH, kTrack);
-    progress_fill_ = box(progress, 0, 0, 0, kProgressH, lv_color_hex(kProgress));
+    progress_fill_ = box(progress, 0, 0, 0, kProgressH, lv_color_hex(palette::kProgress));
 
     // The beat in the bar: four blocks, the lit one in the deck color.
     const int beat_w = (kWidth - 3 * kBeatGap) / 4;
@@ -151,127 +132,115 @@ void DeckScreen::build() {
         beats_[i] = box(deck_page_, kLeft + i * (beat_w + kBeatGap), kBeatY, beat_w, kBeatH, kTrack);
     }
 
-    // The phase bar: a track, a center mark, and the marker, hidden while the phase is unknown.
-    lv_obj_t* phase = box(deck_page_, kLeft, kPhaseY, kWidth, kPhaseH, kTrack);
-    box(phase, kWidth / 2 - 1, 0, 2, kPhaseH, kGray);
-    phase_px_ = pixels(shown_.phase, kWidth - kMarkerW);
-    phase_marker_ = box(phase, phase_px_, 0, kMarkerW, kPhaseH, lv_color_white());
-    lv_obj_add_flag(phase_marker_, LV_OBJ_FLAG_HIDDEN);
+    // The phase bar (#721, the jog display's rule, #462): the track, a bar in the deck color from the center off
+    // phase (0 wide, so hidden, until the core says), and the locked tick. The tick is on the page, after the track so
+    // drawn over it, not in it: it reaches kPhaseTickReach past the track above and below, which the track would clip.
+    phase_ = box(deck_page_, kLeft, kPhaseY, kWidth, kPhaseH, kTrack);
+    phase_bar_ = box(phase_, 0, 0, 0, kPhaseH, lv_color_white());
+    lv_obj_add_flag(phase_bar_, LV_OBJ_FLAG_HIDDEN);
+    phase_tick_ = box(deck_page_, kLeft + kWidth / 2 - kPhaseTickW / 2, kPhaseY - kPhaseTickReach, kPhaseTickW,
+                      kPhaseH + 2 * kPhaseTickReach, lv_color_white());
+    lv_obj_add_flag(phase_tick_, LV_OBJ_FLAG_HIDDEN);
 
     // The lamps: lit is the lamp's color with black text.
     const int lamp_w = (kWidth - 4 * kLampGap) / 5;
     Lamp* lamps[] = {&play_, &cue_, &sync_, &master_, &loop_};
     const char* names[] = {"PLAY", "CUE", "SYNC", "MASTER", "LOOP"};
-    const uint32_t colors[] = {0x30D158, 0xFF9F0A, 0x0A84FF, 0xFFD60A, 0x64D2FF};
     for (int i = 0; i < 5; ++i) {
         Lamp& lamp = *lamps[i];
-        lamp.color = colors[i];
         lamp.box = box(deck_page_, kLeft + i * (lamp_w + kLampGap), kLampY, lamp_w, kLampH, kTrack);
         lv_obj_set_style_radius(lamp.box, 6, 0);
         lamp.text = field(lamp.box, 0, (kLampH - lv_font_get_line_height(small)) / 2, lamp_w, small, kDim,
                           LV_TEXT_ALIGN_CENTER);
         lv_label_set_text_static(lamp.text, names[i]);
     }
-    std::snprintf(loop_text_, sizeof loop_text_, "LOOP");
-    lv_label_set_text_static(loop_.text, loop_text_);
 
     // The level meter: a fill from the bottom.
     lv_obj_t* meter = box(deck_page_, kMeterX, kMeterY, kMeterW, kMeterH, kTrack);
-    level_fill_ = box(meter, 0, 0, kMeterW, 0, lv_color_hex(kLevel));
+    level_fill_ = box(meter, 0, 0, kMeterW, 0, lv_color_hex(palette::kLevel));
     lv_obj_set_align(level_fill_, LV_ALIGN_BOTTOM_LEFT);
 
-    // Waiting: why, and what to do, in the middle.
+    // Waiting: the logo, then why and what to do, in the middle. The logo is opaque RGB565 at its own size and
+    // untransformed, so LVGL copies it from flash with no layer and no decoded copy. 184 wide by 198 high: stretched
+    // down for the panel's short pixels (README, "Round things"), and with two headline lines (2x44), three detail
+    // lines (3x30) and two 12 px gaps the column is exactly the 400 px between the margins.
     waiting_page_ = page(screen);
     lv_obj_set_style_pad_all(waiting_page_, kMargin, 0);
     lv_obj_set_style_pad_row(waiting_page_, 12, 0);
     lv_obj_set_flex_flow(waiting_page_, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(waiting_page_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     const int waiting_w = board::LCD_WIDTH - 2 * kMargin;
+    logo_ = lv_image_create(waiting_page_);
+    lv_image_set_src(logo_, &deck_logo);
+    lv_obj_add_flag(logo_, LV_OBJ_FLAG_HIDDEN);
     headline_ = label(waiting_page_, waiting_w, &geist_semibold_36, lv_color_white(), LV_TEXT_ALIGN_CENTER, 2);
     detail_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_CENTER, 3);
+    // The firmware's version and SHA (#695): floating, bottom right, vertically centered in the bottom margin, so the
+    // column keeps its 400 px.
+    build_ = label(waiting_page_, waiting_w, &geist_regular_24, kGray, LV_TEXT_ALIGN_RIGHT, 1);
+    lv_obj_add_flag(build_, LV_OBJ_FLAG_FLOATING);
+    lv_obj_align(build_, LV_ALIGN_BOTTOM_RIGHT, 0, (kMargin + lv_font_get_line_height(&geist_regular_24)) / 2);
 }
 
-template <size_t N>
-void DeckScreen::set_text(lv_obj_t* label, char (&shown)[N], const char* text) {
-    static_assert(N <= sizeof fitted_, "fitted_ holds it");
-    font_fallback::fit(text, fitted_, N);
-    if (std::strcmp(shown, fitted_) == 0) return;
-    std::memcpy(shown, fitted_, N);
-    lv_label_set_text_static(label, shown);
-}
-
-void DeckScreen::show_waiting(const deck_core::WaitingView& view) {
-    set_text(headline_, headline_text_, view.headline);
-    set_text(detail_, detail_text_, view.detail);
+void DeckScreen::show_waiting(const deck_core::WaitingView& view, const deck_core::WaitingChanges& changes) {
+    // The view is the core's and stays put until the next call: the labels point at its texts.
+    if (changes.headline) lv_label_set_text_static(headline_, view.headline);
+    if (changes.detail) lv_label_set_text_static(detail_, view.detail);
+    if (changes.build) lv_label_set_text_static(build_, view.build);
+    if (changes.logo_small) lv_image_set_src(logo_, view.logo_small ? &deck_logo_small : &deck_logo);
+    if (changes.logo) set_hidden(logo_, !view.logo);
     set_hidden(deck_page_, true);
     set_hidden(waiting_page_, false);
 }
 
-void DeckScreen::show_deck(const deck_core::DeckView& view) {
-    draw(deck_core::face(view));
+void DeckScreen::show_deck(const deck_core::Face& f, const deck_core::Changes& c) {
+    draw(f, c);
     set_hidden(waiting_page_, true);
     set_hidden(deck_page_, false);
 }
 
-void DeckScreen::draw(const deck_core::Face& f) {
-    using std::strcmp;
-    const bool recolor = f.color != shown_.color;
-    if (recolor) lv_obj_set_style_text_color(deck_number_, deck_color(f.color), 0);
-    if (strcmp(f.deck, shown_.deck) != 0) set_text(deck_number_, deck_text_, f.deck);
-    if (strcmp(f.title, shown_.title) != 0) set_text(title_, title_text_, f.title);
-    if (strcmp(f.artist, shown_.artist) != 0) set_text(artist_, artist_text_, f.artist);
-    if (strcmp(f.key, shown_.key) != 0) set_text(key_, key_text_, f.key);
-    if (strcmp(f.bpm, shown_.bpm) != 0) set_text(bpm_, bpm_text_, f.bpm);
-    if (strcmp(f.tempo, shown_.tempo) != 0) set_text(tempo_, tempo_text_, f.tempo);
-    if (strcmp(f.elapsed, shown_.elapsed) != 0) set_text(elapsed_, elapsed_text_, f.elapsed);
-    if (strcmp(f.remaining, shown_.remaining) != 0) set_text(remaining_, remaining_text_, f.remaining);
-
-    // Fast: progress, phase and level move a box only when a whole pixel changes.
-    const int32_t progress = pixels(f.progress, kWidth);
-    if (progress != progress_px_) {
-        progress_px_ = progress;
-        lv_obj_set_width(progress_fill_, progress);
-    }
-    if (f.end_warning != shown_.end_warning) {
-        lv_obj_set_style_bg_color(progress_fill_, lv_color_hex(f.end_warning ? kWarning : kProgress), 0);
-    }
-    if (f.beat != shown_.beat || recolor) {
-        for (int i = 0; i < 4; ++i) {
-            const bool was = shown_.beat == i + 1, lit = f.beat == i + 1;
-            if (lit) lv_obj_set_style_bg_color(beats_[i], deck_color(f.color), 0);
-            else if (was) lv_obj_set_style_bg_color(beats_[i], kTrack, 0);
-        }
-    }
-    if (f.phase_shown) {
-        const int32_t x = pixels(f.phase, kWidth - kMarkerW);
-        if (x != phase_px_) {
-            phase_px_ = x;
-            lv_obj_set_x(phase_marker_, x);
-        }
-    }
-    set_hidden(phase_marker_, !f.phase_shown);
-    const int32_t level = pixels(f.level, kMeterH);
-    if (level != level_px_) {
-        level_px_ = level;
-        lv_obj_set_height(level_fill_, level);
-    }
-
-    // The lamps.
+void DeckScreen::draw(const deck_core::Face& f, const deck_core::Changes& c) {
+    using deck_core::Part;
+    // Texts: the face is the core's and stays put until the next call, so each label points at it.
     struct {
-        Lamp& lamp;
-        bool on, was;
-    } lamps[] = {{play_, f.playing, shown_.playing}, {cue_, f.cue, shown_.cue}, {sync_, f.sync, shown_.sync},
-                 {master_, f.master, shown_.master}, {loop_, f.loop, shown_.loop}};
-    for (auto& l : lamps) {
-        if (l.on == l.was) continue;
-        lv_obj_set_style_bg_color(l.lamp.box, l.on ? lv_color_hex(l.lamp.color) : kTrack, 0);
-        lv_obj_set_style_text_color(l.lamp.text, l.on ? lv_color_black() : kDim, 0);
+        Part part;
+        lv_obj_t* label;
+        const char* text;
+    } texts[] = {{Part::deck, deck_number_, f.deck},   {Part::title, title_, f.title},
+                 {Part::artist, artist_, f.artist},    {Part::key, key_, f.key},
+                 {Part::bpm, bpm_, f.bpm},             {Part::tempo, tempo_, f.tempo},
+                 {Part::elapsed, elapsed_, f.elapsed}, {Part::remaining, remaining_, f.remaining},
+                 {Part::loop_label, loop_.text, f.loop_label}};
+    for (const auto& t : texts) {
+        if (c.has(t.part)) lv_label_set_text_static(t.label, t.text);
     }
-    if (strcmp(f.loop_length, shown_.loop_length) != 0) {
-        char text[sizeof loop_text_] = "LOOP";
-        if (f.loop_length[0]) std::snprintf(text, sizeof text, "LOOP %s", f.loop_length);
-        set_text(loop_.text, loop_text_, text);
+    if (c.has(Part::deck_color)) {
+        lv_obj_set_style_text_color(deck_number_, lv_color_hex(f.deck_color), 0);
+        // The phase bar is the deck color, not a color of its own in the face (the beats' come resolved).
+        lv_obj_set_style_bg_color(phase_bar_, lv_color_hex(f.deck_color), 0);
     }
 
-    shown_ = f;
+    // Fast: the core tells only whole-pixel moves.
+    if (c.has(Part::progress_px)) lv_obj_set_width(progress_fill_, f.progress_px);
+    if (c.has(Part::progress_color)) lv_obj_set_style_bg_color(progress_fill_, lv_color_hex(f.progress_color), 0);
+    for (int i = 0; i < 4; ++i) {
+        if (c.has(Part::beat_color, i)) lv_obj_set_style_bg_color(beats_[i], lv_color_hex(f.beat_color[i]), 0);
+    }
+    if (c.has(Part::phase_track_color)) lv_obj_set_style_bg_color(phase_, lv_color_hex(f.phase_track_color), 0);
+    if (c.has(Part::phase_bar_x)) lv_obj_set_x(phase_bar_, f.phase_bar_x);
+    if (c.has(Part::phase_bar_w)) {
+        if (f.phase_bar_w > 0) lv_obj_set_width(phase_bar_, f.phase_bar_w);
+        set_hidden(phase_bar_, f.phase_bar_w <= 0);
+    }
+    if (c.has(Part::phase_tick)) set_hidden(phase_tick_, f.phase_tick == 0);
+    if (c.has(Part::phase_tick_color)) lv_obj_set_style_bg_color(phase_tick_, lv_color_hex(f.phase_tick_color), 0);
+    if (c.has(Part::level_px)) lv_obj_set_height(level_fill_, f.level_px);
+
+    Lamp* lamps[] = {&play_, &cue_, &sync_, &master_, &loop_};
+    for (int i = 0; i < deck_core::kLamps; ++i) {
+        if (c.has(Part::lamp_color, i)) lv_obj_set_style_bg_color(lamps[i]->box, lv_color_hex(f.lamp_color[i]), 0);
+        if (c.has(Part::lamp_text_color, i)) {
+            lv_obj_set_style_text_color(lamps[i]->text, lv_color_hex(f.lamp_text_color[i]), 0);
+        }
+    }
 }

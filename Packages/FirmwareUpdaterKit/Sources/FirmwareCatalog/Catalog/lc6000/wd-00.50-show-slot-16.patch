@@ -1,0 +1,11 @@
+# LC6000 PRIME wd (jog display) firmware 00.50, trailer CRC 0x3A7CE2CA. Issue #425.
+#
+# Let the show command (0A) reach image slot 16. Uploads (0E) already take slots 1-16,
+# but the show setter drops any index above 15:
+#   0x0800BDA4  cmp r0, #0xf   ->  cmp r0, #0x10
+#   0x0800BDA6  bgt (skip)         unchanged
+# One byte changes (0f -> 10); the second byte is the opcode, kept so the old-bytes check
+# covers the whole instruction.
+#
+# Unproven on hardware until the flash tests in #435. Apply it only to the stock 00.50 image.
+0x0800BDA4 0f28 1028

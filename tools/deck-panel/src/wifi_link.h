@@ -1,5 +1,6 @@
-// The panel's Wi-Fi (#620): a station on the network named at build time (wifi_secrets.py), with no blocking waits.
-// Polled from the loop task, which reports its state to the core.
+// The panel's Wi-Fi (#620, #622): a station on the network saved in NVS, or, with none saved, the panel's own setup
+// network with a captive page to pick one. No blocking waits: everything is polled from the loop task, which reports
+// the state to the core.
 #pragma once
 
 #include <cstdint>
@@ -8,21 +9,27 @@
 
 namespace wifi_link {
 
-/// Whether the build has a network name: false shows "Wi-Fi isn't set".
-bool configured();
-
-/// Starts joining, if the build has credentials. Call once, after the first frame.
+/// Starts joining the saved network, or opens setup when none is saved. Call once, after the first frame.
 void begin();
 
-/// Reads the station's state; call every loop. Cheap: the address is read at most twice a second.
+/// Reads the station's state, or serves setup (the page, the scan, the restart after a save); call every loop.
+/// Cheap: the address is read at most twice a second.
 void poll(uint32_t now_ms);
 
+/// Valid before begin(): the first call loads the saved network, so the first frame says what's true.
 deck_core::Network state();
 
-/// The panel's IPv4 address, dotted; "" unless connected.
+/// The panel's IPv4 address, dotted: the setup network's own while in setup, "" while joining.
 const char* ip();
+
+/// The setup network's name and password, for the screen only; "" unless in setup. Valid before begin().
+const char* setup_name();
+const char* setup_password();
 
 /// Counts connections: changes each time the station (re)joins, so the UDP socket knows to open again.
 uint32_t joins();
+
+/// Forgets the saved network and restarts into setup. Does not return.
+[[noreturn]] void forget_and_restart();
 
 }  // namespace wifi_link

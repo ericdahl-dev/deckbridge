@@ -1,0 +1,14 @@
+{
+  "panel": [],
+  "lc6000": [
+    {
+      "wd": "00.50",
+      "tp": "00.31",
+      "known": { "wd_crc": "0x3A7CE2CA", "tp_sha256": "1f97959902b2febae979e47ab9a9c09b5b362d17e5736ac110df5f1a761a76cc" },
+      "entries": [
+        { "kind": "patch", "chip": "wd", "file": "lc6000/wd-00.50-show-slot-16.patch" },
+        { "kind": "patch", "chip": "tp", "file": "lc6000/tp-00.31-no-deck-select-on-hello.patch" }
+      ]
+    }
+  ]
+}

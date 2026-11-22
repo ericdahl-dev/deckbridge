@@ -10,7 +10,7 @@ struct JogDisplayRendererTimeTests {
                                            key: "A#m", bpm: 128, playerType: "track")
 
     static func image(_ time: (elapsed: Int, length: Int)?) -> [UInt8] {
-        JogDisplayRenderer.simulatorImage(content, litBeat: nil, marker: nil, time: time)
+        JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: nil, time: time)
     }
 
     /// The pixels (x, y) where two images differ.
@@ -25,7 +25,7 @@ struct JogDisplayRendererTimeTests {
 
     @Test("No time, or an unknown length, draws nothing of it")
     func nothingWithoutLength() {
-        let plain = JogDisplayRenderer.simulatorImage(Self.content, litBeat: nil, marker: nil)
+        let plain = JogDisplayRenderer.simulatorImage(Self.content, litBeat: nil, needle: nil)
         #expect(Self.image(nil) == plain)
         #expect(Self.image((elapsed: 42, length: 0)) == plain)
     }
@@ -58,7 +58,7 @@ struct JogDisplayRendererTimeTests {
 
     @Test("The warning's red half: the remaining time and the ring's fill turn red (0xFF3B30); the track stays dark")
     func warningRed() {
-        let image = JogDisplayRenderer.simulatorImage(Self.content, litBeat: nil, marker: nil,
+        let image = JogDisplayRenderer.simulatorImage(Self.content, litBeat: nil, needle: nil,
                                                       time: (elapsed: 90, length: 120), look: .warningRed)
         #expect(Self.slot(image).contains { JogDisplayRendererTests.near($0, 0xFF3B30, by: 8) })
         #expect(!Self.slot(image).contains { JogDisplayRendererTests.near($0, 0xEDEDEA, by: 8) })
@@ -75,7 +75,7 @@ struct JogDisplayRendererTimeTests {
     func warningWhiteHalf() {
         let blue = JogDisplayContent(deck: 4, color: [0, 128, 255], title: "Daybreak", playerType: "track")
         for content in [Self.content, blue] {
-            let image = JogDisplayRenderer.simulatorImage(content, litBeat: nil, marker: nil,
+            let image = JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: nil,
                                                           time: (elapsed: 90, length: 120), look: .warningWhite)
             #expect(Self.slot(image).contains { JogDisplayRendererTests.near($0, 0xEDEDEA, by: 8) })
             #expect(!Self.slot(image).contains { JogDisplayRendererTests.near($0, 0xFF3B30, by: 8) })

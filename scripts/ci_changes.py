@@ -20,10 +20,17 @@ SITE_ONLY = ["website/*", "scripts/check_site.py", "scripts/test_check_site.py",
              "tools/deck-panel/*"]
 # Inside those, paths the Mac jobs also test: the shared message vectors (#456), walked by the Kit tests too, and the
 # drawn display's reference images (#464), which the Kit tests check against the Swift renderer, and the display feed's
-# example messages (#490), which the Kit tests walk too.
-ALSO_MAC = ["tools/lc6000-display-fw/vectors/*", "tools/lc6000-display-fw/test/ref/*", "tools/deck-panel/feed/*"]
-# What the Deck panel job (#615) builds and tests, and CI itself, so a change to the job runs it.
-DECK_PANEL = ["tools/deck-panel/*", ".github/workflows/ci.yml"]
+# example messages (#490), which the Kit tests walk too. The LC6000 patch descriptions, whose copies in the firmware
+# updater's catalog (#686) the Kit tests check against them.
+ALSO_MAC = ["tools/lc6000-display-fw/vectors/*", "tools/lc6000-display-fw/test/ref/*", "tools/deck-panel/feed/*",
+            "tools/lc6000-firmware/patches/*",
+            # make arm's build record reader and what it imports, which the updater's block staging step (#696) uses
+            "tools/lc6000-firmware/build_record.py", "tools/lc6000-firmware/dfupatch.py",
+            "tools/lc6000-firmware/drawn_flash.py", "tools/lc6000-firmware/build_upper_dfu.py",
+            "tools/lc6000-display-fw/arm/upper_header.py"]
+# What the Deck panel job (#615) builds and tests, and CI itself, so a change to the job runs it. The icon SVG the
+# panel's logo is made from (#651), whose drift test the job runs (#669).
+DECK_PANEL = ["tools/deck-panel/*", ".github/workflows/ci.yml", "design/icon/icon-1-deck-ring.svg"]
 
 
 def site_only(path):

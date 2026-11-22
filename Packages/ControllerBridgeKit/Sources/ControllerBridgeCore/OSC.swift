@@ -48,6 +48,17 @@ public struct OSCPacket: Equatable, Sendable {
         messages = try Self.messages(in: bytes[...], depth: 0)
     }
 
+    /// `messages` as one bundle (#636): "#bundle", the time tag 1 ("immediately"), then each message with its size.
+    public static func bundle(_ messages: [OSCMessage]) -> [UInt8] {
+        var out = bundleTag + [0, 0, 0, 0, 0, 0, 0, 1]
+        for message in messages {
+            let bytes = message.encoded()
+            out.appendBigEndian(UInt32(bytes.count))
+            out += bytes
+        }
+        return out
+    }
+
     /// Feedback arrives as untrusted UDP, so nesting is capped and every element size is checked.
     static let maxBundleDepth = 8
     private static let bundleTag = Array("#bundle\0".utf8)

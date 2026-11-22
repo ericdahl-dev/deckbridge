@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B2B2C"/>
+      <stop offset="1" stop-color="#141415"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" ry="183.5" fill="none" stroke="#3D3E3F" stroke-width="3"/>
+  <circle cx="512" cy="512" r="206.0" fill="#1D1D1E"/>
+  <path d="M543.9,252.0 A262,262 0 0 1 772.0,480.1" fill="none" stroke="#6C7277" stroke-width="76" stroke-linecap="butt"/>
+  <path d="M772.0,543.9 A262,262 0 0 1 543.9,772.0" fill="none" stroke="#ECCF65" stroke-width="76" stroke-linecap="butt"/>
+  <path d="M480.1,772.0 A262,262 0 0 1 252.0,543.9" fill="none" stroke="#C5754E" stroke-width="76" stroke-linecap="butt"/>
+  <path d="M252.0,480.1 A262,262 0 0 1 480.1,252.0" fill="none" stroke="#62929E" stroke-width="76" stroke-linecap="butt"/>
+  <rect x="497" y="202.0" width="30" height="166" rx="15" fill="#D5D5D5" transform="rotate(40 512 512)"/>
+  <circle cx="512" cy="512" r="74" fill="#D5D5D5"/>
+  <circle cx="512" cy="512" r="26" fill="#141415"/>
+  <!-- The updater mark (#733): a download badge, so the updater reads as DeckBridge's icon but plainly another app. -->
+  <circle cx="752" cy="752" r="156" fill="#141415"/>
+  <circle cx="752" cy="752" r="134" fill="#3FB27F"/>
+  <path d="M752,670 L752,790" stroke="#FFFFFF" stroke-width="38" stroke-linecap="round"/>
+  <path d="M698,740 L752,794 L806,740" fill="none" stroke="#FFFFFF" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M690,838 L814,838" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>
+</svg>

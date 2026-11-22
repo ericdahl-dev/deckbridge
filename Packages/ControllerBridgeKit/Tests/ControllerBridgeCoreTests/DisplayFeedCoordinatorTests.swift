@@ -52,6 +52,7 @@ struct DisplayFeedCoordinatorTests {
             OSCMessage("/DeckBridge/Display/loop", [.int(0)]),
             OSCMessage("/DeckBridge/Display/loopLength", [.float(0)]),
             OSCMessage("/DeckBridge/Display/beat", [.int(0)]),
+            OSCMessage("/DeckBridge/Display/clockBpm", [.float(0)]),
             OSCMessage("/DeckBridge/Display/elapsed", [.int(0)]),
             OSCMessage("/DeckBridge/Display/remaining", [.int(loaded ? 428 : 0)]),
             OSCMessage("/DeckBridge/Display/progress", [.float(0)]),
@@ -153,6 +154,80 @@ struct DisplayFeedCoordinatorTests {
         rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Loaded", [.int(0)]))
         Self.turnOn(rig, heard: false)
         #expect(feed.sent == Self.snapshot(deck: 1, color: 0xFF0000))
+    }
+
+    @Test("One datagram per update (#636): the opening snapshot is one bundle of all 21; a new title is a bundle of one; nothing changed sends nothing")
+    func bundlePerUpdate() throws {
+        let (rig, feed) = try Self.rig()
+        rig.coordinator.start()
+        Self.load(rig)
+        Self.turnOn(rig)
+        #expect(feed.bundles == [Self.snapshot(deck: 1, color: 0xFF0000, title: "Daybreak", artist: "Bill Hamel, Jeremus")])
+        feed.bundles.removeAll()
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(title: "Nightfall"))
+        #expect(feed.bundles == [[OSCMessage("/DeckBridge/Display/title", [.string("Nightfall")])]])
+        feed.bundles.removeAll()
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(title: "Nightfall"))
+        rig.clock.now = 0.01
+        rig.coordinator.tick()
+        #expect(feed.bundles == [])
+    }
+
+    @Test("Title, artist and key are cut to 255 UTF-8 bytes on a character boundary, so no bundle is ever over 1200 bytes")
+    func bundleCeiling() throws {
+        let (rig, feed) = try Self.rig()
+        rig.coordinator.start()
+        // Two-byte é and four-byte 🎧, so a byte cut would land inside a character.
+        let long = String(repeating: "Café 🎧 ", count: 60), longer = String(repeating: "Ärtist ", count: 200)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Loaded", [.int(1)]))
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/TrackInfo", [
+            .string(long), .string(longer), .string(String(repeating: "m", count: 300)), .float(128), .float(428.5), .int(229),
+            .int(914), .string("track"),
+        ]))
+        Self.turnOn(rig)
+        #expect(feed.bundles.allSatisfy { OSCPacket.bundle($0).count <= 1200 })
+        func text(_ name: String) -> String? {
+            feed.sent.last { $0.address.hasSuffix("/" + name) }.flatMap { if case .string(let v)? = $0.arguments.first { v } else { nil } }
+        }
+        for (name, full) in [("title", long), ("artist", longer), ("key", String(repeating: "m", count: 300))] {
+            let sent = try #require(text(name))
+            #expect(sent.utf8.count <= 255, "\(name)")
+            #expect(sent.utf8.count > 250, "\(name)")
+            #expect(full.hasPrefix(sent), "\(name)")
+        }
+        // A short title is sent as it is.
+        feed.sent.removeAll()
+        rig.coordinator.feedback(JogDisplayContentTests.trackInfo(title: "Nightfall"))
+        #expect(text("title") == "Nightfall")
+    }
+
+    @Test("A playing deck under Syndicate's real streams sends at most about 30 datagrams a second, and every keepalive is one whole bundle (#636)")
+    func playingRate() throws {
+        let (rig, feed) = try Self.rig()
+        rig.coordinator.start()
+        Self.load(rig)
+        MainCueTests.feed(rig, "Playing", 1)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/BPM", [.float(128)]))
+        Self.turnOn(rig)
+        feed.bundles.removeAll()
+        // 10 s: Meter every 5 ms (Syndicate streams it at about 190 a second), Position, PhaseOffset and BPM every
+        // 20 ms, the master clock every 1.25 s, ticks every 10 ms.
+        for step in 1...2000 {
+            let t = Double(step) * 0.005
+            rig.clock.now = t
+            rig.coordinator.feedback(OSCMessage("/Syndicate/Mixer/CH1/Meter", [.float(Float(0.3 + 0.6 * abs(sin(t * 37))))]))
+            if step % 4 == 0 {
+                MainCueTests.position(rig, Float(100 + t))
+                rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/PhaseOffset", [.float(Float(0.01 * sin(t * 3)))]))
+                rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/BPM", [.float(Float(128 + 0.02 * sin(t * 5)))]))
+            }
+            if step % 2 == 0 { rig.coordinator.tick() }
+            if step % 250 == 0 { rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(Int32(step / 250 % 4 + 1))])) }
+        }
+        #expect(feed.bundles.count <= 350)
+        let keepalives = feed.bundles.filter { $0.first?.address.hasSuffix("/deck") == true }
+        #expect(keepalives.count == 5)
+        #expect(keepalives.allSatisfy { $0.count == 21 })
     }
 
     @Test("Only changes go out: a new title sends the title alone; the same feedback again sends nothing")
@@ -439,13 +514,67 @@ struct DisplayFeedCoordinatorTests {
         #expect(beats() == [Self.message("beat", Int32(0))])
     }
 
-    @Test("An empty deck sends beat 0 whatever the clock")
+    @Test("clockBpm is Syndicate's master BPM while its clock runs, to 2 decimals; 0 before the clock, and once it's been quiet for over 2 s (#674)")
+    func clockBpm() throws {
+        let (rig, feed) = try Self.rig()
+        rig.coordinator.start()
+        Self.load(rig)
+        Self.turnOn(rig)
+        func clock() -> [OSCMessage] { feed.sent.filter { $0.address.hasSuffix("/clockBpm") } }
+        feed.sent.removeAll()
+        rig.clock.now = 0.5
+        // The master BPM alone, with no clock yet, isn't a running clock.
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(127.996)]))
+        rig.coordinator.tick()
+        #expect(clock() == [])
+        rig.clock.now = 0.6
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(1)]))
+        #expect(clock() == [Self.message("clockBpm", Float(128))])
+        feed.sent.removeAll()
+        rig.clock.now = 2.61
+        rig.coordinator.tick()
+        #expect(clock() == [Self.message("clockBpm", Float(0))])
+    }
+
+    @Test("A second of the master BPM changing every 10 ms sends clockBpm about 30 times, the last where it ended; the clock starting sends it with that first beat, not a slot later (#674)")
+    func clockBpmIsLimited() throws {
+        let (rig, feed) = try Self.rig()
+        rig.coordinator.start()
+        Self.load(rig)
+        Self.turnOn(rig)
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(128)]))
+        // The deck's own BPM takes two slots in a row, so the next is 1/30 s away when the clock's first beat comes.
+        rig.clock.now = 0.5
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/BPM", [.float(130)]))
+        rig.clock.now = 0.52
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/BPM", [.float(131)]))
+        #expect(feed.sent.last == Self.message("tempo", Float(2.34)))
+        feed.bundles.removeAll()
+        rig.clock.now = 0.53
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(1)]))
+        #expect(feed.bundles == [[Self.message("beat", Int32(1)), Self.message("clockBpm", Float(128))]])
+        feed.sent.removeAll()
+        for step in 1...100 {
+            rig.clock.now = 0.53 + Double(step) * 0.01
+            rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(128 + Float(step) / 10)]))
+            if step % 40 == 0 { rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(2)])) }
+            rig.coordinator.tick()
+        }
+        rig.clock.now = 1.6
+        rig.coordinator.tick()
+        let clocks = feed.sent.filter { $0.address.hasSuffix("/clockBpm") }
+        #expect((28...32).contains(clocks.count))
+        #expect(clocks.last == Self.message("clockBpm", Float(138)))
+    }
+
+    @Test("An empty deck sends beat 0 and clockBpm 0 whatever the clock")
     func emptyDeckBeat() throws {
         let (rig, feed) = try Self.rig()
         rig.coordinator.start()
         rig.coordinator.feedback(OSCMessage("/Syndicate/Deck/1/Loaded", [.int(0)]))
         Self.turnOn(rig)
         feed.sent.removeAll()
+        rig.coordinator.feedback(OSCMessage("/Syndicate/Header/BPM", [.float(128)]))
         rig.coordinator.feedback(OSCMessage("/Syndicate/Header/Clock", [.int(3)]))
         #expect(feed.sent == [])
     }
@@ -613,8 +742,8 @@ struct DisplayFeedCoordinatorTests {
     func keepaliveHealsADrop() throws {
         let rig = try Rig()
         let display = Rig.FakeOSC(), worker = DisplayFeedQueueTests.Worker()
-        // Room for one snapshot (20 messages) and one more.
-        let queue = DisplayFeedQueue(display, backlog: 21) { worker.jobs.append($0) }
+        // Room for the snapshot's bundle and one more.
+        let queue = DisplayFeedQueue(display, backlog: 2) { worker.jobs.append($0) }
         rig.coordinator.attachDisplayFeed(queue)
         rig.coordinator.start()
         Self.load(rig)
