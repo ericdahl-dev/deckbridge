@@ -18,5 +18,7 @@ public struct PanelUpdateOffer: Sendable, Equatable {
 public protocol PanelFlashing: Sendable {
     /// The update for a panel running `build`; nil when there's nothing newer to put on it.
     func offer(for build: PanelBuild) -> PanelUpdateOffer?
+    /// The version a repair writes (the catalog's newest image), for a panel whose build can't be read; nil with none.
+    func repairVersion() -> String?
     func flash(report: @escaping @Sendable (PanelUpdate.Step) -> Void) async
 }

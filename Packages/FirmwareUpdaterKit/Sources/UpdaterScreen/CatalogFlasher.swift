@@ -27,6 +27,8 @@ public struct CatalogFlasher: PanelFlashing {
         }
     }
 
+    public func repairVersion() -> String? { catalog.newestPanel()?.version.description }
+
     public func flash(report: @escaping @Sendable (PanelUpdate.Step) -> Void) async {
         guard let port = DeviceFinder.panelPort(in: await usb.devices()) else { return report(.failed(.lineLost)) }
         guard let newest = catalog.newestPanel(), let image = try? Data(contentsOf: newest.image) else {

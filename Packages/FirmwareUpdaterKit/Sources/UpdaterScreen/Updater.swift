@@ -92,6 +92,16 @@ public final class Updater {
     /// stop once it's being written would leave it unable to start (#744's live run).
     public private(set) var canCancel = false
 
+    /// The repair offered for a panel whose port is there but whose build can't be read (#744): it may not be starting,
+    /// or it may run firmware from before #702. The ROM bootloader is there either way.
+    private var repair: PanelUpdateOffer? {
+        guard let flasher, case .onSerial(nil) = found.panel, let version = flasher.repairVersion() else { return nil }
+        return PanelUpdateOffer(version: version, note: nil)
+    }
+
+    /// Repairs the panel: the catalog's image, written the same way as an update (after the owner confirms).
+    public func repairPanel() async { await updatePanel() }
+
     /// Stops the update before it writes: the flasher resets the panel into its app. Once writing has begun, nothing.
     public func cancelUpdate() {
         guard canCancel else { return }
@@ -166,7 +176,7 @@ public final class Updater {
 
     private func show() {
         screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort,
-                               deckBridgeSilent: deckBridgeSilent, update: updateText, panelUpdate: offer,
+                               deckBridgeSilent: deckBridgeSilent, update: updateText, panelUpdate: offer, panelRepair: repair,
                                writing: updating && !canCancel)
     }
 

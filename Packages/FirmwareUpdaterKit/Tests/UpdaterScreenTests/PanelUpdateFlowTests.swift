@@ -43,6 +43,9 @@ final class StubFlasher: PanelFlashing, @unchecked Sendable {
         asked.append(build)
         return offered
     }
+
+    var repairable: String? = "1.3.0"
+    func repairVersion() -> String? { repairable }
     private let runs = Mutex(0)
     var started: Int { runs.withLock { $0 } }
 
@@ -65,6 +68,7 @@ final class HeldFlasher: PanelFlashing, @unchecked Sendable {
     init(first: PanelUpdate.Step) { self.first = first }
 
     func offer(for build: PanelBuild) -> PanelUpdateOffer? { nil }
+    func repairVersion() -> String? { nil }
     func finish() { state.withLock { $0.finished = true } }
 
     func flash(report: @escaping @Sendable (PanelUpdate.Step) -> Void) async {
@@ -228,5 +232,53 @@ struct PanelUpdateFlowTests {
         await two.refresh()
         #expect(two.screen.panelUpdate == nil)
         #expect(unread.asked.isEmpty)
+    }
+
+    @Test("A panel whose port is there but whose build can't be read: repair is offered with the catalog's version")
+    func repairOffered() async {
+        let rig = Rig()
+        UpdaterScreenTests.panel(rig, printing: ["deck panel: waiting"])
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, flasher: StubFlasher([]))
+        await updater.refresh()
+        #expect(updater.screen.panelRepair == PanelUpdateOffer(version: "1.3.0", note: nil))
+        #expect(updater.screen.panelUpdate == nil)
+    }
+
+    @Test("No repair when the build was read, when there's no image to write, or no flasher")
+    func repairNotOffered() async {
+        let told = Rig()
+        UpdaterScreenTests.panel(told, printing: ["deck panel: boot, build 1d0683f"])
+        let one = Updater(finder: told.finder, changes: AsyncStream { $0.finish() }, flasher: StubFlasher([]))
+        await one.refresh()
+        #expect(one.screen.panelRepair == nil)
+
+        let silent = Rig()
+        UpdaterScreenTests.panel(silent, printing: [])
+        let empty = StubFlasher([])
+        empty.repairable = nil
+        let two = Updater(finder: silent.finder, changes: AsyncStream { $0.finish() }, flasher: empty)
+        await two.refresh()
+        #expect(two.screen.panelRepair == nil)
+
+        let three = Updater(finder: silent.finder, changes: AsyncStream { $0.finish() })
+        await three.refresh()
+        #expect(three.screen.panelRepair == nil)
+    }
+
+    @Test("Repair writes the catalog's image the same way as an update, asking DeckBridge first")
+    func repair() async {
+        let deckBridge = StubDeckBridge(answers: true)
+        let flasher = StubFlasher([.connecting, .writing(0), .restarting, Self.updated])
+        let updater = Self.updater(deckBridge, flasher)
+        await updater.repairPanel()
+        #expect(flasher.started == 1)
+        #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+        #expect(deckBridge.posted == [.release, .done])
+    }
+
+    @Test("The repair's confirm says the panel may just run older firmware, what it writes, and that Wi-Fi is kept")
+    func repairConfirm() {
+        #expect(UpdaterScreen.repairConfirm(version: "1.3.0")
+            == "This panel didn't tell its build: it may not be starting, or it may run older firmware. Repair writes 1.3.0 to it. Wi-Fi is kept.")
     }
 }

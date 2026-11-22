@@ -74,4 +74,9 @@ struct CatalogFlasherTests {
         #expect(opener.asked.isEmpty)
         #expect(steps.withLock { $0 } == [.failed(.lineLost)])
     }
+
+    @Test("Repair writes the catalog's newest image: its version")
+    func repairVersion() throws {
+        #expect(try Self.flasher(Rig(), RefusingOpener(.portBusy)).repairVersion() == "1.10.0")
+    }
 }

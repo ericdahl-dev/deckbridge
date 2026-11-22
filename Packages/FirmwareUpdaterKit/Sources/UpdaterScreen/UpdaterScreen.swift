@@ -53,7 +53,9 @@ public struct UpdaterScreen: Sendable, Equatable {
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
     public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, deckBridgeSilent: Bool = false,
-                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil, writing: Bool = false) {
+                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil,
+                panelRepair: PanelUpdateOffer? = nil, writing: Bool = false) {
+        self.panelRepair = panelRepair
         self.update = update
         cancelNote = writing ? Self.noCancelWhileWriting : nil
         self.panelUpdate = panelUpdate
@@ -87,6 +89,14 @@ public struct UpdaterScreen: Sendable, Equatable {
     public let update: String?
     /// The update offered for the panel over its cable (#687); nil when there's none.
     public let panelUpdate: PanelUpdateOffer?
+    /// The repair offered for a panel whose build can't be read (#744); nil when there's none.
+    public let panelRepair: PanelUpdateOffer?
+
+    /// What the owner confirms before a repair: the panel may be fine on older firmware, so say so.
+    public static func repairConfirm(version: String) -> String {
+        "This panel didn't tell its build: it may not be starting, or it may run older firmware. Repair writes \(version) to it. Wi-Fi is kept."
+    }
+
     /// Why there's no Cancel: the panel is being written (#744); nil otherwise.
     public let cancelNote: String?
 
