@@ -13,6 +13,7 @@ struct CableFeedStatusTests {
         #expect(CableFeedStatus(cable: true, port: .busy).text
             == "Not sending: another app has the panel's port open, such as the Firmware Updater or a serial monitor")
         #expect(CableFeedStatus(cable: true, port: .failed("Permission denied")).text == "Not sending: Permission denied")
+        #expect(CableFeedStatus(cable: true, port: .lent).text == "Paused: the Firmware Updater is using the panel's USB cable")
     }
 
     @Test("Only busy and failed are problems")
@@ -22,5 +23,6 @@ struct CableFeedStatusTests {
         #expect(!CableFeedStatus(cable: true, port: .noPanel).isProblem)
         #expect(!CableFeedStatus(cable: true, port: .open).isProblem)
         #expect(!CableFeedStatus(cable: false, port: .busy).isProblem)
+        #expect(!CableFeedStatus(cable: true, port: .lent).isProblem)  // asked for, not a fault (#710)
     }
 }
