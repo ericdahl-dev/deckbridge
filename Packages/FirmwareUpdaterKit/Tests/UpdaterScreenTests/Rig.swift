@@ -23,12 +23,22 @@ final class FakeSerial: PanelSerial, @unchecked Sendable {
     var bauds: [Int] = []
     /// Ports another app holds exclusively (DeckBridge, TIOCEXCL): opening them fails busy.
     var busy: Set<String> = []
-    func listen(on port: String, baud: Int, for seconds: Double) async -> Listened {
+    /// What a #702 panel answers at 921600 when asked "version\n" (#715); nothing unless asked.
+    var answers: [String: [String]] = [:]
+    /// Everything written to any port, in order: the test checks it is only ever the version question, on the panel's.
+    struct Write: Equatable {
+        let port: String
+        let baud: Int
+        let text: String
+    }
+    var writes: [Write] = []
+    func listen(on port: String, baud: Int, for seconds: Double, asking question: String?) async -> Listened {
         opened.append(port)
         bauds.append(baud)
         if busy.contains(port) { return .busy }
+        if let question { writes.append(Write(port: port, baud: baud, text: question)) }
         switch baud {
-        case 921_600: return .lines(lines[port] ?? [])
+        case 921_600: return .lines((lines[port] ?? []) + (question == "version\n" ? answers[port] ?? [] : []))
         case 115_200: return .lines(oldLines[port] ?? [])
         default: return .lines([])
         }

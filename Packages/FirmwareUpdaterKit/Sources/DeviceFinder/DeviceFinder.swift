@@ -45,6 +45,11 @@ public struct DeviceFinder: Sendable {
     /// How long the finder listens to a panel's serial port for its boot line, at each speed.
     public static let listenSeconds = 3.0
     static let bootLine = "deck panel: boot, build "
+    /// #702's answer to the version question: the boot line's words without "boot, ".
+    static let answerLine = "deck panel: build "
+    /// The version question (#695, #702): a whole line, answered without a reboot. Asked only at 921600: a panel at
+    /// 115200 was flashed before #667, so before #702, and can't answer.
+    public static let versionQuestion = "version\n"
     public static let dirty = "-dirty"
 
     let usb: any USBDevices
@@ -78,7 +83,8 @@ public struct DeviceFinder: Sendable {
                 var build: PanelBuild?
                 var busy = false
                 for baud in Self.panelBauds where build == nil && !busy {
-                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds) {
+                    let question = baud == Self.panelBauds[0] ? Self.versionQuestion : nil
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: question) {
                     case .lines(let lines): build = Self.build(in: lines)
                     case .busy: busy = true
                     }
@@ -115,8 +121,9 @@ public struct DeviceFinder: Sendable {
     /// Reads "deck panel: boot, build <sha>" and #695's "deck panel: boot, build <sha>, version <v>[ local]".
     /// A local or development ("-dirty") build gives no version, so its SHA decides.
     static func build(in lines: [String]) -> PanelBuild? {
-        for line in lines where line.hasPrefix(bootLine) {
-            let tail = line.dropFirst(bootLine.count)
+        for line in lines {
+            guard let prefix = [bootLine, answerLine].first(where: line.hasPrefix) else { continue }
+            let tail = line.dropFirst(prefix.count)
             let parts = tail.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
             let printed = parts[0]
             let sha = printed.hasSuffix(dirty) ? printed.dropLast(dirty.count) : printed
