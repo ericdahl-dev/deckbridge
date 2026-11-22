@@ -56,3 +56,18 @@ func publish(_ release: FakeFeed, on github: FakeGitHub) {
     #expect(offer.source == "Firmware from the newest release: deck panel 1.1.0")
     #expect(offer.reason == nil)
 }
+
+/// The newest release is an app release with no firmware manifest (every release so far): nothing went wrong talking
+/// to GitHub, so the screen mustn't say it couldn't be reached.
+@Test(arguments: [["DeckBridge-1.1.0.zip"], ["manifest.json", "DeckBridge-1.1.0.zip"], ["manifest.sig"]])
+func aLatestReleaseWithoutASignedManifestSaysNoneIsPublishedYet(assets: [String]) async throws {
+    let github = FakeGitHub()
+    github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: assets))
+    for name in assets { serve(name, Data("bytes".utf8), on: github) }
+    let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
+        .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
+    #expect(outcome.refusal == .noFirmwareRelease)
+    let offer = FirmwareOffer(outcome)
+    #expect(offer.source == "Firmware built into this app: deck panel 1.0.0")
+    #expect(offer.reason == "No signed firmware release is published yet, so the firmware built into this app is offered.")
+}

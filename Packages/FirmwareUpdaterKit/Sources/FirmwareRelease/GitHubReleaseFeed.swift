@@ -28,6 +28,8 @@ public enum FeedError: Error, Equatable {
     case notPublished
     /// A URL the feed won't ask: not this repo's download URL, or a redirect off GitHub's asset hosts.
     case refusedURL(String)
+    /// The newest release has no manifest.json and manifest.sig: no signed firmware release is published.
+    case nothingPublished
 }
 
 /// This project's newest published GitHub release (#704), read over GitHub's public, unauthenticated endpoints. It sends
@@ -56,6 +58,7 @@ public actor GitHubReleaseFeed: ReleaseFeed {
         guard !release.draft, !release.prerelease else { throw FeedError.notPublished }
         assets = [:]
         for asset in release.assets { assets[asset.name] = asset.browser_download_url }
+        guard assets["manifest.json"] != nil, assets["manifest.sig"] != nil else { throw FeedError.nothingPublished }
         return PublishedRelease(manifest: try await file("manifest.json"), signature: try await file("manifest.sig"))
     }
 

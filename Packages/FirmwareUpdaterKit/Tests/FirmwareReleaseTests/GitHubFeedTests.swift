@@ -69,7 +69,7 @@ func aDraftOrPreReleaseIsNeverFetched(draft: Bool, prerelease: Bool) async throw
 @Test func aReleaseWithoutItsSignatureGivesNothing() async throws {
     let github = publishedGitHub()
     github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: ["manifest.json", "catalog.json"]))
-    await #expect(throws: FeedError.missingAsset("manifest.sig")) { try await GitHubReleaseFeed(http: github).latest() }
+    await #expect(throws: FeedError.nothingPublished) { try await GitHubReleaseFeed(http: github).latest() }
 }
 
 /// GitHub can't be reached, answers with an error, or with something that isn't a release: the fetch is "unreachable",
