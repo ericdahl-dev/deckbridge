@@ -348,6 +348,14 @@ class CheckSiteTests(unittest.TestCase):
         for words in ("Mixer/CH", "Volume", "Relative", "Jump", "Settings"):
             self.assertIn(words, rows[0])
 
+    def test_the_lc6000_page_says_needle_drop_moves_the_fader(self):
+        # #729, the owner's wording: the strip moves the deck's channel fader, and Shift + the strip seeks.
+        page = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website", "for", "lc6000", "index.html")
+        with open(page, encoding="utf-8") as f:
+            rows = [line.strip() for line in f if "<dt>Needle Drop strip</dt>" in line]
+        self.assertEqual(rows, ["<div><dt>Needle Drop strip</dt><dd>Moves the deck’s channel fader. With Shift, seeks"
+                                " while you touch it.</dd></div>"])
+
     def test_the_readme_documents_shift_hot_cue(self):
         # Shift + hot cue pad on a stopped deck (#358, #363): the README's LC6000 controls table has a row for it, naming
         # the stopped deck, and the quantize reset to Use Global.
