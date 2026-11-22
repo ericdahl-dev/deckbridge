@@ -442,6 +442,32 @@ class CheckSiteTests(unittest.TestCase):
         root = self.site({"support/index.html": page(body='<a href="../">Home</a>', footer="<footer></footer>")})
         self.assertEqual(check_site.problems(root), ['support/index.html: the footer doesn\'t name "Untitled Audio Syndicate Ltd."'])
 
+    def test_the_stated_beta_version_is_the_latest_release(self):
+        # The site says which version is on TestFlight; it's CHANGELOG.md's newest release, in text and JSON-LD.
+        page = ('<p>Version 1.0.1 is in beta on TestFlight now.</p><p>DeckBridge 1.0.1 is available now as a beta.</p>'
+                '<script type="application/ld+json">{"softwareVersion": "1.0.1"}</script>')
+        self.assertEqual(check_site.version_problems("index.html", page, "1.1.0"), [
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+            'index.html: says version 1.0.1, not the latest release 1.1.0',
+        ])
+        self.assertEqual(check_site.version_problems("index.html", page.replace("1.0.1", "1.1.0"), "1.1.0"), [])
+        self.assertEqual(check_site.version_problems("llms.txt", "- Status: version 1.0.1 is on TestFlight", "1.1.0"),
+                         ['llms.txt: says version 1.0.1, not the latest release 1.1.0'])
+        self.assertEqual(check_site.version_problems("index.md", "- **Version 1.0.1** is in beta", "1.1.0"),
+                         ['index.md: says version 1.0.1, not the latest release 1.1.0'])
+        # Not a statement of the beta: the plan for v1.1, the web capture's own version, Syndicate's version.
+        self.assertEqual(check_site.version_problems("x.js", 'Coming in v1.1. var APP_VERSION = "web 1.0.1";', "1.1.0"), [])
+        self.assertEqual(check_site.version_problems("index.md", "Syndicate's own MIDI mapping (version 0.3.7) can't", "1.1.0"), [])
+
+    def test_the_latest_release_is_the_changelogs_newest(self):
+        self.assertEqual(check_site.latest_release("# Changes\n\n## 1.1.0\n\n- x\n\n## 1.0.2\n"), "1.1.0")
+        changelog = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "CHANGELOG.md")
+        with open(changelog, encoding="utf-8") as f:
+            release = check_site.latest_release(f.read())
+        website = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "website")
+        self.assertEqual([p for p in check_site.problems(website, release=release) if "latest release" in p], [])
+
     def test_the_readme_names_the_company_in_full(self):
         readme = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.md")
         with open(readme, encoding="utf-8") as f:
