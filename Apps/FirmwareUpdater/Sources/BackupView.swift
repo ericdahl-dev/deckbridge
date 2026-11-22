@@ -8,27 +8,31 @@ import UnitCheck
 @MainActor @Observable
 final class BackupModel {
     private(set) var running = false
-    private(set) var result: String?
+    /// The step's and the backup's lines (#762): a step starting clears the stale ones.
+    private(set) var lines = LC6000Lines()
+    var result: String? { lines.backup }
+    var stepResult: String? { lines.step }
     /// The update-mode step's confirm is showing (#762: a click and a confirm, no typed word).
     var confirmingStep = false
-    private(set) var stepResult: String?
     /// The update this session's backup allows (#693); nil until a backup is saved.
     private(set) var update: UpdateModel?
 
     /// The display chip's step into update mode: only from the confirm's own button, once.
     func enterUpdateMode(clicked button: String) async {
         guard let confirmed = UpdateModeStep.Confirmed(clicked: button) else { return }
+        lines.stepStarts()
         let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(confirmed: confirmed)
         switch outcome {
-        case .sent: stepResult = UpdateModeStep.sentText
-        case .refused(let reason): stepResult = reason
+        case .sent: lines.step = UpdateModeStep.sentText
+        case .refused(let reason): lines.step = reason
         }
     }
 
     func backUp() async {
         guard !running else { return }
+        lines.backupStarts()
         if let stop = await Preflight(apps: WorkspaceApps()).stop() {
-            result = stop
+            lines.backup = stop
             return
         }
         let panel = NSOpenPanel()
@@ -44,14 +48,14 @@ final class BackupModel {
         guard found.count == 1, let one = found.first, let usb = try? IOUSBHostDFU(service: one.service) else {
             let report = await UnitCheck(known: Self.known, log: FileLog.shared)
                 .backUp(devices: found.map(\.device), transport: Unreachable(), into: folder, stamp: Self.stamp())
-            result = report.refusal ?? "The chip in update mode couldn't be opened. Nothing was read."
+            lines.backup = report.refusal ?? "The chip in update mode couldn't be opened. Nothing was read."
             return
         }
         let report = await UnitCheck(known: Self.known, log: FileLog.shared)
             .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: Self.stamp())
-        update = report.read.map { UpdateModel(read: $0) }
+        update = report.read.map { UpdateModel(read: $0) { [weak self] in self?.lines.writeStarts() } }
         // With a read, the update's view of it: a chip already running this app's patch is said to (#748).
-        result = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
+        lines.backup = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
     }
 
     static var known: KnownFirmware {

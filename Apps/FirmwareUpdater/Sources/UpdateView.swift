@@ -17,8 +17,12 @@ final class UpdateModel {
     /// The word typed in the write's confirm (#762): the write's button stays off until it's UPDATE.
     var typed = ""
 
+    /// Called as a write or restore starts: the backup's line goes (#762).
+    private let writeStarts: () -> Void
+
     /// `read`: the backup read just taken, in this run of the app.
-    init(read: ChipRead) {
+    init(read: ChipRead, writeStarts: @escaping () -> Void = {}) {
+        self.writeStarts = writeStarts
         let catalog = try? Catalog.builtIn()
         let chip: Chip = read.kind == .display ? .wd : .tp
         let edits = catalog.map { catalog in
@@ -43,6 +47,7 @@ final class UpdateModel {
     private func run(_ plan: WritePlan?, _ confirmed: Confirmation?) async {
         guard let plan, let confirmed, !running else { return }
         stop = nil
+        writeStarts()
         if let reason = await Preflight(apps: WorkspaceApps()).stop() {
             stop = reason
             return
