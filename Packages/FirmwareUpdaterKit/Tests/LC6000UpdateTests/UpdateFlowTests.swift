@@ -85,4 +85,35 @@ struct UpdateFlowTests {
         gone.finished(.noAnswer)
         #expect(gone.status == noAnswer && !gone.canRestore && gone.recoveryGuide != nil)
     }
+
+    @Test("The owner's top panel chip after #748's run: patched, so its hash isn't stock's, and it shows up to date")
+    func topPanelPatched() throws {
+        let v = try PatchStateTests.vector("tp 00.31")
+        let stock = V.element(v) + [UInt8](repeating: 0xFF, count: 0x3_8000 - 0xE000)
+        let edits = try V.edits(v)
+        let patched = try PatchedImage.apply(edits, chip: .tp, to: stock)
+        let known = KnownNumbers(display: [:], topPanel: [PatchStateTests.sha(stock): "00.31"])
+        let flow = UpdateFlow(chip: .topPanel, backup: ChipRead(kind: .topPanel, settings: [], app: patched),
+                              backupTakenThisSession: true, edits: edits, known: known)
+        #expect(flow.status == "Up to date: 00.31 with this app's patch")
+        #expect(!flow.canConfirm)
+    }
+
+    @Test("The backup's line agrees: a patched chip isn't firmware the app doesn't know")
+    func backupLine() throws {
+        let v = try PatchStateTests.vector("tp 00.31")
+        let stock = V.element(v) + [UInt8](repeating: 0xFF, count: 0x3_8000 - 0xE000)
+        let edits = try V.edits(v)
+        let read = ChipRead(kind: .topPanel, settings: [], app: try PatchedImage.apply(edits, chip: .tp, to: stock))
+        let known = KnownNumbers(display: [:], topPanel: [PatchStateTests.sha(stock): "00.31"])
+        let flow = UpdateFlow(chip: .topPanel, backup: read, backupTakenThisSession: true, edits: edits, known: known)
+        let unknown = Identified(kind: .topPanel, version: nil, refusal: "The top panel chip runs firmware this app doesn't know. Updates are off; a backup is still allowed.")
+        #expect(flow.backupLine(files: 2, identified: unknown)
+            == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31, with this app's patch.")
+        let stockFlow = UpdateFlow(chip: .topPanel, backup: ChipRead(kind: .topPanel, settings: [], app: stock),
+                                   backupTakenThisSession: true, edits: edits, known: known)
+        let found = Identified(kind: .topPanel, version: "00.31", refusal: nil)
+        #expect(stockFlow.backupLine(files: 2, identified: found)
+            == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31.")
+    }
 }

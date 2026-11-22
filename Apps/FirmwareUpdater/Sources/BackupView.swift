@@ -48,8 +48,9 @@ final class BackupModel {
         }
         let report = await UnitCheck(known: Self.known, log: FileLog.shared)
             .backUp(devices: [one.device], transport: ReadOnlyTransport(usb), into: folder, stamp: Self.stamp())
-        result = Self.text(report)
         update = report.read.map { UpdateModel(read: $0) }
+        // With a read, the update's view of it: a chip already running this app's patch is said to (#748).
+        result = update.map { $0.flow.backupLine(files: report.files.count, identified: report.identified) } ?? Self.text(report)
     }
 
     static var known: KnownFirmware {

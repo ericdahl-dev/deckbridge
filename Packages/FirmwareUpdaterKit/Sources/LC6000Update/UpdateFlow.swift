@@ -70,6 +70,22 @@ public struct UpdateFlow: Sendable {
         }
     }
 
+    /// The backup's result line, agreeing with this flow: a chip that already runs this app's patch is said to, not
+    /// called firmware the app doesn't know (its hash or CRC is no longer stock's).
+    public func backupLine(files: Int, identified: Identified?) -> String {
+        var lines = ["Backup saved: read twice and the same, \(files) files."]
+        let chipName = chip == .display ? "Display chip" : "Top panel chip"
+        if case .alreadyPatched(let version) = state {
+            lines.append("\(chipName): firmware \(version), with this app's patch.")
+        } else if let found = identified {
+            if let version = found.version {
+                lines.append("\(chipName): firmware \(version)\(found.ours ? ", with DeckBridge's changes already on it" : "").")
+            }
+            if let refusal = found.refusal { lines.append(refusal) }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// The writer's outcome: of the update, or of the restore after a mismatch.
     public mutating func finished(_ outcome: WriteOutcome) {
         switch (phase, outcome) {
