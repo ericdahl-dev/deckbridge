@@ -24,6 +24,8 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      # Its own icon (#733), rendered from design/icon/updater-download.svg by scripts/render_app_icon.swift.
+      - path: Assets.xcassets
     dependencies:
       - package: FirmwareUpdaterKit
         product: DeviceFinder
@@ -46,6 +48,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.ericdahl.FirmwareUpdater
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Notarized from the site, not the App Store: hardened runtime, no sandbox. USB, serial and MIDI reads need
         # no entitlement outside the sandbox.
         ENABLE_HARDENED_RUNTIME: YES

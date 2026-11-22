@@ -87,6 +87,14 @@ This writes the bootloader, the partition table (Arduino's stock `default_16MB` 
 esptool.py --port /dev/cu.wchusbserial210 write_flash 0 <the backup file>
 ```
 
+## Version
+
+The firmware's version is in `VERSION` (dotted digits, such as `1.0.0`), set by hand in the release's PR. A build is a release only when it is built from the tag `deck-panel-v<version>` with no uncommitted changes in `tools/deck-panel/`; every other build is local, and says so (#695).
+
+- At boot, on serial: `deck panel: boot, build <SHA>, version <version>`, with ` local` after the version of a local build (whose SHA may end in `-dirty`).
+- On request, without a reboot: send the line `version` at 115200 baud and the panel answers `deck panel: build <SHA>, version <version>[ local]`. Opening the port may reset the board through the CH340's DTR and RTS lines (not yet checked on the panel), so open it with both held low; `pio device monitor` needs `--dtr 0 --rts 0`.
+- On every waiting screen, bottom right: `v<version>  <SHA>`, or `v<version> local  <SHA>`.
+
 ## What the deck view shows
 
 - At boot with a saved network: "Joining Wi-Fi…". With none saved: the setup screen (see Wi-Fi).
@@ -200,6 +208,6 @@ Build and flash `crowpanel-test` (`-e crowpanel-test` in the commands above) for
 - Eight full-height bars across the whole 800 px. From left to right: red, green, blue, white, black, mid gray, dark gray, light gray. If red and blue are swapped, the bus order is wrong.
 - A black band across the middle. On it is the line `DeckBridge deck panel  800x480  V1.4  build <short SHA>` (with `-dirty` if built from uncommitted changes), and below it the last touch, as `Touch at x, y`.
 - The backlight comes on after the first frame is drawn, so nothing flashes at boot.
-- On serial (115200 baud): `deck panel: boot, build <SHA>`, the companion chip and display lines, `touch: GT911 at 0x5D`, then `deck panel: test screen up`. The test screen has no Wi-Fi.
+- On serial (115200 baud): `deck panel: boot, build <SHA>, version <version>` (see Version), the companion chip and display lines, `touch: GT911 at 0x5D`, then `deck panel: test screen up`. The test screen has no Wi-Fi.
 
 **What only the panel can show:** colors, the full area, the backlight, touch, tearing, Wi-Fi and the feed. None of these has a host test.

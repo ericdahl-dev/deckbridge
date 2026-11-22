@@ -6,6 +6,7 @@ import os, re, sys, unittest
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import testflight_distribute as td
+import check_site
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
@@ -111,7 +112,8 @@ class WhatToTest(unittest.TestCase):
 
     def test_names_what_main_gained(self):
         # #648: what's new since the first What to Test, for testers to try.
-        for phrase in ["Shift + Needle Drop", "channel fader", "Exact colors on the LC6000", "Key display",
+        # The Needle Drop strip's fader is its plain touch since #729; Shift + the strip seeks.
+        for phrase in ["Needle Drop strip moves the deck's channel fader", "Shift + the strip seeks", "Exact colors on the LC6000", "Key display",
                        "Display feed", "off by default", "unencrypted", "leave it on Denon"]:
             self.assertIn(phrase, self.text)
 
@@ -123,6 +125,17 @@ class WhatToTest(unittest.TestCase):
     def test_never_offers_the_led_test(self):
         self.assertNotIn("Test LEDs", self.text)
         self.assertNotIn("LED test", self.text)
+
+
+
+class NetworkClaims(unittest.TestCase):
+    """The README and the App Review notes hold the site's rule (#632): a sentence saying nothing goes to the network
+    names the display feed, which sends the deck in front to the address the DJ sets once it's on (ADR 0011)."""
+
+    def test_every_claim_names_the_display_feed(self):
+        for path in ["README.md", "docs/APP_REVIEW.md", "docs/HARDWARE-CHECK.md"]:
+            with self.subTest(path):
+                self.assertEqual(check_site.network_problems(path, read(path)), [])
 
 
 if __name__ == "__main__":

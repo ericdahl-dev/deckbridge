@@ -38,4 +38,17 @@ struct CaptureHoldTests {
         #expect(demo.ledTestStarted() == nil)
         #expect(demo.end() == nil)
     }
+
+    @Test("Unplugged mid LED test (#353): the test ended with nothing left to send, so it's given back; the replug pauses nothing")
+    func unpluggedMidLEDTest() {
+        var flow = LEDPhaseTests.captured()
+        var hold = CaptureHold(source: 1001)
+        _ = hold.stepsStarted()
+        _ = hold.stepsDone()
+        flow.startLEDs(scope: .full, at: 10)
+        #expect(hold.ledTestStarted() == .pause(1001))
+        flow.disconnected(at: 10.05)
+        #expect(hold.sendsDrained(phase: flow.phase, pending: flow.hasPendingSends) == .giveBack)
+        #expect(hold.reconnected() == nil)
+    }
 }

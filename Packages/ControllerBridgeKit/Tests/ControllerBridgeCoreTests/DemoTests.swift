@@ -146,7 +146,7 @@ struct DemoJogDisplayTests {
     @Test("While it plays, the needle turns (several positions in a second) and the master beat runs")
     func needleAndBeat() throws {
         let events = try Self.run(to: 3)
-        let needles = Set(events.compactMap { if case .deckMarker(1, let pitchBend) = $0 { pitchBend } else { nil } })
+        let needles = Set(events.compactMap { if case .deckNeedle(1, let pitchBend) = $0 { pitchBend } else { nil } })
         #expect(needles.count >= 8)
         #expect(events.contains { if case .masterBeat = $0 { true } else { false } })
     }

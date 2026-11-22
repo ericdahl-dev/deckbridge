@@ -51,7 +51,7 @@ public enum JogDisplay {
     /// The goodbye on the Controller port, at quit or unplug, so the unit returns to standalone.
     public static let goodbye: [UInt8] = [0xF0, 0x00, 0x20, 0x7F, 0x02, 0xF7]
 
-    /// Shows the image in `slot` (0A, image index = slot) with element mask 0D: the image and the position marker,
+    /// Shows the image in `slot` (0A, image index = slot) with element mask 0D: the image and the needle,
     /// as djay sends. Mask 01 shows the image alone and hides the needle (#165, on hardware).
     public static func show(slot: UInt8) -> [UInt8] {
         frame(0x0A, [0x0D, 0x00, slot, 0x0D])

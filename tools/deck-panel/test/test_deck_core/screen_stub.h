@@ -18,6 +18,7 @@ struct ScreenStub : deck_core::Screen {
         std::string detail;
         bool logo = false;  ///< the waiting screen's DeckBridge logo
         bool logo_small = false;  ///< at half size (setup, #677)
+        std::string build;  ///< the firmware's version and SHA (#695)
         deck_core::Face face;  ///< the whole face, as shown
         deck_core::Changes changes;  ///< the parts the core said changed
         deck_core::WaitingChanges waiting_changes;
@@ -31,6 +32,7 @@ struct ScreenStub : deck_core::Screen {
         s.detail = view.detail;
         s.logo = view.logo;
         s.logo_small = view.logo_small;
+        s.build = view.build;
         shown.push_back(s);
     }
     void show_deck(const deck_core::Face& face, const deck_core::Changes& changes) override {

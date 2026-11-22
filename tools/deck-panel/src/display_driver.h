@@ -34,7 +34,9 @@ bool display_init();
 // The LVGL display registered by display_init(), or nullptr before it runs.
 lv_display_t* display_lvgl();
 
-// What the panel did since the last call, for a performance log. Call it from LVGL's task (the loop).
+// What the panel did since the last call, for a performance log. Call it from LVGL's task (the loop). This,
+// display_take_scan() and display_take_copy() are parts of one health window (lib/panel_scan, #666): the first of
+// them called again starts the next window, so call each once a window.
 struct DisplayPerf {
     uint32_t vsyncs;          // frames the panel scanned out
     uint32_t swaps;           // frames LVGL finished and handed over
@@ -51,7 +53,8 @@ scan_watch::Report display_take_scan();
 // A bounce chunk's deadline, and (perf build only) the copies timed against it since the last call; no chunks
 // otherwise.
 uint32_t display_copy_budget_us();
-// Of the late copies (#663): those during display_refresh(), and those within 3 ms after a latch (the frame turn).
+// Of the late copies (#663): those during display_refresh(), and of the rest those that started within 3 ms after a
+// latch (the frame turn). One or the other, never both (#666).
 struct DisplayCopyLate {
     uint32_t drawing;
     uint32_t turn;
