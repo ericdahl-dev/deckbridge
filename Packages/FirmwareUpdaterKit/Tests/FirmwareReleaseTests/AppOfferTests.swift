@@ -10,11 +10,8 @@ import FirmwareRelease
 /// A release as the signing step writes it, published on the fake GitHub: manifest.json, manifest.sig and its files
 /// as the release's assets.
 func publish(_ release: FakeFeed, on github: FakeGitHub) {
-    let names = ["manifest.json", "manifest.sig"] + release.files.keys.sorted()
-    github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: names))
-    serve("manifest.json", release.manifest, on: github)
-    serve("manifest.sig", release.signature, on: github)
-    for (name, bytes) in release.files { serve(name, bytes, on: github) }
+    publish(assets: release.files.merging(["manifest.json": release.manifest, "manifest.sig": release.signature]) { $1 },
+            on: github)
 }
 
 @Test func withTheAppsKeysStillEmptyAWholeReleaseOffersTheBuiltInFirmwareAndSaysTheKeyIsUnknown() async throws {
@@ -62,8 +59,7 @@ func publish(_ release: FakeFeed, on github: FakeGitHub) {
 @Test(arguments: [["DeckBridge-1.1.0.zip"], ["manifest.json", "DeckBridge-1.1.0.zip"], ["manifest.sig"]])
 func aLatestReleaseWithoutASignedManifestSaysNoneIsPublishedYet(assets: [String]) async throws {
     let github = FakeGitHub()
-    github.answers[latestURL] = HTTPResponse(status: 200, body: releaseJSON(assets: assets))
-    for name in assets { serve(name, Data("bytes".utf8), on: github) }
+    publish(assets: Dictionary(uniqueKeysWithValues: assets.map { ($0, Data("bytes".utf8)) }), on: github)
     let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
         .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
     #expect(outcome.refusal == .noFirmwareRelease)
@@ -72,10 +68,10 @@ func aLatestReleaseWithoutASignedManifestSaysNoneIsPublishedYet(assets: [String]
     #expect(offer.reason == "No signed firmware release is published yet, so the firmware built into this app is offered.")
 }
 
-/// GitHub answers 404 for the latest release exactly when nothing is published: that's not "couldn't be reached".
+/// GitHub's latest link answers 404 when nothing is published, or the newest release has no manifest: that's not "couldn't be reached".
 @Test func noPublishedReleaseAtAllSaysNoneIsPublishedYet() async throws {
     let github = FakeGitHub()
-    github.answers[latestURL] = HTTPResponse(status: 404, body: Data(#"{"message": "Not Found"}"#.utf8))
+    github.answers[latestURL] = HTTPResponse(status: 404, body: Data("Not Found".utf8))
     let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
         .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
     #expect(outcome.refusal == .noFirmwareRelease)
