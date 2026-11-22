@@ -232,6 +232,15 @@ void test_no_phase_is_the_plain_dark_bar() {
     }
 }
 
+// #721: locked is exactly 0.5 (DeckBridge's DrawnPhase holds it there within #462's 0.002 of a beat): the whole bar in
+// the deck color and the tick at its center, no bar from the center.
+void test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick() {
+    const Face f = deck_core::face(loaded_deck());  // red, phase 0.5
+    TEST_ASSERT_EQUAL_HEX32(0xFF0000, f.phase_track_color);
+    TEST_ASSERT_EQUAL(1, f.phase_tick);
+    TEST_ASSERT_EQUAL(0, f.phase_bar_w);
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -298,6 +307,7 @@ int main(int, char**) {
     RUN_TEST(test_texts_come_fitted_to_the_fonts);
     RUN_TEST(test_the_phase_marker_hides_while_unknown_and_stays_on_the_bar);
     RUN_TEST(test_no_phase_is_the_plain_dark_bar);
+    RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
