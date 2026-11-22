@@ -325,6 +325,16 @@ class CheckSiteTests(unittest.TestCase):
             'support/index.html: says "dfu-util": no flashing instructions on the site',
         ])
 
+    def test_the_json_ld_feature_list_names_what_1_1_brings(self):
+        # #652's audit: the SoftwareApplication's featureList stopped at 1.0. At 1.1 it names each of 1.1's features.
+        at_1_1 = GOOD["index.html"].replace('"softwareVersion": "1.0.1"', '"softwareVersion": "1.1.0"')
+        listed = at_1_1.replace('"softwareVersion": "1.1.0", ', '"softwareVersion": "1.1.0", "featureList": '
+                                '["The jog display", "Transpose", "Exact colors", "A key display", "Display feed"], ')
+        problems = [p for p in check_site.problems(self.site({"index.html": listed})) if "featureList" in p]
+        self.assertEqual(problems, ['index.html: the JSON-LD featureList doesn\'t name 1.1\'s "needle drop"'])
+        at_1_0 = [p for p in check_site.problems(self.site()) if "featureList" in p]
+        self.assertEqual(at_1_0, [])
+
     def test_the_product_pages_name_what_1_1_brings(self):
         """#647: the home page, index.md and llms.txt each name 1.1's features, so one can't quietly drop out."""
         at_1_1 = GOOD["index.html"].replace('"softwareVersion": "1.0.1"', '"softwareVersion": "1.1.0"')

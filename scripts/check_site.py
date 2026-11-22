@@ -446,6 +446,29 @@ CAPTURE_PAGE_JS = "capture/capture-page.js"
 CAPTURE_VERSION = re.compile(r'APP_VERSION\s*=\s*"web (\d+\.\d+\.\d+)"')
 
 
+def feature_list(root):
+    """The home page JSON-LD's SoftwareApplication featureList, lowercased and joined; "" if it has none."""
+    page = Page()
+    with open(os.path.join(root, HOME), encoding="utf-8") as f:
+        page.feed(f.read())
+    def find(node):
+        if isinstance(node, dict):
+            if node.get("@type") == "SoftwareApplication" and isinstance(node.get("featureList"), list):
+                return node["featureList"]
+            return next((v for v in map(find, node.values()) if v), None)
+        if isinstance(node, list):
+            return next((v for v in map(find, node) if v), None)
+        return None
+    for block in page.json_ld:
+        try:
+            found = find(json.loads(block))
+        except ValueError:
+            continue
+        if found:
+            return plain_words(" ".join(str(item) for item in found), False)
+    return ""
+
+
 def app_version(root):
     """The home page JSON-LD's SoftwareApplication softwareVersion: the one version the site may name."""
     path = os.path.join(root, HOME)
@@ -558,6 +581,9 @@ def problems(root, app_prompts=None, release=None):
     app_version = globals()["app_version"](root)
     if HOME in files and not app_version:
         out.append(f"{HOME}: the JSON-LD has no SoftwareApplication softwareVersion")
+    if HOME in files and app_version and version_tuple(app_version) >= (1, 1):
+        listed = feature_list(root)
+        out += [f'{HOME}: the JSON-LD featureList doesn\'t name 1.1\'s "{words}"' for words in NEW_IN_1_1 if words not in listed]
     controllers, controller_problems = load_controllers(root)
     out += controller_problems
     if not controller_problems and HOME in files:
