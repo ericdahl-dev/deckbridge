@@ -1,6 +1,8 @@
 import DeviceFinder
 import Foundation
 import Observation
+import PanelFlasher
+import PortHandoff
 
 /// The time, and a wait: the real one in the app, a fake in tests.
 public protocol UpdaterClock: Sendable {
@@ -38,12 +40,44 @@ public final class Updater {
 
     /// `changes` yields when a USB device arrives or leaves, or a serial port appears.
     /// `log`: the finder's log, for the line when the wait for the port is up.
+    /// `borrow`: asks DeckBridge for the panel's port (#710). `flasher`: puts the catalog's newest image on the panel
+    /// over its cable (#687); nil, the app offers no update.
     public init(finder: DeviceFinder, changes: AsyncStream<Void>, clock: any UpdaterClock = SystemClock(),
-                log: (any LogSink)? = nil) {
+                log: (any LogSink)? = nil, borrow: (@Sendable () -> PortBorrow)? = nil,
+                flasher: (any PanelFlashing)? = nil) {
         self.finder = finder
         self.changes = changes
         self.clock = clock
         self.log = log
+        self.borrow = borrow
+        self.flasher = flasher
+    }
+
+    private let borrow: (@Sendable () -> PortBorrow)?
+    private let flasher: (any PanelFlashing)?
+    /// What the update over the cable says now; nil before the first one.
+    private var updateText: String?
+
+    /// Updates the panel over its cable (#687). DeckBridge is asked for the port first (#710). With no answer (it isn't
+    /// running, or it's from before #710) the port is tried anyway; only a busy port then says to free it by hand.
+    public func updatePanel() async {
+        guard let flasher else { return }
+        let lend = borrow?()
+        let outcome = await lend?.borrow() ?? .noAnswer
+        let (steps, step) = AsyncStream<PanelUpdate.Step>.makeStream()
+        Task.detached {
+            await flasher.flash { step.yield($0) }
+            step.finish()
+        }
+        for await next in steps {
+            if case .failed(.portBusy) = next, let text = UpdaterScreen.handoff(outcome) {
+                updateText = text
+            } else {
+                updateText = next.text
+            }
+            show()
+        }
+        lend?.giveBack()
     }
 
     public func refresh() async {
@@ -72,7 +106,8 @@ public final class Updater {
     }
 
     private func show() {
-        screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort)
+        screen = UpdaterScreen(found: found, lc6000WarningAccepted: lc6000WarningAccepted, panelWaiting: waitingForPort,
+                               update: updateText)
     }
 
     /// The panel is on USB with no port, and the wait isn't up: it may still be coming.
