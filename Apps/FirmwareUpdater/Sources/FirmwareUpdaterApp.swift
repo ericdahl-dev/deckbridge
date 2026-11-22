@@ -1,4 +1,5 @@
 import DeviceFinder
+import FirmwareCatalog
 import SwiftUI
 import UpdaterScreen
 
@@ -20,12 +21,19 @@ struct FirmwareUpdaterApp: App {
 }
 
 /// The app's model, with the real ports: IOKit, CoreMIDI, a listen-only serial port, and IOKit's USB notifications.
+/// Updates over the cable (#687) use the built-in catalog's panel image, the flashing serial port, and DeckBridge's
+/// port handoff (#710). With no panel image in the catalog, no update is offered.
 @MainActor
 enum Live {
     static let usbChanges = IOKitUSBChanges()
     static func updater() -> Updater {
-        Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
-                changes: usbChanges.changes, log: FileLog.shared)
+        let usb = IOKitUSB()
+        let finder = DeviceFinder(usb: usb, midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared)
+        let flasher = (try? Catalog.builtIn()).map {
+            CatalogFlasher(catalog: $0, usb: usb, finder: finder, opener: FlashingSerialOpener())
+        }
+        return Updater(finder: finder, changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow,
+                       flasher: flasher)
     }
 }
 
@@ -35,6 +43,7 @@ struct UpdaterView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
+            PanelUpdateView(model: model)
             SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
             HStack {
                 Spacer()
@@ -87,5 +96,30 @@ struct GuideView: View {
             Link("Open WCH's driver download page", destination: guide.link)
         }
         .padding(.top, 4)
+    }
+}
+
+/// Updating the panel over its cable (#687): the offer, each step while it runs with Cancel, then the result.
+struct PanelUpdateView: View {
+    let model: Updater
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if model.updating {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(model.screen.update ?? "")
+                    Spacer()
+                    Button("Cancel") { model.cancelUpdate() }
+                }
+            } else {
+                if let text = model.screen.update { Text(text).fixedSize(horizontal: false, vertical: true) }
+                if let offer = model.screen.panelUpdate {
+                    if let note = offer.note { Text(note).foregroundStyle(.secondary) }
+                    Button("Update the panel to \(offer.version)") { Task { await model.updatePanel() } }
+                        .disabled(model.looking)
+                }
+            }
+        }
     }
 }
