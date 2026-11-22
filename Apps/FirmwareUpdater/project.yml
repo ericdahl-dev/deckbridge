@@ -39,6 +39,8 @@ targets:
         product: FirmwareCatalog
       - package: FirmwareUpdaterKit
         product: PortHandoff
+      - package: FirmwareUpdaterKit
+        product: FirmwareRelease
     info:
       path: Sources/Info.plist
       properties:
