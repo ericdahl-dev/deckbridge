@@ -10,6 +10,8 @@ import UnitCheck
 final class UpdateModel {
     private(set) var flow: UpdateFlow
     private(set) var running = false
+    /// Something reached the chip's flash this session (an update or a restore): a read taken before it is stale.
+    private(set) var wrote = false
     /// Why a write didn't start (DeckBridge running, the chip not found): nothing was sent.
     private(set) var stop: String?
     var confirming = false
@@ -45,6 +47,7 @@ final class UpdateModel {
         running = true
         defer { running = false }
         let outcome = await ChipWriter(transport: usb).write(plan, confirmed: Confirmation(plan))
+        if outcome != .refused { wrote = true }
         flow.finished(outcome)
         FileLog.shared.log("LC6000 \(flow.chip == .display ? "display" : "top panel") chip: update \(Self.word(outcome))")
     }
