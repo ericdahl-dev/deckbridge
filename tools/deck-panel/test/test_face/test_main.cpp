@@ -259,6 +259,23 @@ void test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track() {
     TEST_ASSERT_EQUAL(122, f.phase_bar_w);
 }
 
+// #721: half a beat off, either way, is the whole half bar (the feed's phase wraps there: 0 and 1 are both half a beat),
+// and past the end it stays on the bar. The lock's boundary is the feed's: the smallest step off 0.5 (1/16384 of a
+// beat, #462's unit) is off phase, a 1 px bar, never locked.
+void test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked() {
+    DeckView v = loaded_deck();
+    struct { float phase; int x, w; } cases[] = {{0.0f, 0, 352}, {1.0f, 352, 352}, {1.3f, 352, 352},
+                                                 {0.5f + 1.0f / 16384, 352, 1}, {0.5f - 1.0f / 16384, 351, 1}};
+    for (const auto& c : cases) {
+        v.phase = c.phase;
+        const Face f = deck_core::face(v);
+        TEST_ASSERT_EQUAL(c.x, f.phase_bar_x);
+        TEST_ASSERT_EQUAL(c.w, f.phase_bar_w);
+        TEST_ASSERT_EQUAL(0, f.phase_tick);
+        TEST_ASSERT_EQUAL_HEX32(0x721919, f.phase_track_color);
+    }
+}
+
 // The meter is 310 px tall, from the key row to the lamps' bottom.
 void test_the_level_fill_is_whole_pixels_of_the_310_px_meter() {
     DeckView v = loaded_deck();
@@ -327,6 +344,7 @@ int main(int, char**) {
     RUN_TEST(test_no_phase_is_the_plain_dark_bar);
     RUN_TEST(test_locked_is_the_whole_bar_in_the_deck_color_with_the_tick);
     RUN_TEST(test_off_phase_a_bar_grows_from_the_center_on_the_dimmed_track);
+    RUN_TEST(test_the_bar_reaches_each_end_at_half_a_beat_and_one_step_off_is_not_locked);
     RUN_TEST(test_the_level_fill_is_whole_pixels_of_the_310_px_meter);
     return UNITY_END();
 }
