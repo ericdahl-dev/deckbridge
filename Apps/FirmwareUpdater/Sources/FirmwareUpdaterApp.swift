@@ -32,7 +32,8 @@ enum Live {
     static let usbChanges = IOKitUSBChanges()
     static func updater() -> Updater {
         Updater(finder: DeviceFinder(usb: IOKitUSB(), midi: CoreMIDINames(), serial: ListeningSerial(), log: FileLog.shared),
-                changes: usbChanges.changes, log: FileLog.shared, firmware: firmwareOffer)
+                changes: usbChanges.changes, log: FileLog.shared, borrow: DeckBridgeHandoff.borrow,
+                firmware: firmwareOffer)
     }
 
     /// The firmware on offer (#704): this project's newest GitHub release if it checks out against the app's keys, else
