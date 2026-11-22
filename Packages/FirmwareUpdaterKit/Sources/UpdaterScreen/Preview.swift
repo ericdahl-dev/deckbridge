@@ -5,7 +5,7 @@ import PanelFlasher
 
 /// The screenshot preview (#761), Debug builds only: the window in a fixed state, on fake ports. Every port here is a
 /// plain value in this file: this package has no IOKit, CoreMIDI or serial code, and the preview has no DeckBridge
-/// handoff, so nothing is opened, sent or signalled.
+/// handoff, so nothing is opened, sent or signaled.
 public enum PreviewState: String, CaseIterable, Sendable {
     /// Nothing plugged in.
     case nothing
