@@ -154,7 +154,7 @@ struct JogDisplayDriverTests {
 /// What the driver did, as typed events, for the Diagnostics simulator (#221): the same facts as the bytes on WD.
 @Suite("Jog display events")
 struct JogDisplayEventTests {
-    @Test("An upload, its acks and commit, the show, the marker and the play light are each an event")
+    @Test("An upload, its acks and commit, the show, the needle and the play light are each an event")
     func events() {
         let port = JogDisplayDriverTests.FakePort(), log = Rig.FakeLog()
         let driver = JogDisplayDriver(port: port, clock: Rig.FakeClock(), log: log, size: 1, render: JogDisplayDriverTests.render)

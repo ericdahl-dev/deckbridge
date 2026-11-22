@@ -5,7 +5,7 @@
 // shrunk: nothing is under 14 px. The layout is the designer's (gen.py), in its pixels.
 //
 // A pure function, shared by the upload and the Diagnostics simulator (#221). The upload draws no lit beat and no
-// marker: the marker is the unit's own (pitch bend), and a lit beat would need an upload per beat. The simulator can
+// needle: the needle is the unit's own (pitch bend), and a lit beat would need an upload per beat. The simulator can
 // pass both to show what the unit would.
 import ControllerBridgeCore
 import CoreGraphics
@@ -16,7 +16,7 @@ public enum JogDisplayRenderer {
     public static let size = JogImage.size
 
     /// RGBA bytes, row by row, top first, upright: what `JogImage.forUnit` turns and encodes. `litBeat` (1–4) lights
-    /// that beat's section; `marker` draws the marker that many turns clockwise from 12 o'clock.
+    /// that beat's section; `needle` draws the needle that many turns clockwise from 12 o'clock.
     /// `phase` is the deck's offset from the master's beat in 1/16384 beats (#462), as op 0B carries it; nil is unknown.
     public static func render(_ content: JogDisplayContent, litBeat: Int? = nil, needle: Double? = nil,
                               meter: (level: Int, peak: Int)? = nil, phase: Int? = nil,
@@ -120,15 +120,15 @@ public enum JogDisplayRenderer {
 
     // MARK: Drawing
 
-    /// The image the jog display upload sends (#165), before `JogImage.forUnit` turns it: no lit beat and no marker,
+    /// The image the jog display upload sends (#165), before `JogImage.forUnit` turns it: no lit beat and no needle,
     /// which are the unit's own.
     public static func uploadImage(_ content: JogDisplayContent) -> [UInt8] { render(content) }
 
     /// One beat slot's image (#215): the upload's with master beat `litBeat` (1–4) lit. The unit holds all four and
-    /// shows one per beat; the marker stays the unit's own.
+    /// shows one per beat; the needle stays the unit's own.
     public static func uploadImage(_ content: JogDisplayContent, litBeat: Int) -> [UInt8] { render(content, litBeat: litBeat) }
 
-    /// The image the Diagnostics simulator shows (#221): the upload's, with the lit beat and the marker the unit would
+    /// The image the Diagnostics simulator shows (#221): the upload's, with the lit beat and the needle the unit would
     /// draw over it. With neither, it is the upload's exactly (a test pins it).
     /// `meter` is the front deck's mixer level and held peak, 0–127 each (#461), as the drawn display shows them.
     /// `phase` is the deck's offset from the master's beat (#462), in 1/16384 beats as op 0B carries it; nil is unknown.
@@ -387,7 +387,7 @@ public enum JogDisplayRenderer {
         context.fillPath()
     }
 
-    /// The marker: a white wedge with a black keyline riding the ring's edge, pointing in.
+    /// The needle: a white wedge with a black keyline riding the ring's edge, pointing in.
     private static func drawNeedle(turns: Double, in context: CGContext) {
         let degrees = turns.truncatingRemainder(dividingBy: 1) * 360
         func point(_ radius: CGFloat, _ deg: Double) -> CGPoint {

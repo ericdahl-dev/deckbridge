@@ -3,7 +3,7 @@
 // once and not retried until the content changes; goodbye at the end.
 
 /// Where the jog display's messages go: the Controller port (the hello and goodbye) and the WD port (images, the
-/// marker). The app's CoreMIDI adapter, a test's fake, and the Diagnostics simulator (#221) all take this.
+/// needle). The app's CoreMIDI adapter, a test's fake, and the Diagnostics simulator (#221) all take this.
 public protocol JogDisplayPort: AnyObject, Sendable {
     func sendController(_ bytes: [UInt8])
     func sendWD(_ bytes: [UInt8])
@@ -219,7 +219,7 @@ public final class JogDisplayDriver {
     public private(set) var connected = false
     /// Whether the hello went out and no goodbye since.
     public var isConnected: Bool { connected }
-    /// The last marker and play light sent, so only changes go out.
+    /// The last needle and play light sent, so only changes go out.
     private var lastNeedle: Int?
     private var lastPlayLight: Bool?
     /// The content shown, or being uploaded, and the content wanted next.
@@ -262,7 +262,7 @@ public final class JogDisplayDriver {
     public func connect() {
         guard !connected, let port else { return }
         connected = true
-        // What the preview showed goes to the unit now, and the marker and light are sent afresh.
+        // What the preview showed goes to the unit now, and the needle and light are sent afresh.
         if wanted == nil { wanted = current }
         current = nil
         slotContent = [:]
@@ -386,7 +386,7 @@ public final class JogDisplayDriver {
         return nil
     }
 
-    /// The marker at `pitchBend` (0...16383): pitch bend on WD ch1. Only a change goes out.
+    /// The needle at `pitchBend` (0...16383): pitch bend on WD ch1. Only a change goes out.
     public func needle(_ pitchBend: Int) {
         guard pitchBend != lastNeedle else { return }
         lastNeedle = pitchBend

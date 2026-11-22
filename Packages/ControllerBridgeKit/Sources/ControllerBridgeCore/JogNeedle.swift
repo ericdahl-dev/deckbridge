@@ -1,4 +1,4 @@
-// The jog display's marker (#165, #215): one hand on the platter display, moved by pitch bend on the WD port.
+// The jog display's needle (#165, #215): one hand on the platter display, moved by pitch bend on the WD port.
 // It shows the deck's own phase in the bar, one turn per bar of four beats, from the deck's BarRamp and BPM (the
 // user's pick: the needle is the deck, the lit ring segment is the master). The master-clock mode stays for #215.
 // The platter never moves it (the user's pick for v1.1, reversing #306): a seek on a paused deck moves the deck's

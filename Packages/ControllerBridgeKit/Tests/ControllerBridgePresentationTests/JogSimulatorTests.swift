@@ -28,8 +28,8 @@ struct JogSimulatorTests {
         #expect(JogUploadStatus.notConnected.readout(timeZone: utc) == "No LC6000 connected: preview only")
     }
 
-    @Test("The marker redraws at most 30 times a second, and a burst still ends on its latest value")
-    func markerLimiter() {
+    @Test("The needle redraws at most 30 times a second, and a burst still ends on its latest value")
+    func needleLimiter() {
         var limiter = RedrawLimiter<Int>(interval: 1.0 / 30)
         // The first value draws at once.
         #expect(limiter.offer(10, at: 0.000) == 10)
@@ -45,8 +45,8 @@ struct JogSimulatorTests {
         #expect(limiter.offer(13, at: 0.200) == 13)
     }
 
-    @Test("The marker's pitch bend is a fraction of a turn: 0 is 12 o'clock, 4096 a quarter turn clockwise (provisional, #165)")
-    func markerAngle() {
+    @Test("The needle's pitch bend is a fraction of a turn: 0 is 12 o'clock, 4096 a quarter turn clockwise (provisional, #165)")
+    func needleAngle() {
         #expect(JogNeedleAngle.degrees(pitchBend: 0) == 0)
         #expect(JogNeedleAngle.degrees(pitchBend: 4096) == 90)
         #expect(JogNeedleAngle.degrees(pitchBend: 8192) == 180)

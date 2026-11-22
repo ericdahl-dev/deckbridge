@@ -69,7 +69,7 @@ public enum JogUploadStatus: Equatable, Sendable {
     }
 }
 
-/// Holds a fast stream (the marker's angle, ~100 updates a second while playing) to at most one redraw per `interval`
+/// Holds a fast stream (the needle's angle, ~100 updates a second while playing) to at most one redraw per `interval`
 /// (#221: ~30 Hz), always ending on the newest value. The view offers each value as it arrives and ticks on its
 /// display timer; whatever either returns is drawn.
 public struct RedrawLimiter<Value: Sendable>: Sendable {
@@ -101,7 +101,7 @@ public struct RedrawLimiter<Value: Sendable>: Sendable {
     }
 }
 
-/// Where the simulator draws the marker (#221), from the pitch bend the Coordinator sends to the display (#165).
+/// Where the simulator draws the needle (#221), from the pitch bend the Coordinator sends to the display (#165).
 public enum JogNeedleAngle {
     /// The hand's angle in degrees, clockwise from 12 o'clock: pitchBend / 16384 of a turn (0…16383). A quarter turn
     /// is one beat, from 0 on beat 1. PROVISIONAL: the #165 hardware spike confirms where the unit puts zero and which
@@ -182,13 +182,13 @@ public struct JogSimulator: Equatable, Sendable {
         return (accepted ? "Shown on the LC6000\n" : "Refused by the LC6000\n") + status(deck: deck).readout(timeZone: timeZone)
     }
 
-    /// The deck's last marker pitch bend (0 until one arrives), for `JogNeedleAngle.degrees(pitchBend:)`.
+    /// The deck's last needle pitch bend (0 until one arrives), for `JogNeedleAngle.degrees(pitchBend:)`.
     public func needle(deck: Int) -> Int { needles[deck] ?? 0 }
 
     /// Whether the deck is playing, as Syndicate reports it.
     public func playing(deck: Int) -> Bool { plays[deck] ?? false }
 
-    /// The marker as the renderer takes it (#238): turns clockwise from 12 o'clock.
+    /// The needle as the renderer takes it (#238): turns clockwise from 12 o'clock.
     public func needleTurns(deck: Int) -> Double { Double(needle(deck: deck)) / 16_384 }
 
     /// The beat section to light (1-4): the master clock's, the same on every deck, paused or not (#165, the user's

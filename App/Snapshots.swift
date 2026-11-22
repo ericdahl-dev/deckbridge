@@ -186,7 +186,7 @@ enum Snapshots {
         let cases: [(String, JogDisplayContent, Int?, Double?)] = [
             ("deck1-track", daybreak, nil, nil), ("deck4-long-title", ten, nil, nil), ("deck2-osc-clip", clip, nil, nil),
             ("deck3-empty", emptyDeck, nil, nil),
-            // As the simulator would show the unit: beat 2 lit and the marker at 126°.
+            // As the simulator would show the unit: beat 2 lit and the needle at 126°.
             ("deck4-beat2-marker-simulated", ten, 2, 126.0 / 360),
         ]
         for (name, content, beat, needle) in cases {

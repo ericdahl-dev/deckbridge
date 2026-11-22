@@ -149,7 +149,7 @@ struct JogDisplayPane: View {
         .card()
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
         .background {
-            // The display timer: lets a held-back marker through, at most 30 times a second.
+            // The display timer: lets a held-back needle through, at most 30 times a second.
             if animates {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                     Color.clear.onChange(of: context.date) { _, now in log.tick(now) }

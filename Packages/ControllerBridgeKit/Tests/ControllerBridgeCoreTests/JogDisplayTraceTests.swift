@@ -6,7 +6,7 @@ import Testing
 /// about a minute, so they stay out of it. What the unit gets is in the WD out lines; mode changes keep their lines.
 @Suite("Jog display: the Debug trace")
 struct JogDisplayTraceTests {
-    @Test("The preview's per-tick events (drawnPreview, deckNeedle) have no trace line; every other event but marker has one")
+    @Test("The preview's per-tick events (drawnPreview, deckNeedle) have no trace line; every other event but needle has one")
     func previewEventsUntraced() {
         #expect(JogDisplayEvent.drawnPreview(DrawnDisplayState()).traceLine == nil)
         #expect(JogDisplayEvent.deckNeedle(deck: 1, pitchBend: 8192).traceLine == nil)
@@ -16,8 +16,8 @@ struct JogDisplayTraceTests {
         #expect(JogDisplayEvent.masterBeat(3).traceLine == "event masterBeat(3)")
     }
 
-    @Test("The needle's marker event has no trace line (#637): with no LC6000 nothing is sent for it, at 50 a second")
-    func markerUntraced() {
+    @Test("The needle event has no trace line (#637): with no LC6000 nothing is sent for it, at 50 a second")
+    func needleUntraced() {
         #expect(JogDisplayEvent.needle(pitchBend: 2048).traceLine == nil)
     }
 

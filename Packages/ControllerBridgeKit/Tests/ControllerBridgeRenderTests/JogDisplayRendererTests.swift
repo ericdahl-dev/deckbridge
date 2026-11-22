@@ -24,21 +24,21 @@ struct JogDisplayRendererTests {
         JogDisplayContent(deck: 3, color: [0, 255, 255], playerType: "osc"),
     ]
 
-    @Test("The simulator, with no lit beat or marker, shows exactly the image prepared for the upload, before its turn")
+    @Test("The simulator, with no lit beat or needle, shows exactly the image prepared for the upload, before its turn")
     func simulatorIsTheUpload() {
         for content in Self.contents {
             #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: nil) == JogDisplayRenderer.uploadImage(content))
         }
     }
 
-    @Test("The simulator's lit beat and marker draw over that image: with them it differs, so they really show")
+    @Test("The simulator's lit beat and needle draw over that image: with them it differs, so they really show")
     func simulatorOverlays() {
         let content = Self.contents[1]
         #expect(JogDisplayRenderer.simulatorImage(content, litBeat: 2, needle: nil) != JogDisplayRenderer.uploadImage(content))
         #expect(JogDisplayRenderer.simulatorImage(content, litBeat: nil, needle: 0.25) != JogDisplayRenderer.uploadImage(content))
     }
 
-    @Test("Each beat slot's upload (#215) is the simulator's image for that beat, without the marker; the four differ")
+    @Test("Each beat slot's upload (#215) is the simulator's image for that beat, without the needle; the four differ")
     func beatSlotsMatchTheSimulator() {
         let content = Self.contents[1]
         let images = (1...4).map { JogDisplayRenderer.uploadImage(content, litBeat: $0) }
