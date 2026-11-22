@@ -120,4 +120,14 @@ struct UpdateFlowTests {
         #expect(stockFlow.backupLine(files: 2, identified: found)
             == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31.")
     }
+
+    /// While a write runs (#762): which chip, not to unplug, and how long. The top panel chip's time is the owner's
+    /// write of 2026-11-22 (about 30 s, confirm to read back); the display chip's isn't measured yet.
+    @Test("While writing: the chip, don't unplug or switch off, and how long")
+    func writingLine() throws {
+        #expect(try Self.flow().writingText
+            == "Writing the display chip. Don't unplug or switch off the LC6000. This takes under a minute.")
+        #expect(UpdateFlow(chip: .topPanel, backup: nil, backupTakenThisSession: true, edits: [], known: .none).writingText
+            == "Writing the top panel chip. Don't unplug or switch off the LC6000. This takes about 30 seconds.")
+    }
 }

@@ -47,6 +47,13 @@ public struct UpdateFlow: Sendable {
         "If it goes wrong, the LC6000 may not start, and the worst case needs a hardware probe. Your backup stays on "
             + "this Mac. Keep it on and plugged in until it's done.\n\nType \(Confirmation.word) to write."
     }
+    /// While a write or restore runs (#762). The top panel chip's time is the owner's write (2026-11-22, about 30 s);
+    /// the display chip's isn't measured yet.
+    public var writingText: String {
+        "Writing the \(name). Don't unplug or switch off the LC6000. "
+            + (chip == .topPanel ? "This takes about 30 seconds." : "This takes under a minute.")
+    }
+
     /// Exactly what is written where, behind the confirm's Details.
     public var confirmDetails: String { plan?.text ?? "" }
 

@@ -79,6 +79,7 @@ struct UpdateView: View {
             Text("Update the chip").font(.headline)
             if let status = model.flow.status { Text(status).fixedSize(horizontal: false, vertical: true) }
             if let stop = model.stop { Text(stop).fixedSize(horizontal: false, vertical: true) }
+            if model.running { Text(model.flow.writingText).fixedSize(horizontal: false, vertical: true) }
             // The sectors and addresses, out of the way (#762): an alert can't hold a disclosure, so it sits by the button.
             if model.flow.canConfirm {
                 DisclosureGroup("Details") {
