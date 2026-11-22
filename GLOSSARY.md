@@ -128,7 +128,7 @@ The jog display's four beat sections, lit by the master clock's beat on every de
 _Avoid_: beat ring, platter ring (that's the LEDs')
 
 **Needle**:
-The jog display's hand, showing where the deck is in its own bar; called `marker` in code (#303 renames it after 1.1.0).
+The jog display's hand, showing where the deck is in its own bar.
 _Avoid_: pointer
 
 **Preview**:

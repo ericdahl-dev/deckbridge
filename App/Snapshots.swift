@@ -186,11 +186,11 @@ enum Snapshots {
         let cases: [(String, JogDisplayContent, Int?, Double?)] = [
             ("deck1-track", daybreak, nil, nil), ("deck4-long-title", ten, nil, nil), ("deck2-osc-clip", clip, nil, nil),
             ("deck3-empty", emptyDeck, nil, nil),
-            // As the simulator would show the unit: beat 2 lit and the marker at 126°.
+            // As the simulator would show the unit: beat 2 lit and the needle at 126°.
             ("deck4-beat2-marker-simulated", ten, 2, 126.0 / 360),
         ]
-        for (name, content, beat, marker) in cases {
-            let rgba = JogDisplayRenderer.render(content, litBeat: beat, marker: marker)
+        for (name, content, beat, needle) in cases {
+            let rgba = JogDisplayRenderer.render(content, litBeat: beat, needle: needle)
             let png = JogImage.png(rgba: rgba, width: JogImage.size, height: JogImage.size)
             do { try Data(png).write(to: URL(fileURLWithPath: "\(directory)/jog-display-\(name).png")) } catch { print("Couldn't write: \(error)") }
         }
@@ -293,8 +293,8 @@ enum Snapshots {
         jog.apply(.deckPlaying(deck: 1, playing: true), at: at)
         // Each deck's own needle, the master on beat 2 for every ring (#165): deck 1 a little behind the beat, deck 2 paused.
         jog.apply(.masterBeat(2), at: at)
-        jog.apply(.deckMarker(deck: 1, pitchBend: 3_600), at: at)
-        jog.apply(.deckMarker(deck: 2, pitchBend: 12_000), at: at)
+        jog.apply(.deckNeedle(deck: 1, pitchBend: 3_600), at: at)
+        jog.apply(.deckNeedle(deck: 2, pitchBend: 12_000), at: at)
         // Decks 3 and 4 from Syndicate only: previewed, not on the unit (#221).
         jog.apply(.preview(JogDisplayContent(deck: 3, color: [0, 255, 255], title: "Sunrise", artist: "Ward", key: "C", bpm: 122,
                                              playerType: "track")), at: at)

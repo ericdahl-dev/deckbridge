@@ -5,7 +5,7 @@
 final class JogDisplayController {
     private let clock: any Clock
     /// Each entry's needle: its deck's own phase in the bar (#165).
-    private var needles: [Int: JogMarker] = [:]
+    private var needles: [Int: JogNeedle] = [:]
     /// What each entry's facts said last, to see a new BarRamp and a deck that stops.
     private var lastRamp: [Int: DeckFacts.BarRamp] = [:]
     private var lastPlaying: [Int: Bool] = [:]
@@ -188,8 +188,8 @@ final class JogDisplayController {
         if live {
             for index in entries.indices where entries[index].facts.playing {
                 let needle = needle(index, at: clock.now)
-                driver.deckMarker(deck: entries[index].facts.deck, needle)
-                if index == front { driver.marker(needle) }
+                driver.deckNeedle(deck: entries[index].facts.deck, needle)
+                if index == front { driver.needle(needle) }
             }
             let period = 1 / Self.liveRate
             let next = (nextLiveDue ?? clock.now) + period
@@ -288,14 +288,14 @@ final class JogDisplayController {
             if let ramp = facts.barRamp, ramp != lastRamp[index] {
                 lastRamp[index] = ramp
                 let bpm = facts.playing ? facts.bpm ?? masterBPM ?? 120 : 0
-                needles[index, default: JogMarker()].ramp(ramp.phase, bpm: bpm, at: ramp.at)
+                needles[index, default: JogNeedle()].ramp(ramp.phase, bpm: bpm, at: ramp.at)
             }
         }
     }
 
     /// An entry's needle as pitch bend at `time`.
     func needle(_ index: Int, at time: Double) -> Int {
-        (needles[index] ?? JogMarker()).pitchBend(at: time)
+        (needles[index] ?? JogNeedle()).pitchBend(at: time)
     }
 
     /// What the controller knows of one controller entry, in the Coordinator's order.
