@@ -228,7 +228,7 @@ void test_a_lead_longer_than_the_time_since_the_edge_shows_that_edge() {
     for (uint32_t t = 1469; t < 1888; ++t) TEST_ASSERT_EQUAL(2, clock.beat_at(t));
     for (uint32_t t = 1888; t < 1938; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
     clock.edge(3, 1938);
-    for (uint32_t t = 1938; t < 2356; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
+    for (uint32_t t = 1938; t < 2357; ++t) TEST_ASSERT_EQUAL(3, clock.beat_at(t));
     TEST_ASSERT_EQUAL(4, clock.beat_at(2357));
 }
 

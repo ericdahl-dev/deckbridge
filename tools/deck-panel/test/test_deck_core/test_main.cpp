@@ -924,16 +924,16 @@ void test_the_waiting_texts_come_fitted_to_the_fonts() {
 // #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives. #718:
 // the build's lead early, 50 ms unless the build sets DECK_PANEL_BEAT_LEAD_MS.
 void test_the_next_beat_box_lights_the_lead_before_its_beat_is_due() {
-    TEST_ASSERT_EQUAL(50, deck_core::BeatClock::kLeadMs);
+    const uint32_t lit = 1938 - deck_core::BeatClock::kLeadMs;  // beat 3 is due at 1938
     deck_core::DeckCore core;
     ScreenStub screen;
     feed(core, int_message(prefix + "deck", 1), 1000);
     feed(core, int_message(prefix + "beat", 1), 1000);
     feed(core, int_message(prefix + "beat", 2), 1469);
-    core.render(screen, 1887);
+    core.render(screen, lit - 1);
     TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
-    core.render(screen, 1888);
-    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, due at 1938, lit 50 ms early
+    core.render(screen, lit);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, lit the lead early
     TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[1]);
 }
 
