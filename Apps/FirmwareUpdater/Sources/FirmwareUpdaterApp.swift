@@ -7,13 +7,18 @@ import UpdaterScreen
 
 @main
 struct FirmwareUpdaterApp: App {
-    @State private var model = Live.updater()
+    @State private var model = Self.makeModel()
 
     var body: some Scene {
         Window(UpdaterScreen.appName, id: "updater") {
             UpdaterView(model: model)
-                .frame(minWidth: 480, minHeight: 360)
                 .task {
+                    #if DEBUG
+                    if let shot = PreviewLaunch.shot {
+                        await PreviewLaunch.run(shot, on: model)
+                        return
+                    }
+                    #endif
                     await model.refresh()
                     FileLog.shared.log(model.screen.firstLookLine)
                     if SmokeLaunch.isOn { SmokeLaunch.finish() }
@@ -22,7 +27,15 @@ struct FirmwareUpdaterApp: App {
                 // Beside the devices, not after them: watch() runs until the app quits.
                 .task { await model.loadFirmware() }
         }
-        .windowResizability(.contentSize)
+    }
+
+    /// The real ports, or in a Debug build started with --preview, a fixed state on fake ones (#761) and no real port
+    /// made at all.
+    @MainActor static func makeModel() -> Updater {
+        #if DEBUG
+        if let shot = PreviewLaunch.shot { return Updater.preview(shot.state) }
+        #endif
+        return Live.updater()
     }
 }
 
@@ -57,9 +70,38 @@ enum Live {
 
 struct UpdaterView: View {
     let model: Updater
-    @State private var backup = BackupModel()
+    @State private var backup = Self.makeBackup()
+    @State private var fitting = WindowFitting()
 
+    static func makeBackup() -> BackupModel {
+        #if DEBUG
+        if let shot = PreviewLaunch.shot { return BackupModel(preview: shot.backupResult) }
+        #endif
+        return BackupModel()
+    }
+
+    /// The sections in a scroll view the window fits (#761): taller than the screen, they scroll, and new text at the
+    /// bottom is kept in view.
     var body: some View {
+        ScrollViewReader { scroll in
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    sections
+                    Color.clear.frame(height: 0).id(Self.end)
+                }
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                    fitting.contentChanged(size)
+                    scroll.scrollTo(Self.end, anchor: .bottom)
+                }
+            }
+        }
+        .frame(minWidth: WindowFit.minWidth, minHeight: 200)
+        .background(WindowReader { fitting.attach($0) })
+    }
+
+    private static let end = "end"
+
+    private var sections: some View {
         VStack(alignment: .leading, spacing: 16) {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
             FirmwareRow(line: model.firmware)
