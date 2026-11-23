@@ -8,6 +8,9 @@ Checked, as the live site answered on 2026-11-22:
   - every file under website/ answers 200 with the repo's bytes and its content type (404.html excepted: it answers 404);
   - the clean URLs answer 200 with their index.html, with and without the trailing slash, never a redirect;
   - an unknown path answers 404 with the 404 page.
+And new with #767 (the live site sent no cache headers):
+  - HTML is never cached long: no-cache, or at most 5 minutes;
+  - fonts and images are cached at least 30 days.
 
 Usage: python3 -I scripts/check_site_image.py [--url BASE]
 Needs Docker without --url (CI's Linux runner has it).
@@ -104,7 +107,38 @@ def check_not_found(base):
     return failures
 
 
-CHECKS = [check_files, check_not_found]
+def max_age(headers):
+    """The Cache-Control max-age in seconds, 0 for no-cache or no-store, None when there's no Cache-Control."""
+    value = headers.get("Cache-Control")
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split(",")]
+    if "no-cache" in parts or "no-store" in parts:
+        return 0
+    ages = [int(part.split("=", 1)[1]) for part in parts if part.startswith("max-age=")]
+    return ages[0] if ages else None
+
+
+SHORT = 300
+LONG = 30 * 24 * 3600
+
+
+def check_cache(base):
+    failures = []
+    for path in ["/", "/for/lc6000/", "/support/", "/index.html", "/no-such-track/"]:
+        age = max_age(fetch(base, path)[1])
+        if age is None or age > SHORT:
+            failures.append(f"{path}: HTML cached for {age} s, want no-cache or at most {SHORT} s")
+    long_lived = ["/fonts/Geist.woff2", "/fonts/GeistMono.woff2"] + sorted(
+        "/" + p.relative_to(SITE).as_posix() for p in (SITE / "img").iterdir() if p.suffix in {".png", ".webp"})
+    for path in long_lived:
+        age = max_age(fetch(base, path)[1])
+        if age is None or age < LONG:
+            failures.append(f"{path}: cached for {age} s, want at least {LONG} s")
+    return failures
+
+
+CHECKS = [check_files, check_not_found, check_cache]
 
 
 def run_checks(base):
