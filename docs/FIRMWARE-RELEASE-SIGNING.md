@@ -33,7 +33,7 @@ swift run firmware-release new-key --id backup --out /Volumes/<USB stick>/backup
   `Sources/FirmwareRelease/ReleaseKeys.swift`, as `("primary", "<hex>"), ("backup", "<hex>")`, in a pull request.
   Public keys aren't secret. A test fails on a mistyped key.
   Done 2026-11-23: the owner's primary and backup public keys are in `ReleaseKeys.swift`, and the deck panel's
-  `release_keys.h` holds the same pair (#690).
+  `release_keys.h` (#690) must hold the same pair.
 
 ## Each release: one command
 
