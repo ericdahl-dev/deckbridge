@@ -1,6 +1,6 @@
 """The deck panel trusts exactly the release keys the updater app trusts (#690, ADR 0012): the panel's list in
 lib/release_keys/release_keys.h and the app's in ReleaseKeys.swift must hold the same (id, public key) pairs, so a
-release the app accepts is one the panel accepts too. Both start empty, until the owner makes the keys."""
+release the app accepts is one the panel accepts too. Both hold the owner's primary and backup keys (#689)."""
 import pathlib
 import re
 import unittest

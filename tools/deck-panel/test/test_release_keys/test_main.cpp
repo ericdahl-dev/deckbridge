@@ -21,9 +21,16 @@ void test_listed_keys_become_trusted_keys_and_a_mistyped_one_is_left_out() {
     TEST_ASSERT_EQUAL_HEX8(0x1a, out[0].public_key[31]);
 }
 
-void test_the_shipped_list_is_empty_until_the_owner_makes_the_keys() {
-    update_session::TrustedKey out[2];
-    TEST_ASSERT_EQUAL(0, release_keys::trusted(release_keys::kListed, out, 2));
+// The owner's keys (#689, made 2026-11-23), as `firmware-release public-key` printed them: primary, then backup.
+void test_the_shipped_list_trusts_the_owners_primary_and_backup_keys() {
+    update_session::TrustedKey out[3];
+    TEST_ASSERT_EQUAL(2, release_keys::trusted(release_keys::kListed, out, 3));
+    TEST_ASSERT_EQUAL_STRING("primary", out[0].id);
+    TEST_ASSERT_EQUAL_HEX8(0x26, out[0].public_key[0]);
+    TEST_ASSERT_EQUAL_HEX8(0xf8, out[0].public_key[31]);
+    TEST_ASSERT_EQUAL_STRING("backup", out[1].id);
+    TEST_ASSERT_EQUAL_HEX8(0x2e, out[1].public_key[0]);
+    TEST_ASSERT_EQUAL_HEX8(0xbe, out[1].public_key[31]);
 }
 
 }  // namespace
@@ -31,6 +38,6 @@ void test_the_shipped_list_is_empty_until_the_owner_makes_the_keys() {
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_listed_keys_become_trusted_keys_and_a_mistyped_one_is_left_out);
-    RUN_TEST(test_the_shipped_list_is_empty_until_the_owner_makes_the_keys);
+    RUN_TEST(test_the_shipped_list_trusts_the_owners_primary_and_backup_keys);
     return UNITY_END();
 }

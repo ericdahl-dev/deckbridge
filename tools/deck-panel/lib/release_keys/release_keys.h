@@ -1,8 +1,7 @@
 // The release keys the panel trusts (#690, ADR 0012): the maintainer's primary key and the offline backup key, the
 // same pairs as the updater app's ReleaseKeys.swift (test_release_keys.py checks they match).
 //
-// EMPTY until the owner makes the keys (docs/FIRMWARE-RELEASE-SIGNING.md): until then the panel refuses every update
-// over Wi-Fi as signed by an unknown key, and the cable stays the way to change its firmware.
+// The owner made them on 2026-11-23 (#689, docs/FIRMWARE-RELEASE-SIGNING.md). Public halves only.
 #pragma once
 
 #include <cstddef>
@@ -18,6 +17,8 @@ struct Listed {
 
 // Each entry: {"primary", "<64 hex>"}, then {"backup", "<64 hex>"}. Ends with the {nullptr, nullptr} marker.
 constexpr Listed kListed[] = {
+    {"primary", "26739c2c075965fd9a99330f97c3b09a28d11f85c1fa4d81bd5495cb67c1a5f8"},
+    {"backup", "2e972a79fd40b287a151166dcdc723d07e84afe9ffc933fb211c670873c07cbe"},
     {nullptr, nullptr},
 };
 
