@@ -38,9 +38,9 @@ public struct CableFeedStatus: Equatable, Sendable {
         switch port {
         case .noPanel: return "No deck panel plugged into this Mac"
         case .open: return "Sending to the deck panel on USB"
-        case .busy: return "Not sending: another app has the panel's port open, such as the Firmware Updater or a serial monitor"
+        case .busy: return "Not sending: another app has the panel's port open, such as the DeckBridge Firmware Updater or a serial monitor"
         case .failed(let reason): return "Not sending: \(reason)"
-        case .lent: return "Paused: the Firmware Updater is using the panel's USB cable"
+        case .lent: return "Paused: the DeckBridge Firmware Updater is using the panel's USB cable"
         }
     }
 }

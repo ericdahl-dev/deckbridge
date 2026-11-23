@@ -11,9 +11,9 @@ struct CableFeedStatusTests {
         #expect(CableFeedStatus(cable: true, port: .noPanel).text == "No deck panel plugged into this Mac")
         #expect(CableFeedStatus(cable: true, port: .open).text == "Sending to the deck panel on USB")
         #expect(CableFeedStatus(cable: true, port: .busy).text
-            == "Not sending: another app has the panel's port open, such as the Firmware Updater or a serial monitor")
+            == "Not sending: another app has the panel's port open, such as the DeckBridge Firmware Updater or a serial monitor")
         #expect(CableFeedStatus(cable: true, port: .failed("Permission denied")).text == "Not sending: Permission denied")
-        #expect(CableFeedStatus(cable: true, port: .lent).text == "Paused: the Firmware Updater is using the panel's USB cable")
+        #expect(CableFeedStatus(cable: true, port: .lent).text == "Paused: the DeckBridge Firmware Updater is using the panel's USB cable")
     }
 
     @Test("Only busy and failed are problems")

@@ -18,9 +18,10 @@
   <rect x="497" y="202.0" width="30" height="166" rx="15" fill="#D5D5D5" transform="rotate(40 512 512)"/>
   <circle cx="512" cy="512" r="74" fill="#D5D5D5"/>
   <circle cx="512" cy="512" r="26" fill="#141415"/>
-  <!-- The updater mark (#733): a download badge, so the updater reads as DeckBridge's icon but plainly another app. -->
+  <!-- The updater mark (#733): a download badge, so the updater reads as DeckBridge's icon but plainly another app.
+       Its fill is the ring's teal (#763). -->
   <circle cx="752" cy="752" r="156" fill="#141415"/>
-  <circle cx="752" cy="752" r="134" fill="#3FB27F"/>
+  <circle cx="752" cy="752" r="134" fill="#62929E"/>
   <path d="M752,670 L752,790" stroke="#FFFFFF" stroke-width="38" stroke-linecap="round"/>
   <path d="M698,740 L752,794 L806,740" fill="none" stroke="#FFFFFF" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M690,838 L814,838" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round"/>

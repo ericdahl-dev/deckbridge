@@ -28,7 +28,7 @@ class UpdaterSmokeTests(unittest.TestCase):
         root = self.tmp.name
         self.bin = os.path.join(root, "bin")
         os.makedirs(self.bin)
-        self.app = os.path.join(root, "FirmwareUpdater.app")
+        self.app = os.path.join(root, "DeckBridge Firmware Updater.app")  # #763's name, its binary too
         os.makedirs(os.path.join(self.app, "Contents", "MacOS"))
         self.log = os.path.join(root, "updater.log")
         self.ran = os.path.join(root, "ran")
@@ -42,7 +42,7 @@ class UpdaterSmokeTests(unittest.TestCase):
 
     def stand_in(self, body):
         """The app's binary: notes its arguments, then does `body` with $LOG as the log file."""
-        executable(os.path.join(self.app, "Contents", "MacOS", "FirmwareUpdater"),
+        executable(os.path.join(self.app, "Contents", "MacOS", "DeckBridge Firmware Updater"),
                    f'#!/bin/bash\necho "$@" > "{self.ran}"\nLOG="{self.log}"\n{body}\n')
 
     def run_smoke(self, timeout="5"):

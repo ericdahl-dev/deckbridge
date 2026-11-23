@@ -10,7 +10,7 @@ struct FirmwareUpdaterApp: App {
     @State private var model = Self.makeModel()
 
     var body: some Scene {
-        Window("Firmware Updater", id: "updater") {
+        Window(UpdaterScreen.appName, id: "updater") {
             UpdaterView(model: model)
                 .task {
                     #if DEBUG

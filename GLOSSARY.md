@@ -151,6 +151,20 @@ _Avoid_: hook, patch
 The drawn display's drawing, kept in the display's spare flash beside Denon's firmware; block A and block B must come from the same build, or the display stays silent.
 _Avoid_: upper block
 
+### LC6000 firmware updates
+
+**Display chip**:
+The LC6000's chip that runs the jog display: Denon's firmware, with DeckBridge's display firmware (block A, and block B once installed) when the owner has put it there. The firmware updater backs it up and updates it.
+_Avoid_: WD chip, jog display chip
+
+**Top panel chip**:
+The LC6000's chip that runs the controls on its top, such as the pads and the deck select. Always "top panel chip" in full, never "top panel" alone (see **Panel**). DeckBridge's top panel firmware is one small change to Denon's.
+_Avoid_: TP chip, top panel (alone), main chip
+
+**Update mode**:
+A chip restarted into ST's own bootloader (USB 0483:DF11), where it can be read and written over USB and runs nothing else. Entering it writes nothing; a power cycle ends it. The updater works on one chip in update mode at a time.
+_Avoid_: DFU mode, bootloader mode, flash mode
+
 ### Deck display
 
 **Display feed**:

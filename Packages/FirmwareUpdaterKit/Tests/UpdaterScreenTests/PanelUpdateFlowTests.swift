@@ -126,13 +126,24 @@ struct PanelUpdateFlowTests {
         #expect(updater.screen.panel.detail == "Build 2b7e9c1")
     }
 
+    @Test("A write that stops partway: the screen has no address, the log has it (#763)")
+    func writeFailedAddressInLogOnly() async {
+        let rig = Rig()
+        let updater = Updater(finder: rig.finder, changes: AsyncStream { $0.finish() }, log: rig.log,
+                              borrow: StubDeckBridge(answers: true).borrow,
+                              flasher: StubFlasher([.connecting, .writing(0.3), .failed(.writeFailed(address: 0x10400))]))
+        await updater.updatePanel()
+        #expect(updater.screen.update == "Writing stopped partway. The panel may not start: try again before you unplug it.")
+        #expect(rig.log.lines.contains("deck panel: writing stopped at 0x10400"))
+    }
+
     @Test("A failure: its text shows, the port still goes back once, and the next update can start")
     func failure() async {
         let deckBridge = StubDeckBridge(answers: true)
         let flasher = StubFlasher([.connecting, .failed(.verifyFailed(address: 0x10000))])
         let updater = Self.updater(deckBridge, flasher)
         await updater.updatePanel()
-        #expect(updater.screen.update == "The written firmware didn't check out. The panel may not start: try again before unplugging it.")
+        #expect(updater.screen.update == "The written firmware didn't check out. The panel may not start: try again before you unplug it.")
         #expect(deckBridge.posted == [.release, .done])
         await updater.updatePanel()
         #expect(flasher.started == 2)

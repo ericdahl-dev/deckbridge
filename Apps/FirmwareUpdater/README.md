@@ -1,6 +1,7 @@
 # Firmware updater
 
-A separate Mac app (spec #684) with two sections, deck panel and LC6000. Today it only looks: it says what is plugged
+**DeckBridge Firmware Updater** (#763): the .app file, the app menu, the Dock and the window all use that name. The
+bundle ID stays `dev.ericdahl.FirmwareUpdater`, and so does the log folder below. A separate Mac app (spec #684) with two sections, deck panel and LC6000. Today it only looks: it says what is plugged
 in. Its one write is the text line `version` to the deck panel's own console (#715); nothing goes to the LC6000. It is not part of DeckBridge or its App Store build, and shares nothing
 with it at runtime.
 
@@ -25,7 +26,7 @@ Needs Xcode 26 and XcodeGen (`brew install xcodegen`). The logic lives in `Packa
 
 ## Log
 
-`~/Library/Logs/FirmwareUpdater/updater.log`: a "first look" line per launch, in status words only (#734), and one line per device found. No serial numbers, port paths, MAC addresses
+`~/Library/Logs/FirmwareUpdater/updater.log` (the folder name didn't change with the app's name, #763): a "first look" line per launch, in status words only (#734), and one line per device found. No serial numbers, port paths, MAC addresses
 or Wi-Fi details.
 
 ## Launch smoke check (#734)
