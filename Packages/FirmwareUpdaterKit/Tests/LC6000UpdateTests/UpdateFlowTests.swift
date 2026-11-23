@@ -21,18 +21,22 @@ struct UpdateFlowTests {
         return UpdateFlow(chip: .display, backup: backup, backupTakenThisSession: fresh, edits: edits, known: known)
     }
 
-    @Test("Stock, with this session's backup: the confirm names the chip and the risk, and lists what is written")
+    @Test("Stock, with this session's backup: the confirm says the risk first in plain words; the sectors are its Details")
     func confirm() throws {
         let flow = try Self.flow()
         #expect(flow.canConfirm)
         #expect(flow.confirmTitle == "Write to the LC6000's display chip?")
         #expect(flow.confirmButton == "Write to the display chip")
         #expect(flow.confirmBody == """
+            If it goes wrong, the LC6000 may not start, and the worst case needs a hardware probe. Your backup stays on \
+            this Mac. Keep it on and plugged in until it's done.
+
+            Type UPDATE to write.
+            """)
+        #expect(!flow.confirmBody.contains("0x"))
+        #expect(flow.confirmDetails == """
             The display chip: 2 flash sectors are erased and written with the patched image, 0x08008000-0x0800BFFF \
             (16 KB) and 0x08060000-0x0807FFFF (128 KB). 5 bytes differ from your backup. Every other sector is untouched.
-
-            If this goes wrong, the unit may not start, and the worst case needs a hardware debug probe to recover it. \
-            Your backup stays on this Mac. Quit DeckBridge first, and keep the LC6000 powered and plugged in until it's done.
             """)
     }
 
@@ -57,7 +61,7 @@ struct UpdateFlowTests {
         var flow = try Self.flow()
         flow.finished(.written)
         #expect(flow.status == "Written and checked. Turn the LC6000 off and on again.")
-        #expect(!flow.canConfirm && !flow.canRestore && flow.recoveryGuide == nil)
+        #expect(!flow.canConfirm && !flow.canRestore && flow.recoveryGuide(bundled: URL(filePath: "/x.md")) == nil)
     }
 
     @Test("A mismatch offers Restore backup; restored and checked, power-cycle")
@@ -80,10 +84,13 @@ struct UpdateFlowTests {
         let noAnswer = "The chip stopped answering during the update, so the LC6000 may not start. Leave it plugged in and follow the recovery guide."
         #expect(flow.status == noAnswer)
         #expect(!flow.canRestore && !flow.canConfirm)
-        #expect(flow.recoveryGuide == URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md"))
+        #expect(flow.recoveryGuide(bundled: nil) == URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md"))
+        // The app's own copy first (#762): it opens with no network, when the unit may need it most.
+        let local = URL(filePath: "/Applications/DeckBridge Firmware Updater.app/Contents/Resources/LC6000-RECOVERY.md")
+        #expect(flow.recoveryGuide(bundled: local) == local)
         var gone = try Self.flow()
         gone.finished(.noAnswer)
-        #expect(gone.status == noAnswer && !gone.canRestore && gone.recoveryGuide != nil)
+        #expect(gone.status == noAnswer && !gone.canRestore && gone.recoveryGuide(bundled: nil) != nil)
     }
 
     @Test("The owner's top panel chip after #748's run: patched, so its hash isn't stock's, and it shows up to date")
@@ -115,6 +122,16 @@ struct UpdateFlowTests {
         let found = Identified(kind: .topPanel, version: "00.31", refusal: nil)
         #expect(stockFlow.backupLine(files: 2, identified: found)
             == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31.")
+    }
+
+    /// While a write runs (#762): which chip, not to unplug, and how long. The top panel chip's time is the owner's
+    /// write of 2026-11-22 (about 30 s, confirm to read back); the display chip's isn't measured yet.
+    @Test("While writing: the chip, don't unplug or switch off, and how long")
+    func writingLine() throws {
+        #expect(try Self.flow().writingText
+            == "Writing the display chip. Don't unplug or switch off the LC6000. This takes under a minute.")
+        #expect(UpdateFlow(chip: .topPanel, backup: nil, backupTakenThisSession: true, edits: [], known: .none).writingText
+            == "Writing the top panel chip. Don't unplug or switch off the LC6000. This takes about 30 seconds.")
     }
 
     @Test("The log line for each outcome: fixed words, and where a read-back differed (#763: the address is log only)")

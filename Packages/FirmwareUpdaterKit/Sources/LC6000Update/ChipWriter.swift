@@ -1,12 +1,29 @@
+import Foundation
 // Writing an LC6000 chip in ST's update mode (#693): only after the owner confirms this very plan, only the plan's
 // sectors, erased and written as dfu-util's DfuSe download does it (erase 0x41, set address 0x21, DNLOAD blocks from
 // 2), then read back and compared. Tested on a fake chip; on a unit, the owner runs every write.
 import UnitCheck
 
 /// The owner's confirm of one plan: the confirm sheet's button makes it, for the plan it showed.
+/// The owner's go-ahead for one plan. The update's write needs the typed word UPDATE (#762, the owner's decision of
+/// 2026-11-22); a restore after a mismatch needs only its confirm. Nothing else makes one, so nothing else can write.
 public struct Confirmation: Sendable {
     let plan: WritePlan
-    public init(_ plan: WritePlan) { self.plan = plan }
+
+    /// The word the owner types before the write.
+    public static let word = "UPDATE"
+
+    /// For the update's write: only when `typed` is UPDATE, in any case, spaces around it allowed.
+    public init?(typed: String, for plan: WritePlan) {
+        guard !plan.isRestore, typed.trimmingCharacters(in: .whitespaces).uppercased() == Self.word else { return nil }
+        self.plan = plan
+    }
+
+    /// For Restore backup: only for a restore plan, never the update's own write.
+    public init?(restoring plan: WritePlan) {
+        guard plan.isRestore else { return nil }
+        self.plan = plan
+    }
 }
 
 public enum WriteOutcome: Sendable, Equatable {

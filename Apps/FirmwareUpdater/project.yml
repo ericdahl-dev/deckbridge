@@ -26,6 +26,9 @@ targets:
       - path: Sources
       # Its own icon (#733), rendered from design/icon/updater-download.svg by scripts/render_app_icon.swift.
       - path: Assets.xcassets
+      # The LC6000 recovery guide, opened from the app with no network (#762). Never site text.
+      - path: ../../docs/LC6000-RECOVERY.md
+        buildPhase: resources
     dependencies:
       - package: FirmwareUpdaterKit
         product: DeviceFinder

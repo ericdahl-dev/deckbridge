@@ -126,6 +126,28 @@ struct PanelUpdateFlowTests {
         #expect(updater.screen.panel.detail == "Build 2b7e9c1")
     }
 
+    /// One status line per step (#762): the update's result stays through its own closing look, and goes at the next.
+    @Test("The update's result stays after its own look; Look again clears it")
+    func resultClearsAtNextLook() async {
+        let updater = Self.updater(StubDeckBridge(answers: false), StubFlasher([.connecting, .restarting, Self.updated]))
+        await updater.updatePanel()
+        #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+        await updater.refresh()
+        #expect(updater.screen.update == nil)
+    }
+
+    @Test("A USB change after an update (the panel's port coming back) keeps the result on screen")
+    func resultStaysThroughUSBChange() async {
+        let (changes, change) = AsyncStream<Void>.makeStream()
+        let updater = Updater(finder: Rig().finder, changes: changes, borrow: StubDeckBridge(answers: false).borrow,
+                              flasher: StubFlasher([.connecting, .restarting, Self.updated]))
+        await updater.updatePanel()
+        change.yield()
+        change.finish()
+        await updater.watch()
+        #expect(updater.screen.update == "Updated: the panel now runs build 2b7e9c1")
+    }
+
     @Test("A write that stops partway: the screen has no address, the log has it (#763)")
     func writeFailedAddressInLogOnly() async {
         let rig = Rig()

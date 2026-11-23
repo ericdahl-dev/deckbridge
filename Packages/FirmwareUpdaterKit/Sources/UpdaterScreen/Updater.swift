@@ -138,11 +138,15 @@ public final class Updater {
         flashing = nil
         canCancel = false
         updating = false
-        // The panel restarted into its new build: look again so the section shows it.
-        await refresh()
+        // The panel restarted into its new build: look again so the section shows it, keeping the result on screen.
+        await look(keepingResult: true)
     }
 
-    public func refresh() async {
+    /// A look the owner asked for (Look again) or launch's: the last update's result goes (#762: one status line per
+    /// step). A USB change keeps it: the panel's port comes back seconds after an update, and the result must stay.
+    public func refresh() async { await look(keepingResult: false) }
+
+    private func look(keepingResult: Bool) async {
         // During an update the panel restarts (a USB change), and a look would open the port the flasher holds. The
         // update looks once when it's done.
         guard !updating else { return }
@@ -151,6 +155,7 @@ public final class Updater {
             return
         }
         looking = true
+        if !keepingResult { updateText = nil }
         repeat {
             lookAgain = false
             found = await finder.find()
@@ -170,7 +175,7 @@ public final class Updater {
 
     /// Looks again on every USB change, until the stream ends.
     public func watch() async {
-        for await _ in changes { await refresh() }
+        for await _ in changes { await look(keepingResult: true) }
     }
 
     public func acceptLC6000Warning() {

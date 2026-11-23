@@ -118,7 +118,7 @@ Denon's updater at hand. Note what the panel runs now (build and Wi-Fi network).
 2. With DeckBridge running, try to start.
    - **See:** "DeckBridge is running. Quit it first: it talks to the LC6000."
 3. Put one chip in update mode. Top panel chip: power off, hold BACK + FWD + VINYL while powering on. Display chip:
-   type UPDATE and send the update-mode message.
+   click "Restart the display chip in update mode…" and confirm. No word to type here: UPDATE guards the write (#762).
    - **See:** the chip named ("LC6000 top panel chip" or "LC6000 display chip"), and its firmware checked.
 4. Back it up to a folder on this Mac, outside any git repository.
    - **See:** "Backup saved: read twice and the same, N files." A folder inside a repository is refused: "That folder

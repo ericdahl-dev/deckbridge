@@ -3,7 +3,7 @@ import Foundation
 import UnitCheck
 
 /// The update-mode step's one send (#692), as tools/lc6000-firmware/enter-update-mode.swift sends it: a SysEx as UMP
-/// SysEx7 packets on a CoreMIDI output port. Used only by UpdateModeStep, after the owner typed UPDATE.
+/// SysEx7 packets on a CoreMIDI output port. Used only by UpdateModeStep, after the owner's click and confirm.
 struct CoreMIDISend: MIDISend {
     func destinations() async -> [String] { Self.named().map(\.name) }
 

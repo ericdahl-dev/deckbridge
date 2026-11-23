@@ -15,7 +15,7 @@ public struct UpdateFlow: Sendable {
 
     enum Phase: Equatable { case ready, mismatch(UInt32), done(String), recovery }
 
-    /// The written recovery guide, in the repo.
+    /// The written recovery guide, in the repo: the fallback when the app's own copy is missing.
     public static let recoveryGuideURL = URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md")!
 
     /// `backup`: the read the plan is built from. `backupTakenThisSession`: it was read in this run of the app.
@@ -36,25 +36,44 @@ public struct UpdateFlow: Sendable {
         }
     }
 
+    #if DEBUG
+    /// A screenshot preview's flow (#762): a made-up plan on a made-up backup, never from a chip. Debug builds only.
+    public init(preview plan: WritePlan, version: String) {
+        chip = plan.chip
+        fresh = true
+        state = .stock(version)
+        self.plan = plan
+    }
+    #endif
+
     var name: String { chip == .display ? "display chip" : "top panel chip" }
 
     /// The confirm can be pressed: a plan from this session's backup, and nothing written yet.
     public var canConfirm: Bool { phase == .ready && fresh && plan.map { !$0.sectors.isEmpty } == true }
     public var confirmTitle: String { "Write to the LC6000's \(name)?" }
     public var confirmButton: String { "Write to the \(name)" }
+    /// The risk first, in plain words (#762), and the word to type. No addresses: those are `confirmDetails`.
     public var confirmBody: String {
-        (plan?.text ?? "") + "\n\n" + "If this goes wrong, the unit may not start, and the worst case needs a hardware "
-            + "debug probe to recover it. Your backup stays on this Mac. Quit DeckBridge first, and keep the LC6000 "
-            + "powered and plugged in until it's done."
+        "If it goes wrong, the LC6000 may not start, and the worst case needs a hardware probe. Your backup stays on "
+            + "this Mac. Keep it on and plugged in until it's done.\n\nType \(Confirmation.word) to write."
     }
+    /// While a write or restore runs (#762). The top panel chip's time is the owner's write (2026-11-22, about 30 s);
+    /// the display chip's isn't measured yet.
+    public var writingText: String {
+        "Writing the \(name). Don't unplug or switch off the LC6000. "
+            + (chip == .topPanel ? "This takes about 30 seconds." : "This takes under a minute.")
+    }
+
+    /// Exactly what is written where, behind the confirm's Details.
+    public var confirmDetails: String { plan?.text ?? "" }
 
     /// After a mismatch: the backup's bytes back in the same sectors.
     public var canRestore: Bool { if case .mismatch = phase { true } else { false } }
     public var restoreButton: String { "Restore backup" }
     public var restorePlan: WritePlan? { plan?.restore }
 
-    /// The guide, when the chip may not start.
-    public var recoveryGuide: URL? { phase == .recovery ? Self.recoveryGuideURL : nil }
+    /// The guide, when the chip may not start: the app's own copy (`bundled`, #762: no network needed), else GitHub's.
+    public func recoveryGuide(bundled: URL?) -> URL? { phase == .recovery ? bundled ?? Self.recoveryGuideURL : nil }
 
     public var status: String? {
         switch phase {
