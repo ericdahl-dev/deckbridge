@@ -32,8 +32,8 @@ DeckBridge 1.1.0 shows the deck on the LC6000's jog display, lights the unit in 
 - Without the unit: open Diagnostics › Jog display. It previews every deck's screen live, even with no LC6000.
 - Colors: with Settings › Decks › Exact colors on the LC6000 (on by default), the ring and pads match the deck and cue
   colors. Try Light brightness.
-- Shift + Needle Drop moves the deck's channel fader in Syndicate (Relative or Jump, Settings › Controller). Relative
-  needs Syndicate's Volume feedback on.
+- The Needle Drop strip moves the deck's channel fader in Syndicate (Relative or Jump, Settings › Controller); Shift +
+  the strip seeks. Relative needs Syndicate's Volume feedback on.
 - Top panel: the pitch arrows during pickup, Shift + Sync (sync off), Shift + browse (zoom), Shift + Auto Loop (move the
   loop), VINYL (bend or seek while playing).
 - Transpose: Shift + Pitch Bend − / + moves the key a semitone (Key Lock turns on).

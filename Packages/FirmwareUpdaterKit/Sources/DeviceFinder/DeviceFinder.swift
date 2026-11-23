@@ -1,0 +1,170 @@
+import Foundation
+import FirmwareModel
+
+/// A deck panel the finder saw on USB.
+public enum PanelFound: Sendable, Equatable {
+    /// On USB, but no driver made a serial port for its chip.
+    case driverMissing
+    /// On its serial port; the build is nil when its boot line wasn't seen.
+    case onSerial(build: PanelBuild?)
+    /// On its serial port, but another app holds it (DeckBridge).
+    case portBusy
+}
+
+/// An LC6000 the finder saw. Its firmware isn't read here: nothing is sent to it (#692 checks the unit).
+public enum LC6000Found: Sendable, Equatable {
+    /// Its MIDI ports are there.
+    case onMIDI
+    /// ST's ROM bootloader is on USB: any STM32 device in update mode, likely an LC6000's chip.
+    case updateMode
+}
+
+/// What the finder saw.
+public struct Found: Sendable, Equatable {
+    public var panel: PanelFound?
+    public var lc6000: LC6000Found?
+
+    public init(panel: PanelFound? = nil, lc6000: LC6000Found? = nil) {
+        self.panel = panel
+        self.lc6000 = lc6000
+    }
+}
+
+/// Finds a deck panel and an LC6000 (#685). It only looks.
+public struct DeviceFinder: Sendable {
+    /// The CrowPanel's USB serial chip, a CH340K (tools/deck-panel/README.md).
+    static let panelChip = (vendor: UInt16(0x1A86), product: UInt16(0x7522))
+    /// The panel's USB id as the log writes it.
+    public static let panelUSBID = String(format: "%04X:%04X", panelChip.vendor, panelChip.product)
+
+    /// The LC6000's MIDI ports carry this in their names, as DeckBridge finds them ("LC6000 PRIME Controller", "… WD").
+    static let lc6000Ports = "LC6000 PRIME"
+    /// ST's ROM DFU bootloader.
+    static let stBootloader = (vendor: UInt16(0x0483), product: UInt16(0xDF11))
+    /// The panel's serial speeds, tried in turn: 921600 (#667, with #711's board wiring), then 115200 (today's firmware).
+    public static let panelBauds = [921_600, 115_200]
+
+    /// How long the finder listens to a panel's serial port for its boot line, at each speed.
+    public static let listenSeconds = 3.0
+    static let bootLine = "deck panel: boot, build "
+    /// #702's answer to the version question: the boot line's words without "boot, ".
+    static let answerLine = "deck panel: build "
+    /// The version question (#695, #702): a whole line, answered without a reboot. Asked once at each speed: today's
+    /// firmware answers at 115200, a panel with #711's wiring at 921600 (cos, checked on a #702 panel).
+    /// It starts with a newline: a question at the panel's other speed lands in its console's line buffer as junk, and
+    /// without one the next question reads "<junk>version" and goes unanswered (the owner run, #726).
+    public static let versionQuestion = "\nversion\n"
+    public static let dirty = "-dirty"
+
+    let usb: any USBDevices
+    let midi: any MIDIPorts
+    let serial: any PanelSerial
+    let log: any LogSink
+
+    public init(usb: any USBDevices, midi: any MIDIPorts, serial: any PanelSerial, log: any LogSink) {
+        self.usb = usb
+        self.midi = midi
+        self.serial = serial
+        self.log = log
+    }
+
+    /// What is plugged in now. The log gets one line per device found, made only from fixed words, USB ids and the
+    /// checked build: never a port path (some drivers name it after the chip's serial number) or a line the panel
+    /// printed (it may carry Wi-Fi names, MAC or IP addresses).
+    /// The panel's serial port among `devices`, for the panel flasher (#687): by the finder's own chip ids.
+    public static func panelPort(in devices: [USBDevice]) -> String? { panel(in: devices)?.serialPort }
+
+    private static func panel(in devices: [USBDevice]) -> USBDevice? {
+        devices.first { $0.vendor == panelChip.vendor && $0.product == panelChip.product }
+    }
+
+    public func find() async -> Found {
+        let devices = await usb.devices()
+        var found = Found()
+        if let chip = Self.panel(in: devices) {
+            let usbID = Self.hex(chip)
+            if let port = chip.serialPort {
+                var build: PanelBuild?
+                var busy = false
+                for baud in Self.panelBauds where build == nil && !busy {
+                    switch await serial.listen(on: port, baud: baud, for: Self.listenSeconds, asking: Self.versionQuestion) {
+                    case .lines(let lines):
+                        build = Self.build(in: lines)
+                        if build == nil { log.log("deck panel: asked at \(baud), " + Self.noBuild(in: lines)) }
+                    case .busy: busy = true
+                    }
+                }
+                if busy {
+                    found.panel = .portBusy
+                    log.log("deck panel: on USB \(usbID), serial port busy (another app has it)")
+                } else {
+                    found.panel = .onSerial(build: build)
+                    log.log("deck panel: on USB \(usbID), serial port present, " + (build.map { "build \($0.sha)" + ($0.version.map { ", version \($0.description)" } ?? "") } ?? "build not read"))
+                }
+            } else {
+                found.panel = .driverMissing
+                log.log("deck panel: on USB \(usbID), no serial port yet")
+            }
+        }
+        if await midi.names().contains(where: { $0.contains(Self.lc6000Ports) }) {
+            found.lc6000 = .onMIDI
+            log.log("LC6000: MIDI ports present, firmware not checked")
+        } else if let st = devices.first(where: { $0.vendor == Self.stBootloader.vendor && $0.product == Self.stBootloader.product }) {
+            found.lc6000 = .updateMode
+            log.log("LC6000: a device in update mode on USB \(Self.hex(st))")
+        }
+        return found
+    }
+
+    /// Why `lines` gave no build, for the log (#710's owner run): counts and fixed words only, never the panel's text.
+    static func noBuild(in lines: [String]) -> String {
+        guard !lines.isEmpty else { return "nothing back" }
+        let count = lines.count == 1 ? "1 line" : "\(lines.count) lines"
+        let prefixes = [bootLine, answerLine]
+        if lines.contains(where: { line in prefixes.contains(where: line.hasPrefix) }) {
+            return count + ", build line not well formed"
+        }
+        if lines.contains(where: { line in prefixes.contains(where: line.contains) }) {
+            return count + ", build line torn inside another line"
+        }
+        return count + ", no build line"
+    }
+
+    static func hex(_ device: USBDevice) -> String {
+        String(format: "%04X:%04X", device.vendor, device.product)
+    }
+
+    /// The build from the panel's boot line, "deck panel: boot, build <sha>": a git short SHA, lowercase hex of 7 to
+    /// 40 digits, with "-dirty" on a development build (tools/deck-panel/git_sha.py), kept as printed. "unknown" (a
+    /// build made outside git) or anything else is no build.
+    /// Reads "deck panel: boot, build <sha>" and #695's "deck panel: boot, build <sha>, version <v>[ local]".
+    /// A local or development ("-dirty") build gives no version, so its SHA decides.
+    static func build(in lines: [String]) -> PanelBuild? {
+        for line in lines {
+            guard let prefix = [bootLine, answerLine].first(where: line.hasPrefix) else { continue }
+            let tail = line.dropFirst(prefix.count)
+            let parts = tail.split(separator: ",", maxSplits: 1, omittingEmptySubsequences: false)
+            let printed = parts[0]
+            let sha = printed.hasSuffix(dirty) ? printed.dropLast(dirty.count) : printed
+            guard (7...40).contains(sha.count), sha.allSatisfy({ "0123456789abcdef".contains($0) }) else { return nil }
+            guard parts.count == 2 else { return PanelBuild(sha: String(printed)) }
+            guard let printedVersion = Self.version(in: parts[1]) else { return nil }
+            let version = printedVersion.local || printed.hasSuffix(dirty) ? nil : printedVersion.version
+            return PanelBuild(sha: String(printed), version: version)
+        }
+        return nil
+    }
+
+    /// " version <dotted digits>" with an optional " local".
+    private static func version(in tail: Substring) -> (version: FirmwareVersion, local: Bool)? {
+        let prefix = " version ", localSuffix = " local"
+        guard tail.hasPrefix(prefix) else { return nil }
+        var text = tail.dropFirst(prefix.count)
+        let local = text.hasSuffix(localSuffix)
+        if local { text = text.dropLast(localSuffix.count) }
+        guard text.allSatisfy({ $0 == "." || ("0"..."9").contains($0) }), let version = FirmwareVersion(String(text)) else {
+            return nil
+        }
+        return (version, local)
+    }
+}

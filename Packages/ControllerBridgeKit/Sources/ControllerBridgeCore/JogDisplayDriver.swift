@@ -3,7 +3,7 @@
 // once and not retried until the content changes; goodbye at the end.
 
 /// Where the jog display's messages go: the Controller port (the hello and goodbye) and the WD port (images, the
-/// marker). The app's CoreMIDI adapter, a test's fake, and the Diagnostics simulator (#221) all take this.
+/// needle). The app's CoreMIDI adapter, a test's fake, and the Diagnostics simulator (#221) all take this.
 public protocol JogDisplayPort: AnyObject, Sendable {
     func sendController(_ bytes: [UInt8])
     func sendWD(_ bytes: [UInt8])
@@ -57,10 +57,10 @@ public enum JogDisplayEvent: Equatable, Sendable {
     /// The upload stopped: refused with the ack's status, or nil for no answer.
     case failed(refusal: UInt8?)
     /// The needle on the unit: the deck in front's (pitch bend on WD).
-    case marker(pitchBend: Int)
+    case needle(pitchBend: Int)
     case playLight(Bool)
     /// Each deck's needle for the simulator (#165): its own phase in the bar. Nothing is sent for it.
-    case deckMarker(deck: Int, pitchBend: Int)
+    case deckNeedle(deck: Int, pitchBend: Int)
     /// The master clock's beat (1-4), the lit ring segment on every deck. Nothing is sent for it (#215 may draw it).
     case masterBeat(Int)
     /// Whether `deck` is playing, from Syndicate's feedback, reported on change (#317). Nothing is sent for it: the
@@ -82,7 +82,7 @@ extension JogDisplayEvent {
     /// gets is in the WD out lines; mode changes have their own.
     public var traceLine: String? {
         switch self {
-        case .drawnPreview, .deckMarker, .marker: nil
+        case .drawnPreview, .deckNeedle, .needle: nil
         default: "event \(self)"
         }
     }
@@ -219,8 +219,8 @@ public final class JogDisplayDriver {
     public private(set) var connected = false
     /// Whether the hello went out and no goodbye since.
     public var isConnected: Bool { connected }
-    /// The last marker and play light sent, so only changes go out.
-    private var lastMarker: Int?
+    /// The last needle and play light sent, so only changes go out.
+    private var lastNeedle: Int?
     private var lastPlayLight: Bool?
     /// The content shown, or being uploaded, and the content wanted next.
     private var current: JogDisplayContent?
@@ -230,7 +230,7 @@ public final class JogDisplayDriver {
     /// The last content drawn and its image (#221): what the preview drew goes to the unit when it connects, unredrawn.
     /// Each deck's last previewed content.
     private var previews: [Int: JogDisplayContent] = [:]
-    private var deckMarkers: [Int: Int] = [:]
+    private var deckNeedles: [Int: Int] = [:]
     private var lastMasterBeat: Int?
     private var deckPlays: [Int: Bool] = [:]
     private var drawn: (content: JogDisplayContent, image: [UInt8])?
@@ -262,13 +262,13 @@ public final class JogDisplayDriver {
     public func connect() {
         guard !connected, let port else { return }
         connected = true
-        // What the preview showed goes to the unit now, and the marker and light are sent afresh.
+        // What the preview showed goes to the unit now, and the needle and light are sent afresh.
         if wanted == nil { wanted = current }
         current = nil
         slotContent = [:]
         beatFailures = [:]
         screenSlot = nil
-        lastMarker = nil
+        lastNeedle = nil
         lastPlayLight = nil
         for message in JogDisplay.hello { sendController(message) }
         hello = (at: clock.now, resent: 0, due: clock.now + Self.helloAgainFirst, said: false)
@@ -304,7 +304,7 @@ public final class JogDisplayDriver {
         readyPending = false
         connected = false
         upload = nil
-        lastMarker = nil
+        lastNeedle = nil
         lastPlayLight = nil
         current = nil
         sendController(JogDisplay.goodbye)
@@ -386,22 +386,22 @@ public final class JogDisplayDriver {
         return nil
     }
 
-    /// The marker at `pitchBend` (0...16383): pitch bend on WD ch1. Only a change goes out.
-    public func marker(_ pitchBend: Int) {
-        guard pitchBend != lastMarker else { return }
-        lastMarker = pitchBend
+    /// The needle at `pitchBend` (0...16383): pitch bend on WD ch1. Only a change goes out.
+    public func needle(_ pitchBend: Int) {
+        guard pitchBend != lastNeedle else { return }
+        lastNeedle = pitchBend
         // Drawing, the chip draws the needle from our message, and stock's pitch bend would only make it recompose
         // its own hidden layer (#459, agent2's #466 reading).
         if connected, case .drawn = mode { sendWD(DrawnDisplay.Message.needle(pitchBend).bytes) }
         else if connected { sendWD([0xE0, UInt8(pitchBend & 0x7F), UInt8(pitchBend >> 7 & 0x7F)]) }
-        onEvent?(.marker(pitchBend: pitchBend))
+        onEvent?(.needle(pitchBend: pitchBend))
     }
 
     /// A deck's needle for the simulator, reported on change; nothing is sent to the unit.
-    public func deckMarker(deck: Int, _ pitchBend: Int) {
-        guard deckMarkers[deck] != pitchBend else { return }
-        deckMarkers[deck] = pitchBend
-        onEvent?(.deckMarker(deck: deck, pitchBend: pitchBend))
+    public func deckNeedle(deck: Int, _ pitchBend: Int) {
+        guard deckNeedles[deck] != pitchBend else { return }
+        deckNeedles[deck] = pitchBend
+        onEvent?(.deckNeedle(deck: deck, pitchBend: pitchBend))
     }
 
     /// The master clock's beat, reported on change; nothing is sent to the unit.
@@ -761,7 +761,7 @@ public final class JogDisplayDriver {
     /// The live part of the full state (#459): the master beat (0 with no master clock), then the needle, if known.
     private func sendLive() {
         sendWD(DrawnDisplay.Message.beat(lastMasterBeat ?? 0).bytes)
-        if let lastMarker { sendWD(DrawnDisplay.Message.needle(lastMarker).bytes) }
+        if let lastNeedle { sendWD(DrawnDisplay.Message.needle(lastNeedle).bytes) }
         // The deck's time (#460), once known.
         if let lastTime { sendWD(lastTime); timeCleared = false }
         // The level meter (#461): empty until the deck's channel reports.
@@ -788,7 +788,7 @@ public final class JogDisplayDriver {
     /// The hand-back (#459): stock's needle is stale after drawing, and it redraws only on a change, so the current
     /// one goes as pitch bend just before end; the play light is sent again on the next tick.
     private func endDrawing(_ version: Int) {
-        if let lastMarker { sendWD([0xE0, UInt8(lastMarker & 0x7F), UInt8(lastMarker >> 7 & 0x7F)]) }
+        if let lastNeedle { sendWD([0xE0, UInt8(lastNeedle & 0x7F), UInt8(lastNeedle >> 7 & 0x7F)]) }
         sendWD(DrawnDisplay.Message.end(version: version).bytes)
         lastPlayLight = nil
     }

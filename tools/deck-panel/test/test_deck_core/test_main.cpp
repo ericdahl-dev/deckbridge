@@ -342,6 +342,7 @@ void test_each_shared_example_shows_its_deck_state() {
         TEST_ASSERT_EQUAL_MESSAGE(flag("master"), v.master, name);
         TEST_ASSERT_EQUAL_MESSAGE(flag("loop"), v.loop, name);
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("loopLength", 0)), v.loop_length, name);
+        TEST_ASSERT_EQUAL_FLOAT_MESSAGE(static_cast<float>(number("clockBpm", 0)), v.clock_bpm, name);  // #674
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int>(number("beat", 0)), v.beat, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("elapsed", 0)), v.elapsed, name);
         TEST_ASSERT_EQUAL_MESSAGE(static_cast<int32_t>(number("remaining", 0)), v.remaining, name);
@@ -354,7 +355,9 @@ void test_each_shared_example_shows_its_deck_state() {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(deck_core::kNoTrack, f.title, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.elapsed, name);
             TEST_ASSERT_EQUAL_STRING_MESSAGE("", f.bpm, name);
-            TEST_ASSERT_EQUAL_MESSAGE(deck_core::kPhaseHidden, f.phase_px, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_bar_w, name);
+            TEST_ASSERT_EQUAL_MESSAGE(0, f.phase_tick, name);
+            TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x262626, f.phase_track_color, name);
         } else {
             TEST_ASSERT_EQUAL_STRING_MESSAGE(title.c_str(), f.title, name);
         }
@@ -540,7 +543,7 @@ void test_every_field_of_the_feed_has_its_row() {
         int_message(prefix + "master", 1), int_message(prefix + "loop", 1), float_message(prefix + "loopLength", 0.25f),
         int_message(prefix + "beat", 3), int_message(prefix + "elapsed", 95), int_message(prefix + "remaining", 212),
         float_message(prefix + "progress", 0.3125f), float_message(prefix + "phase", 0.75f),
-        float_message(prefix + "level", 0.5f),
+        float_message(prefix + "level", 0.5f), float_message(prefix + "clockBpm", 128.0f),
     });
     TEST_ASSERT_TRUE(v.loaded);
     TEST_ASSERT_EQUAL_STRING("11B", v.key);
@@ -554,6 +557,7 @@ void test_every_field_of_the_feed_has_its_row() {
     TEST_ASSERT_EQUAL_FLOAT(0.3125f, v.progress);
     TEST_ASSERT_EQUAL_FLOAT(0.75f, v.phase);
     TEST_ASSERT_EQUAL_FLOAT(0.5f, v.level);
+    TEST_ASSERT_EQUAL_FLOAT(128.0f, v.clock_bpm);
 }
 
 void test_flags_go_off_with_0_and_phase_takes_minus_1() {
@@ -668,6 +672,59 @@ void test_a_bad_element_does_not_lose_the_good_ones() {
     core.render(screen, 200);
     TEST_ASSERT_EQUAL(3, screen.last().deck);  // the cut bundle's first element counted
     TEST_ASSERT_EQUAL_STRING("", screen.last().title.c_str());
+}
+
+// #750: every bundle starts with DeckBridge's sequence number; the core counts the numbers it never saw, per source.
+static Bytes numbered(int32_t seq, const std::vector<Bytes>& rest) {
+    std::vector<Bytes> all{int_message(prefix + "seq", seq)};
+    all.insert(all.end(), rest.begin(), rest.end());
+    return bundle(all);
+}
+
+void test_numbered_bundles_count_the_ones_that_never_came() {
+    deck_core::DeckCore core;
+    TEST_ASSERT_FALSE(core.seq_seen());
+    feed(core, numbered(1, {int_message(prefix + "deck", 2)}), 100);
+    feed(core, numbered(2, {int_message(prefix + "beat", 1)}), 133);
+    // 3 and 4 lost; this one switches the deck in front, and still counts.
+    feed(core, numbered(5, {int_message(prefix + "deck", 3), int_message(prefix + "playing", 0)}), 166);
+    TEST_ASSERT_TRUE(core.seq_seen());
+    TEST_ASSERT_EQUAL_UINT32(2, core.lost());
+}
+
+// Wi-Fi and the cable at once: each counts its own numbers, and the lost total is both.
+void test_each_source_counts_its_own_numbers() {
+    deck_core::DeckCore core;
+    for (int32_t n = 1; n <= 3; ++n) {
+        Bytes w = numbered(n, {int_message(prefix + "beat", n)});
+        core.feed(w.data(), w.size(), 100 + n, deck_core::Source::wifi);
+        Bytes c = numbered(n, {int_message(prefix + "beat", n)});
+        core.feed(c.data(), c.size(), 100 + n, deck_core::Source::cable);
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
+    Bytes c = numbered(6, {});
+    core.feed(c.data(), c.size(), 200, deck_core::Source::cable);
+    TEST_ASSERT_EQUAL_UINT32(2, core.lost());
+}
+
+// After the feed was quiet past the wait (a restart overlapping an outage, #750's review), the next number starts a
+// new count: 40, then nothing for 5 s, then 46 is not 5 lost.
+void test_after_a_quiet_feed_the_count_starts_again() {
+    deck_core::DeckCore core;
+    feed(core, numbered(40, {int_message(prefix + "deck", 2)}), 100);
+    feed(core, numbered(46, {int_message(prefix + "deck", 2)}), 100 + deck_core::DeckCore::kWaitAfterMs + 1);
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
+    feed(core, numbered(48, {int_message(prefix + "deck", 2)}), 100 + deck_core::DeckCore::kWaitAfterMs + 40);
+    TEST_ASSERT_EQUAL_UINT32(1, core.lost());
+}
+
+// A DeckBridge from before #750 numbers nothing: nothing seen, so no count can be told.
+void test_an_unnumbered_feed_is_not_seen() {
+    deck_core::DeckCore core;
+    feed(core, bundle({int_message(prefix + "deck", 2)}), 100);
+    feed(core, int_message(prefix + "beat", 1), 133);
+    TEST_ASSERT_FALSE(core.seq_seen());
+    TEST_ASSERT_EQUAL_UINT32(0, core.lost());
 }
 
 // The feed never nests bundles: one inside is skipped, its messages unread; the bundle's own messages still count.
@@ -836,7 +893,7 @@ void test_the_first_deck_is_every_part_then_only_what_changed() {
     ScreenStub screen;
     feed(core, int_message(prefix + "deck", 1), 100);
     core.render(screen, 100);
-    TEST_ASSERT_EQUAL(28, screen.last().changes.count());
+    TEST_ASSERT_EQUAL(static_cast<int>(deck_core::Part::count), screen.last().changes.count());
     feed(core, int_message(prefix + "playing", 1), 110);
     core.render(screen, 110);
     TEST_ASSERT_EQUAL(2, screen.last().changes.count());  // the play lamp's box and its text
@@ -919,6 +976,103 @@ void test_the_waiting_texts_come_fitted_to_the_fonts() {
 }
 
 
+// #660: the beat box lights when its beat is due, from the panel's clock, before the message for it arrives. #718:
+// the build's lead early (DECK_PANEL_BEAT_LEAD_MS).
+void test_the_next_beat_box_lights_the_lead_before_its_beat_is_due() {
+    const uint32_t lit = 1938 - deck_core::BeatClock::kLeadMs;  // beat 3 is due at 1938
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, lit - 1);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    core.render(screen, lit);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // beat 3, lit the lead early
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[1]);
+}
+
+
+// #660: the deck in front is the master and stops. The beats stop with it at once: the box shows the last beat heard,
+// never the one the clock had lit ahead of its message.
+void test_the_master_stopping_stops_the_beat_at_once() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "master", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+    feed(core, int_message(prefix + "playing", 0), 1950);
+    core.render(screen, 1950);
+    TEST_ASSERT_EQUAL_HEX32(0x262626, screen.last().face.beat_color[2]);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // 2, the last heard
+    core.render(screen, 3000);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);
+}
+
+// #718: the master stopped, but the master clock runs on (Syndicate's metronome), and DeckBridge's 2 s keepalive sends
+// `playing 0` again. Only the master's playing going from 1 to 0 stops the clock; a repeat doesn't, so the beat
+// clock keeps lighting each box ahead.
+void test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "master", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, int_message(prefix + "playing", 0), 1600);  // the master stops
+    feed(core, int_message(prefix + "beat", 3), 1938);     // the clock runs on: a new run
+    feed(core, int_message(prefix + "beat", 4), 2407);     // 469 ms: the length again
+    feed(core, int_message(prefix + "playing", 0), 2500);  // the keepalive
+    core.render(screen, 2876 - deck_core::BeatClock::kLeadMs / 2);  // beat 1 is due at 2876
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[0]);  // 1, lit ahead of its message
+}
+
+// #718: the deck in front switches from the playing master (1) to a stopped deck (2) that isn't the master. The master
+// clock runs on, so the next beat still lights ahead. DeckBridge's snapshot puts deck and playing before master, so
+// deck 2's `playing 0` arrives while `master` is still deck 1's: it must not read as the master stopping.
+void test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, bundle({int_message(prefix + "deck", 1), int_message(prefix + "playing", 1),
+                       int_message(prefix + "master", 1)}), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, bundle({int_message(prefix + "deck", 2), int_message(prefix + "playing", 0),
+                       int_message(prefix + "master", 0)}), 1500);
+    core.render(screen, 1938 - deck_core::BeatClock::kLeadMs / 2);  // beat 3 is due at 1938
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);  // 3, lit ahead of its message
+}
+
+// Not the master: its pause says nothing about the master clock, which runs on.
+void test_a_deck_that_is_not_the_master_stopping_leaves_the_beat() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, int_message(prefix + "playing", 1), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    feed(core, int_message(prefix + "beat", 2), 1469);
+    feed(core, int_message(prefix + "playing", 0), 1500);
+    core.render(screen, 1940);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[2]);
+}
+
+
+// #660 with #674: the feed's clockBpm is the master clock's BPM; with it, the first beat heard is enough.
+void test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    feed(core, int_message(prefix + "deck", 1), 1000);
+    feed(core, float_message(prefix + "clockBpm", 128.0f), 1000);
+    feed(core, int_message(prefix + "beat", 1), 1000);
+    core.render(screen, 1469);
+    TEST_ASSERT_NOT_EQUAL(0x262626, screen.last().face.beat_color[1]);  // beat 2, due
+}
+
 // #677: the setup screen's logo is half size, so the join instructions have the room; every other waiting screen's is
 // full size. The first screen and a change between them say so.
 void test_the_setup_screen_has_the_small_logo_and_no_other() {
@@ -938,6 +1092,32 @@ void test_the_setup_screen_has_the_small_logo_and_no_other() {
     core.render(screen, 20);
     TEST_ASSERT_FALSE(screen.last().logo_small);
     TEST_ASSERT_FALSE(screen.last().waiting_changes.logo_small);
+}
+
+// #695: every waiting screen shows the firmware's version beside its SHA, as the board gives it, so the owner can
+// tell which firmware runs. It's drawn with the first screen and doesn't count as a change between waiting screens.
+void test_every_waiting_screen_shows_the_build() {
+    deck_core::DeckCore core;
+    ScreenStub screen;
+    core.set_build("v1.2.0  abc1234");
+    core.set_network(deck_core::Network::setup, "192.168.4.1");
+    core.render(screen, 0);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    TEST_ASSERT_TRUE(screen.last().waiting_changes.build);
+    core.set_network(deck_core::Network::joining, "");
+    core.render(screen, 10);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    TEST_ASSERT_FALSE(screen.last().waiting_changes.build);
+    core.set_network(deck_core::Network::connected, "192.168.1.40");
+    core.render(screen, 20);
+    TEST_ASSERT_EQUAL_STRING("v1.2.0  abc1234", screen.last().build.c_str());
+    // A new label alone is a change of the build and nothing else.
+    core.set_build("v1.3.0  def5678");
+    core.render(screen, 30);
+    TEST_ASSERT_EQUAL_STRING("v1.3.0  def5678", screen.last().build.c_str());
+    const deck_core::WaitingChanges c = screen.last().waiting_changes;
+    TEST_ASSERT_TRUE(c.build && c.any());
+    TEST_ASSERT_FALSE(c.headline || c.detail || c.logo || c.logo_small);
 }
 
 int main(int, char**) {
@@ -978,13 +1158,24 @@ int main(int, char**) {
     RUN_TEST(test_the_core_says_what_it_holds);
     RUN_TEST(test_a_bad_element_does_not_lose_the_good_ones);
     RUN_TEST(test_a_nested_bundle_is_skipped);
+    RUN_TEST(test_numbered_bundles_count_the_ones_that_never_came);
+    RUN_TEST(test_each_source_counts_its_own_numbers);
+    RUN_TEST(test_an_unnumbered_feed_is_not_seen);
+    RUN_TEST(test_after_a_quiet_feed_the_count_starts_again);
     RUN_TEST(test_a_clipped_stream_after_boot_never_says_no_track_loaded);
     RUN_TEST(test_a_booted_panel_given_a_clipped_stream_never_says_no_track_loaded);
     RUN_TEST(test_coming_back_from_waiting_keeps_the_deck_loaded);
     RUN_TEST(test_every_field_of_the_feed_has_its_row);
+    RUN_TEST(test_the_next_beat_box_lights_the_lead_before_its_beat_is_due);
+    RUN_TEST(test_the_feeds_clock_bpm_times_the_beat_from_the_first_edge);
+    RUN_TEST(test_the_master_stopping_stops_the_beat_at_once);
+    RUN_TEST(test_a_repeated_playing_0_on_the_stopped_master_leaves_the_beat_clock);
+    RUN_TEST(test_switching_the_front_from_the_playing_master_to_a_stopped_deck_leaves_the_beat_clock);
+    RUN_TEST(test_a_deck_that_is_not_the_master_stopping_leaves_the_beat);
     RUN_TEST(test_the_waiting_screen_is_told_only_what_changed);
     RUN_TEST(test_the_waiting_screen_is_told_when_the_logo_changes);
     RUN_TEST(test_the_setup_screen_has_the_small_logo_and_no_other);
+    RUN_TEST(test_every_waiting_screen_shows_the_build);
     RUN_TEST(test_the_waiting_texts_come_fitted_to_the_fonts);
     RUN_TEST(test_the_first_deck_is_every_part_then_only_what_changed);
     RUN_TEST(test_a_change_that_moves_no_pixel_tells_the_screen_nothing);

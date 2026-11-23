@@ -27,6 +27,9 @@ uint32_t g_window_start_ms = 0;
 uint32_t g_datagrams = 0;
 uint32_t g_too_big_at_start = 0;
 uint32_t g_too_big = 0;
+uint32_t g_dropped_at_start = 0;
+bool g_drops_counted = false;
+uint32_t g_dropped = 0;
 
 // The frame ledger (#662): about 1 KB, so static, off the loop's stack. Fed by the hooks below, all on this task.
 frame_ledger::Ledger g_ledger;
@@ -92,9 +95,12 @@ void begin() {
     Serial.println("perf: on, a line every 5 s");
 }
 
-void tick(uint32_t now_ms, int datagrams, uint32_t too_big, bool may_print, frame_clock::Clock& clock) {
+void tick(uint32_t now_ms, int datagrams, uint32_t too_big, uint32_t dropped, bool drops_counted, bool may_print,
+          frame_clock::Clock& clock) {
+    g_drops_counted = drops_counted;
     if (datagrams > 0) g_datagrams += static_cast<uint32_t>(datagrams);
     g_too_big = too_big;
+    g_dropped = dropped;
     if (!may_print || now_ms - g_window_start_ms < kWindowMs) return;
 
     const DisplayPerf d = display_take_perf();
@@ -110,6 +116,8 @@ void tick(uint32_t now_ms, int datagrams, uint32_t too_big, bool may_print, fram
     w.draw_bitmap_us = d.draw_bitmap_us;
     w.datagrams = g_datagrams;
     w.too_big = g_too_big - g_too_big_at_start;
+    w.dropped = g_dropped - g_dropped_at_start;
+    w.drops_counted = g_drops_counted;  // a numbered feed came (#750); else lost can't be told
     w.internal_free = static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     w.scan = display_take_scan();
     w.copy_budget_us = display_copy_budget_us();
@@ -132,6 +140,7 @@ void tick(uint32_t now_ms, int datagrams, uint32_t too_big, bool may_print, fram
     g_window_start_ms = now_ms;
     g_datagrams = 0;
     g_too_big_at_start = g_too_big;
+    g_dropped_at_start = g_dropped;
 }
 
 void feed_seen(uint32_t us) {
@@ -157,7 +166,7 @@ void frame_on_glass(uint32_t release_us) { g_ledger.on_glass(release_us); }
 
 namespace perf_log {
 void begin() {}
-void tick(uint32_t, int, uint32_t, bool, frame_clock::Clock&) {}
+void tick(uint32_t, int, uint32_t, uint32_t, bool, bool, frame_clock::Clock&) {}
 }  // namespace perf_log
 
 #endif

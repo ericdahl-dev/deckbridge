@@ -1,0 +1,141 @@
+import DeviceFinder
+import Foundation
+import PanelFlasher
+
+/// Steps to install a missing USB driver (#688): plain text, and the maker's own download page.
+public struct DriverGuide: Sendable, Equatable {
+    public let steps: [String]
+    public let link: URL
+
+    /// WCH's CH34x driver for the panel's CH340K. The page was checked by hand on 2026-11-21: WCH's own site,
+    /// CH34XSER_MAC.ZIP version 2.1, for CH340 and macOS 11 and later.
+    public static let ch34x = DriverGuide(
+        steps: [
+            "Download the CH34x driver for macOS from WCH, the chip's maker.",
+            "Open the download, drag CH34xVCPDriver to Applications, open it, and click Install.",
+            "If macOS asks, allow the driver in System Settings > General > Login Items & Extensions > Driver Extensions.",
+            "Unplug the panel and plug it back in. This app looks again by itself.",
+        ],
+        link: URL(string: "https://www.wch-ic.com/downloads/CH34XSER_MAC_ZIP.html")!)
+}
+
+/// One section of the app, as the owner reads it.
+public struct DeviceSection: Sendable, Equatable {
+    public let status: String
+    public let detail: String?
+    /// A warning the owner must accept before anything else in the section shows or can be used.
+    public let warning: String?
+    /// How to install the driver, when the device's driver is missing.
+    public let guide: DriverGuide?
+
+    init(status: String, detail: String? = nil, warning: String? = nil, guide: DriverGuide? = nil) {
+        self.status = status
+        self.detail = detail
+        self.warning = warning
+        self.guide = guide
+    }
+}
+
+/// The app's two sections (#685).
+public struct UpdaterScreen: Sendable, Equatable {
+    public let panel: DeviceSection
+    public let lc6000: DeviceSection
+    /// The LC6000's steps (update mode, backup) show: its warning accepted and an LC6000 found (#762).
+    public let showsLC6000Steps: Bool
+
+    /// The LC6000's steps, in order (#762): DeckBridge quit first, since it talks to the LC6000.
+    public static let lc6000Steps = [
+        "Quit DeckBridge first. It talks to the LC6000.",
+        "Put one chip in update mode. Top panel chip: power the LC6000 off, then hold BACK + FWD + VINYL while you power it on.",
+        "Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware.",
+        "Then pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.",
+    ]
+
+    /// The app's name wherever the owner sees it (#763): the window title here; project.yml names the rest.
+    public static let appName = "DeckBridge Firmware Updater"
+
+    /// The LC6000 section's own warning (#685, spec #684 story 9), so someone who owns only a panel never starts on it.
+    public static let lc6000Warning = """
+        This section changes the firmware inside a Denon LC6000 PRIME. It is not made, supported or endorsed by Denon. \
+        If a change goes wrong, the unit may stop working, and the worst case needs a hardware debug probe to \
+        recover. If you only have a deck panel, you don't need this section.
+        """
+
+    /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
+    public static let portBusy = "DeckBridge is using the panel's USB cable. \(PanelUpdate.turnOffCable), then look again."
+
+    /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
+    /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
+    public init(found: Found, lc6000WarningAccepted: Bool, panelWaiting: Bool = false, deckBridgeSilent: Bool = false,
+                update: String? = nil, panelUpdate: PanelUpdateOffer? = nil,
+                panelRepair: PanelUpdateOffer? = nil, writing: Bool = false) {
+        self.panelRepair = panelRepair
+        self.update = update
+        cancelNote = writing ? Self.noCancelWhileWriting : nil
+        self.panelUpdate = panelUpdate
+        firstLookLine = Self.firstLook(found, panelWaiting: panelWaiting)
+        switch found.panel {
+        case nil: panel = DeviceSection(status: "Nothing connected")
+        case .driverMissing where panelWaiting: panel = DeviceSection(status: "Deck panel found", detail: "Waiting for its port")
+        case .driverMissing: panel = DeviceSection(status: "Deck panel found", detail: "The USB driver for its chip is missing",
+                                                    guide: .ch34x)
+        case .onSerial(let build?):
+            let development = build.sha.hasSuffix(DeviceFinder.dirty) ? " (a development build)" : ""
+            let shown = build.version.map { "Version \($0.description), build \(build.sha)" } ?? "Build \(build.sha)"
+            panel = DeviceSection(status: "Deck panel found", detail: shown + development)
+        case .portBusy: panel = DeviceSection(status: "Deck panel found", detail: deckBridgeSilent ? Self.deckBridgeNoAnswer : Self.portBusy)
+        case .onSerial(nil):
+            panel = DeviceSection(status: "Deck panel found",
+                            detail: "Build not read")
+        }
+        showsLC6000Steps = lc6000WarningAccepted && found.lc6000 != nil
+        guard lc6000WarningAccepted else {
+            lc6000 = DeviceSection(status: "Read the warning first", warning: Self.lc6000Warning)
+            return
+        }
+        switch found.lc6000 {
+        case nil: lc6000 = DeviceSection(status: "Nothing connected", detail: "Plug in the LC6000 and switch it on.")
+        case .onMIDI: lc6000 = DeviceSection(status: "LC6000 found", detail: "Firmware not checked yet")
+        // Not which chip: naming it would mean a new request at every look (#762). The backup names it.
+        case .updateMode: lc6000 = DeviceSection(status: "An LC6000 chip in update mode")
+        }
+    }
+
+    /// What the update over the cable says now (#687): a step, the result, or what to do; nil before one starts.
+    public let update: String?
+    /// The update offered for the panel over its cable (#687); nil when there's none.
+    public let panelUpdate: PanelUpdateOffer?
+    /// The repair offered for a panel whose build can't be read (#744); nil when there's none.
+    public let panelRepair: PanelUpdateOffer?
+
+    /// What the owner confirms before a repair: the panel may be fine on older firmware, so say so.
+    public static func repairConfirm(version: String) -> String {
+        "This panel didn't tell its build: it may not be starting, or it may run older firmware. Repair writes \(version) to it. Wi-Fi is kept."
+    }
+
+    /// Why there's no Cancel: the panel is being written (#744); nil otherwise.
+    public let cancelNote: String?
+
+    public static let noCancelWhileWriting =
+        "The panel can't be stopped while it's written: it has one app slot, so stopping now would leave it unable to start."
+
+    /// The log's first look (#734): what each section found, in status words only, never a build, serial number or
+    /// port, so the launch smoke check can match it exactly. The LC6000's words don't wait for its warning.
+    public let firstLookLine: String
+
+    static func firstLook(_ found: Found, panelWaiting: Bool) -> String {
+        let panel = switch found.panel {
+        case nil: "not found"
+        case .driverMissing where panelWaiting: "found (waiting for its port)"
+        case .driverMissing: "found (driver missing)"
+        case .portBusy: "found (port busy)"
+        case .onSerial(let build): build == nil ? "found (build not read)" : "found (build read)"
+        }
+        let lc6000 = switch found.lc6000 {
+        case nil: "not found"
+        case .onMIDI: "found"
+        case .updateMode: "in update mode"
+        }
+        return "first look: deck panel \(panel), LC6000 \(lc6000)"
+    }
+}

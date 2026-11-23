@@ -156,6 +156,7 @@ const Row kRows[] = {
          return true;
      }},
     {"bpm", 'f', [](DeckView& v, const Message& m) { return set(v.bpm, m.f); }},
+    {"clockBpm", 'f', [](DeckView& v, const Message& m) { return set(v.clock_bpm, m.f); }},
     {"tempo", 'f', [](DeckView& v, const Message& m) { return set(v.tempo, m.f); }},
     {"playing", 'i', [](DeckView& v, const Message& m) { return set(v.playing, m.i != 0); }},
     {"cue", 'i', [](DeckView& v, const Message& m) { return set(v.cue, m.i != 0); }},
@@ -176,6 +177,7 @@ const Row kRows[] = {
 void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     static const char kBundle[8] = {'#', 'b', 'u', 'n', 'd', 'l', 'e', 0};
     bool alive = false;
+    datagram_deck_ = view_.deck;
     if (length >= 16 && std::memcmp(bytes, kBundle, 8) == 0) {
         // A bundle (#636): "#bundle", a timetag (ignored: the feed's are "immediately"), then elements, each a size
         // and that many bytes. One arrival for the whole bundle.
@@ -185,11 +187,11 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source
                                   uint32_t(bytes[at + 2]) << 8 | uint32_t(bytes[at + 3]);
             at += 4;
             if (size == 0 || size % 4 != 0 || size > length - at) break;  // the framing can't be trusted past here
-            alive = apply(bytes + at, size) || alive;
+            alive = apply(bytes + at, size, now_ms, source) || alive;
             at += size;
         }
     } else {
-        alive = apply(bytes, length);
+        alive = apply(bytes, length, now_ms, source);
     }
     if (goodbye_) {
         // The waiting screen at once; the deck is kept for the next snapshot.
@@ -206,7 +208,7 @@ void DeckCore::feed(const uint8_t* bytes, size_t length, uint32_t now_ms, Source
     last_heard_ms_ = now_ms;
 }
 
-bool DeckCore::apply(const uint8_t* bytes, size_t length) {
+bool DeckCore::apply(const uint8_t* bytes, size_t length, uint32_t now_ms, Source source) {
     Message message;
     if (!parse(bytes, length, message)) return false;
     // DeckBridge's goodbye (ADR 0011, #651): not the deck's state but the feed's end, so not a table row. 1 is the
@@ -215,12 +217,34 @@ bool DeckCore::apply(const uint8_t* bytes, size_t length) {
         if (message.type == 'i' && message.i == 1) goodbye_ = true;
         return false;
     }
+    // DeckBridge's bundle number (#750), first in every bundle: counted per source, before anything else is read.
+    if (std::strcmp(message.name, "seq") == 0) {
+        if (message.type == 'i') {
+            const int at = source == Source::cable ? 1 : 0;
+            // Quiet past the wait (an outage, maybe with a DeckBridge restart in it, #750's review): count afresh.
+            if (static_cast<int32_t>(now_ms - seq_ms_[at]) > static_cast<int32_t>(kWaitAfterMs)) seq_[at].restart();
+            seq_ms_[at] = now_ms;
+            seq_[at].saw(static_cast<uint32_t>(message.i));
+        }
+        return true;
+    }
     // An address this panel doesn't know is a newer DeckBridge's (ADR 0011): ignored, but the feed is alive.
     bool alive = true;
+    const bool was_playing = view_.playing;
     for (const Row& row : kRows) {
         if (std::strcmp(row.name, message.name) != 0) continue;
         alive = row.type == message.type && row.apply(view_, message);
     }
+    // The master clock's beat also sets the panel's beat clock (#660), at the time it arrived.
+    if (alive && std::strcmp(message.name, "beat") == 0) clock_.edge(view_.beat, now_ms);
+    if (alive && std::strcmp(message.name, "clockBpm") == 0) clock_.set_tempo(view_.clock_bpm);
+    // The deck in front is the master and stopped: so did the master clock, at once (#660). Another deck's pause
+    // says nothing about it, and nor does `playing 0` again (DeckBridge's keepalive, #718): only 1 to 0 is a stop. And
+    // only on the same deck: when the front switched earlier in this datagram (deck comes before playing and master),
+    // the 1 was the old deck's and the 0 is the new one's, read while `master` is still the old deck's (#718).
+    if (alive && std::strcmp(message.name, "playing") == 0 && view_.master && was_playing && !view_.playing &&
+        view_.deck == datagram_deck_)
+        clock_.stop();
     return alive;
 }
 
@@ -228,6 +252,8 @@ void DeckCore::set_network(Network state, const char* ip) {
     network_ = state;
     std::snprintf(ip_, sizeof ip_, "%s", ip);
 }
+
+void DeckCore::set_build(const char* label) { std::snprintf(build_, sizeof build_, "%s", label); }
 
 void DeckCore::set_setup(const char* name, const char* password) {
     std::snprintf(setup_name_, sizeof setup_name_, "%s", name);
@@ -253,10 +279,15 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
         drawn_waiting_ = true;
         screen.show_waiting(shown_waiting_view_, changes);
     } else {
-        // Every frame: the view compare is the cheap way out; the face is built only when the view changed.
-        if (shown_ && !shown_waiting_ && view_ == shown_view_) return;
+        // The beat as the panel's clock has it at this frame's time (#660); everything else as received.
+        const int beat = clock_.beat_at(now_ms);
+        // Every frame: the view compare is the cheap way out; the face is built only when the view or beat changed.
+        if (shown_ && !shown_waiting_ && view_ == shown_view_ && beat == shown_beat_) return;
         shown_view_ = view_;
-        const Face now = face(view_);
+        shown_beat_ = beat;
+        DeckView timed = view_;
+        timed.beat = beat;
+        const Face now = face(timed);
         const Changes changes = drawn_ ? changed(shown_face_, now) : Changes::all();
         // Back from waiting with nothing changed, the page needs showing even so: the board shows it on any call.
         if (drawn_ && !changes.any() && !shown_waiting_) return;
@@ -271,6 +302,7 @@ void DeckCore::render(Screen& screen, uint32_t now_ms) {
 WaitingView DeckCore::waiting_view() const {
     WaitingView view;
     view.logo = true;  // every waiting screen: the logo, the reason and the address beneath (#651)
+    std::snprintf(view.build, sizeof view.build, "%s", build_);  // and the firmware's version (#695)
     switch (network_) {
         case Network::setup:
             std::snprintf(view.headline, sizeof view.headline, "Set up the panel's Wi-Fi");

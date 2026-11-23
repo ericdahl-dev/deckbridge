@@ -69,7 +69,7 @@ public enum JogUploadStatus: Equatable, Sendable {
     }
 }
 
-/// Holds a fast stream (the marker's angle, ~100 updates a second while playing) to at most one redraw per `interval`
+/// Holds a fast stream (the needle's angle, ~100 updates a second while playing) to at most one redraw per `interval`
 /// (#221: ~30 Hz), always ending on the newest value. The view offers each value as it arrives and ticks on its
 /// display timer; whatever either returns is drawn.
 public struct RedrawLimiter<Value: Sendable>: Sendable {
@@ -101,8 +101,8 @@ public struct RedrawLimiter<Value: Sendable>: Sendable {
     }
 }
 
-/// Where the simulator draws the marker (#221), from the pitch bend the Coordinator sends to the display (#165).
-public enum JogMarkerAngle {
+/// Where the simulator draws the needle (#221), from the pitch bend the Coordinator sends to the display (#165).
+public enum JogNeedleAngle {
     /// The hand's angle in degrees, clockwise from 12 o'clock: pitchBend / 16384 of a turn (0…16383). A quarter turn
     /// is one beat, from 0 on beat 1. PROVISIONAL: the #165 hardware spike confirms where the unit puts zero and which
     /// way it turns; flip it here, the one place the simulator reads it.
@@ -124,7 +124,7 @@ public struct JogSimulator: Equatable, Sendable {
         /// The upload in progress was refused, or got no answer.
         case failed
         /// A deck's needle: its own phase in the bar (#165, the user's pick).
-        case marker(deck: Int, pitchBend: Int)
+        case needle(deck: Int, pitchBend: Int)
         /// The master clock's beat (1-4): the lit ring segment on every deck.
         case masterBeat(Int)
         /// Whether `deck` is playing, from Syndicate's feedback (#317): not the play light, which blinks while paused.
@@ -140,7 +140,7 @@ public struct JogSimulator: Equatable, Sendable {
     /// The deck the unit is showing: the last one an upload started for.
     public private(set) var front: Int?
     private var uploads: [Int: Upload] = [:]
-    private var markers: [Int: Int] = [:]
+    private var needles: [Int: Int] = [:]
     private var plays: [Int: Bool] = [:]
     private var master: Int?
 
@@ -157,7 +157,7 @@ public struct JogSimulator: Equatable, Sendable {
             if let front, uploads[front]?.slot == slot { uploads[front]?.accepted = true }
         case .failed:
             if let front { uploads[front]?.accepted = false }
-        case .marker(let deck, let pitchBend): markers[deck] = pitchBend
+        case .needle(let deck, let pitchBend): needles[deck] = pitchBend
         case .masterBeat(let beat): master = beat
         case .playing(let deck, let on): plays[deck] = on
         }
@@ -182,14 +182,14 @@ public struct JogSimulator: Equatable, Sendable {
         return (accepted ? "Shown on the LC6000\n" : "Refused by the LC6000\n") + status(deck: deck).readout(timeZone: timeZone)
     }
 
-    /// The deck's last marker pitch bend (0 until one arrives), for `JogMarkerAngle.degrees(pitchBend:)`.
-    public func marker(deck: Int) -> Int { markers[deck] ?? 0 }
+    /// The deck's last needle pitch bend (0 until one arrives), for `JogNeedleAngle.degrees(pitchBend:)`.
+    public func needle(deck: Int) -> Int { needles[deck] ?? 0 }
 
     /// Whether the deck is playing, as Syndicate reports it.
     public func playing(deck: Int) -> Bool { plays[deck] ?? false }
 
-    /// The marker as the renderer takes it (#238): turns clockwise from 12 o'clock.
-    public func markerTurns(deck: Int) -> Double { Double(marker(deck: deck)) / 16_384 }
+    /// The needle as the renderer takes it (#238): turns clockwise from 12 o'clock.
+    public func needleTurns(deck: Int) -> Double { Double(needle(deck: deck)) / 16_384 }
 
     /// The beat section to light (1-4): the master clock's, the same on every deck, paused or not (#165, the user's
     /// pick). The needle is the deck's own phase, so the two together are a sync check. None before the clock runs.

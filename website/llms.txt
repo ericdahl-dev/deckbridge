@@ -4,10 +4,11 @@
 
 - Why: Syndicate's own MIDI mapping (0.3.7) can't handle the LC6000's 14-bit jog wheel or 14-bit pitch fader, and gives LED feedback only to the DDJ-FLX4 and FLX10. Source: Syndicate User Guide 0.3.7, section 13.9 (https://untitledaudiosyndicate.com/user-guide/index.html#c13-9).
 - Features: full-resolution jog and pitch with pitch-fader pickup; decks 1 to 4 from one unit via the LC6000's own layers; deck colors that follow Syndicate's palette live, with the jog ring in the deck color; the printed Shift functions; LEDs for Play, Cue, Sync and pads, with hot cues in Syndicate's cue colors; safe recovery on unplug, sleep or quit; diagnostics (MIDI monitor, LED sweep, OSC log); a demo controller; a second LC6000 on another deck; Syndicate on another Mac over the local network.
-- Coming in v1.1: the jog-wheel display showing art in real time.
+- New in v1.1: the jog display shows the deck's track, key and BPM, with Syndicate's master clock around the ring and the deck's own bar in the needle, and Diagnostics shows the same on the Mac; Shift + Pitch Bend transposes a semitone; CDJ-style cue (PLAY while CUE is held keeps playing, Shift + CUE returns and stops, Shift + a hot cue pad jumps at once); Needle Drop moves the deck's channel fader in Syndicate; exact colors on the ring and pads with no firmware change; a key display in traditional or Camelot; and a display feed that sends the deck in front, unencrypted, to the one address you set on your local network (off by default).
+- In the lab: not in your hands yet. A drawn jog display on our own LC6000's reflashed display chip, which needs custom firmware that is not part of the DeckBridge app and is not offered for download (DeckBridge never includes or distributes Denon's firmware); and a 7-inch Wi-Fi deck panel fed by DeckBridge's display feed, with no kit or firmware to download.
 - Requirements: macOS 26 or later; Syndicate with OSC input enabled (port 9090, feedback port 9096); a Denon LC6000 PRIME over USB. The LC6000 PRIME is the only supported controller today.
 - Does not need djay Pro or Engine DJ; works with Syndicate only.
-- Status: version 1.0.1 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Price: free.
+- Status: version 1.1.0 is on TestFlight; join the beta at https://testflight.apple.com/join/HWcpqqpz. Mac App Store: coming soon. Price: free.
 - Privacy: the app collects no data; no account, no analytics.
 - Contact: deckbridge@ericdahl.dev
 - DeckBridge is independent and not affiliated with or endorsed by Untitled Audio Syndicate Ltd. or Denon DJ.

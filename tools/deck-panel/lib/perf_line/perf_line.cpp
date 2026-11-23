@@ -29,14 +29,17 @@ std::string format(const Window& w) {
                  w.ledger.lag_worst_us / 1000.0, static_cast<unsigned>(w.ledger.skipped),
                  static_cast<unsigned>(w.ledger.frames));
     }
+    char dropped[16];
+    if (w.drops_counted) snprintf(dropped, sizeof dropped, "%u", static_cast<unsigned>(w.dropped));
+    else snprintf(dropped, sizeof dropped, "n/a");
     char tail[560];
     snprintf(tail, sizeof tail,
              "%.1f vsyncs/s, %u swap timeouts, scan lag %.1f-%.1f ms, vsync %.1f-%.1f ms, %u resyncs, %s, "
-             "feed %u datagrams %u too big, %s, clock %u frames %u late %u missed %u no latch, internal free %u",
+             "feed %u datagrams %u too big %s dropped, %s, clock %u frames %u late %u missed %u no latch, internal free %u",
              w.vsyncs / seconds, static_cast<unsigned>(w.swap_timeouts), w.scan.lag_min_us / 1000.0,
              w.scan.lag_max_us / 1000.0, w.scan.vsync_min_us / 1000.0, w.scan.vsync_max_us / 1000.0,
              static_cast<unsigned>(w.scan.resyncs), copy, static_cast<unsigned>(w.datagrams),
-             static_cast<unsigned>(w.too_big), lag, static_cast<unsigned>(w.clock.frames),
+             static_cast<unsigned>(w.too_big), dropped, lag, static_cast<unsigned>(w.clock.frames),
              static_cast<unsigned>(w.clock.late), static_cast<unsigned>(w.clock.missed),
              static_cast<unsigned>(w.clock.no_latch), static_cast<unsigned>(w.internal_free));
     if (w.frames == 0) {
@@ -52,10 +55,6 @@ std::string format(const Window& w) {
     return line;
 }
 
-int phase(uint32_t since_latch_us, uint32_t period_us) {
-    if (period_us == 0 || since_latch_us >= period_us) return kPhases - 1;
-    return static_cast<int>(static_cast<uint64_t>(since_latch_us) * kPhases / period_us);
-}
 
 std::string format_copy(const CopySpread& c) {
     static const char* const kNames[kMarks] = {"wait", "read", "render", "refresh", "wifi",

@@ -25,6 +25,8 @@ struct Window {
     uint64_t draw_bitmap_us = 0;    // handing frames over
     uint32_t datagrams = 0;         // feed datagrams read; lwIP's own drops aren't visible here
     uint32_t too_big = 0;           // feed datagrams dropped for size
+    uint32_t dropped = 0;           // feed datagrams dropped with the intake full (#664)
+    bool drops_counted = true;      // false with no receive task: lwIP's drops past its mailbox aren't seen (#713)
     uint32_t internal_free = 0;     // bytes
     scan_watch::Report scan;        // the scan-out's steadiness
     uint32_t copy_budget_us = 0;    // a bounce chunk's deadline
@@ -68,7 +70,13 @@ struct CopySpread {
 };
 
 // The eighth of a `period_us` scan-out that `since_latch_us` falls in; one period or more is the last.
-int phase(uint32_t since_latch_us, uint32_t period_us);
+// In the header so the board's IRAM copy wrapper inlines it, and 32-bit for a frame's period, so no 64-bit division
+// per chunk (#666; __udivdi3 resolves to ROM here, but the 32-bit path is cheaper still).
+inline int phase(uint32_t since_latch_us, uint32_t period_us) {
+    if (period_us == 0 || since_latch_us >= period_us) return kPhases - 1;
+    if (period_us <= UINT32_MAX / kPhases) return static_cast<int>(since_latch_us * kPhases / period_us);
+    return static_cast<int>(static_cast<uint64_t>(since_latch_us) * kPhases / period_us);
+}
 
 // The second perf line: "perf copy: late/copies by eighth after the latch ...; by loop step ...".
 std::string format_copy(const CopySpread& c);

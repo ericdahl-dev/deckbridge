@@ -1,0 +1,68 @@
+# The firmware updater (spec #684, #685): a separate Mac app, never part of DeckBridge or the App Store build.
+# Generated with XcodeGen like DeckBridge; scripts/updater.sh builds and opens it.
+name: FirmwareUpdater
+options:
+  bundleIdPrefix: dev.ericdahl
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  FirmwareUpdaterKit:
+    path: ../../Packages/FirmwareUpdaterKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FirmwareUpdater:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      # Its own icon (#733), rendered from design/icon/updater-download.svg by scripts/render_app_icon.swift.
+      - path: Assets.xcassets
+      # The LC6000 recovery guide, opened from the app with no network (#762). Never site text.
+      - path: ../../docs/LC6000-RECOVERY.md
+        buildPhase: resources
+    dependencies:
+      - package: FirmwareUpdaterKit
+        product: DeviceFinder
+      - package: FirmwareUpdaterKit
+        product: UpdaterScreen
+      - package: FirmwareUpdaterKit
+        product: FirmwareModel
+      - package: FirmwareUpdaterKit
+        product: PanelFlasher
+      - package: FirmwareUpdaterKit
+        product: UnitCheck
+      - package: FirmwareUpdaterKit
+        product: LC6000Update
+      - package: FirmwareUpdaterKit
+        product: FirmwareCatalog
+      - package: FirmwareUpdaterKit
+        product: PortHandoff
+      - package: FirmwareUpdaterKit
+        product: FirmwareRelease
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDisplayName: DeckBridge Firmware Updater
+        CFBundleName: DeckBridge Firmware Updater
+        LSApplicationCategoryType: public.app-category.utilities
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ericdahl.FirmwareUpdater
+        # The name the owner sees (#763): the .app file and its binary. The bundle ID stays.
+        PRODUCT_NAME: DeckBridge Firmware Updater
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Notarized from the site, not the App Store: hardened runtime, no sandbox. USB, serial and MIDI reads need
+        # no entitlement outside the sandbox.
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: false

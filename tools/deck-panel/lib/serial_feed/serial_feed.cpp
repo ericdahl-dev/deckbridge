@@ -21,12 +21,15 @@ int SerialFeed::next() {
 size_t SerialFeed::next_size() {
     // Once per call: the loop asks every frame, and a byte read now arrived since the last ask.
     const uint32_t now = clock_ ? clock_() : 0;
-    while (!complete_) {
+    for (size_t seen = 0; !complete_; ++seen) {
+        if (seen == kMostPerCall) return 0;
         const int next = this->next();
         if (next < 0) {
             // Nothing waiting and nothing read for kQuietMs inside a frame: it was cut (DeckBridge writes each whole),
             // so it's dropped. Judged only on an empty buffer, so a loop that stalled with the rest waiting keeps it.
             if (clock_ && in_frame_ && now - last_byte_ms_ >= kQuietMs) {
+                // The updater's "version" line, sent right after the cut, landed in it (Codex on #754): still asked.
+                if (text_) pass_version_line();
                 length_ = 0;
                 in_frame_ = false;
                 escaped_ = false;
@@ -60,6 +63,23 @@ size_t SerialFeed::next_size() {
     }
     // Too big for the drain's buffer: it skips it whole and counts it.
     return overlong_ ? sizeof packet_ + 1 : length_;
+}
+
+void SerialFeed::pass_version_line() {
+    static constexpr char kLine[] = "version";
+    constexpr size_t kLen = sizeof kLine - 1;
+    for (size_t at = 0; at + kLen <= length_; ++at) {
+        const bool starts = at == 0 || packet_[at - 1] == '\n' || packet_[at - 1] == '\r';
+        const bool ends = at + kLen < length_ && (packet_[at + kLen] == '\n' || packet_[at + kLen] == '\r');
+        if (!starts || !ends) continue;
+        bool same = true;
+        for (size_t i = 0; i < kLen && same; ++i) same = packet_[at + i] == static_cast<uint8_t>(kLine[i]);
+        if (!same) continue;
+        text_->put('\n');
+        for (size_t i = 0; i < kLen; ++i) text_->put(kLine[i]);
+        text_->put('\n');
+        return;
+    }
 }
 
 size_t SerialFeed::read(uint8_t* into, size_t room) {

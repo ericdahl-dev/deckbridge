@@ -61,10 +61,21 @@ final class Rig {
         var sent: [OSCMessage] = []
         /// Each bundle as sent (#636); its messages are in `sent` too.
         var bundles: [[OSCMessage]] = []
+        /// Each bundle's sequence number (#750), in order; `bundles` and `sent` leave the seq message out, so tests
+        /// about the feed's contents read as before.
+        var seqs: [UInt32] = []
+        /// Each bundle exactly as sent, seq and all.
+        var rawBundles: [[OSCMessage]] = []
         func send(_ message: OSCMessage) { sent.append(message) }
         func send(bundle messages: [OSCMessage]) {
-            bundles.append(messages)
-            sent += messages
+            rawBundles.append(messages)
+            var rest = messages
+            if let first = rest.first, first.address == "/DeckBridge/Display/seq", case .int(let n) = first.arguments.first {
+                seqs.append(UInt32(bitPattern: n))
+                rest.removeFirst()
+            }
+            bundles.append(rest)
+            sent += rest
         }
     }
 
