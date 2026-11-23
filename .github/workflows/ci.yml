@@ -190,6 +190,7 @@ jobs:
           python3 -I scripts/test_ci_profile.py
           python3 -I scripts/test_testflight_distribute.py
           python3 -I scripts/test_check_app_icon.py
+          python3 -I scripts/test_check_updater_name.py
 
   app:
     name: App build (Release, ad-hoc)
@@ -224,15 +225,17 @@ jobs:
           xcodegen generate
           xcodebuild -project FirmwareUpdater.xcodeproj -scheme FirmwareUpdater -configuration Release \
             -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= build
-          app=build/Build/Products/Release/FirmwareUpdater.app
+          app="build/Build/Products/Release/DeckBridge Firmware Updater.app"
           info=$(codesign -dv "$app" 2>&1); echo "$info"
           [[ "$info" == *"flags="*"runtime"* ]] || { echo "hardened runtime missing"; exit 1; }
           if codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q app-sandbox; then echo "sandboxed"; exit 1; fi
           # Its own icon (#733): every size in the set, and the built app names and carries it.
-          python3 -I ../../scripts/check_app_icon.py --iconset Assets.xcassets/AppIcon.appiconset --app "$app"
+          python3 -I ../../scripts/check_app_icon.py --iconset Assets.xcassets/AppIcon.appiconset --badge 62929E --app "$app"
+          # Its name (#763): the file, the app menu, About, Quit and the Dock.
+          python3 -I ../../scripts/check_updater_name.py "$app"
       # It starts with nothing plugged in, logs its first look ("not found" for both sections) and quits (#734).
       - name: Firmware updater launch smoke
-        run: UPDATER_SMOKE_TIMEOUT=60 scripts/updater_smoke.sh Apps/FirmwareUpdater/build/Build/Products/Release/FirmwareUpdater.app
+        run: UPDATER_SMOKE_TIMEOUT=60 scripts/updater_smoke.sh "Apps/FirmwareUpdater/build/Build/Products/Release/DeckBridge Firmware Updater.app"
       # A gate since #46: it passed on the 10 main runs from 99545f9 to 23a8788 (virtual MIDI and loopback UDP work on
       # hosted macos-26 runners). A failure fails this job, which is a required check.
       - name: Smoke

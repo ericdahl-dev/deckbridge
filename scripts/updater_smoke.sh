@@ -5,7 +5,7 @@
 # "deck panel not found, LC6000 not found". A device line from the finder would mean it found, and maybe opened, a
 # device.
 #
-# Usage: scripts/updater_smoke.sh [path/to/FirmwareUpdater.app]
+# Usage: scripts/updater_smoke.sh ["path/to/DeckBridge Firmware Updater.app"]
 # Default app: the Release ad-hoc build from .github/workflows/ci.yml (Apps/FirmwareUpdater/build).
 #
 # It needs nothing plugged in: it reads the USB device list (ioreg) first, and stops without starting the app if a
@@ -16,8 +16,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-app="${1:-Apps/FirmwareUpdater/build/Build/Products/Release/FirmwareUpdater.app}"
-binary="$app/Contents/MacOS/FirmwareUpdater"
+app="${1:-Apps/FirmwareUpdater/build/Build/Products/Release/DeckBridge Firmware Updater.app}"
+# The binary has the app's name (#763: PRODUCT_NAME names both).
+binary="$app/Contents/MacOS/$(basename "$app" .app)"
 [ -x "$binary" ] || { echo "No app at $app. Build it first (see .github/workflows/ci.yml)."; exit 2; }
 log="${UPDATER_LOG:-$HOME/Library/Logs/FirmwareUpdater/updater.log}"
 timeout="${UPDATER_SMOKE_TIMEOUT:-60}"

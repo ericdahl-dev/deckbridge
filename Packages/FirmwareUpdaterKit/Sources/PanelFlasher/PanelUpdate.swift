@@ -98,6 +98,11 @@ public struct PanelUpdate: Sendable {
     }
 }
 
+extension PanelUpdate {
+    /// The one sentence that sends the owner to DeckBridge's switch, always quoted (#763).
+    public static let turnOffCable = "Turn off \"Send over the USB cable\" in DeckBridge"
+}
+
 extension PanelUpdate.Step {
     /// What the owner reads for this step: what is happening, or what went wrong and what to do.
     public var text: String {
@@ -114,14 +119,14 @@ extension PanelUpdate.Step {
     }
 
     static func text(for error: FlashError) -> String {
-        let mayNotStart = "The panel may not start: try again before unplugging it."
+        let mayNotStart = "The panel may not start: try again before you unplug it."
         switch error {
         case .portBusy:
-            return "DeckBridge is using the panel's cable. Turn off \"Send over the USB cable\" in DeckBridge, then try again."
+            return "DeckBridge is using the panel's cable. \(PanelUpdate.turnOffCable), then try again."
         case .wrongBoard(let what): return "This board isn't a deck panel (\(what)). Nothing was written."
         case .notADeckPanel: return "This board doesn't have the deck panel's layout. Nothing was written."
         case .noBootloader, .refused, .noAnswer: return "The panel didn't answer. Unplug it, plug it back in, and try again."
-        case .writeFailed(let address): return "Writing failed at 0x\(String(address, radix: 16, uppercase: true)). \(mayNotStart)"
+        case .writeFailed: return "Writing stopped partway. \(mayNotStart)"  // the address goes to the log (#763)
         case .verifyFailed: return "The written firmware didn't check out. \(mayNotStart)"
         case .canceled: return "Canceled. The panel was restarted."
         case .lineLost: return "The cable was lost. Plug the panel back in and try again."

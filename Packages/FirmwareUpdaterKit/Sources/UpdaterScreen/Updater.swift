@@ -123,6 +123,10 @@ public final class Updater {
         }
         for await next in steps {
             if case .writing = next { canCancel = false }
+            // The screen says only "partway" (#763); where it stopped is for the log.
+            if case .failed(.writeFailed(let address)) = next {
+                log?.log("deck panel: writing stopped at 0x\(String(address, radix: 16, uppercase: true))")
+            }
             if case .failed(.portBusy) = next, let text = UpdaterScreen.handoff(outcome) {
                 updateText = text
             } else {

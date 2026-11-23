@@ -54,11 +54,13 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: DeckBridge Firmware Updater
-        CFBundleName: Firmware Updater
+        CFBundleName: DeckBridge Firmware Updater
         LSApplicationCategoryType: public.app-category.utilities
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.ericdahl.FirmwareUpdater
+        # The name the owner sees (#763): the .app file and its binary. The bundle ID stays.
+        PRODUCT_NAME: DeckBridge Firmware Updater
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Notarized from the site, not the App Store: hardened runtime, no sandbox. USB, serial and MIDI reads need
         # no entitlement outside the sandbox.

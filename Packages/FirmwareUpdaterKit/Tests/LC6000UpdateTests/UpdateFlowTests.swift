@@ -52,7 +52,7 @@ struct UpdateFlowTests {
     @Test("Already patched: up to date, and nothing to confirm")
     func upToDate() throws {
         let flow = try Self.flow(patched: true)
-        #expect(flow.status == "Up to date: 00.50 with this app's patch")
+        #expect(flow.status == "Up to date: 00.50 with DeckBridge's display firmware")
         #expect(!flow.canConfirm)
     }
 
@@ -68,7 +68,7 @@ struct UpdateFlowTests {
     func mismatchThenRestore() throws {
         var flow = try Self.flow()
         flow.finished(.mismatch(at: 0x0800_BDA4))
-        #expect(flow.status == "The chip read back different at 0x0800BDA4, so the update didn't take. Restore your backup now.")
+        #expect(flow.status == "The chip read back different, so the update didn't take. Restore your backup now.")
         #expect(flow.canRestore && flow.restoreButton == "Restore backup" && !flow.canConfirm)
         #expect(flow.restorePlan == flow.plan?.restore)
         flow.finished(.written)
@@ -102,7 +102,7 @@ struct UpdateFlowTests {
         let known = KnownNumbers(display: [:], topPanel: [PatchStateTests.sha(stock): "00.31"])
         let flow = UpdateFlow(chip: .topPanel, backup: ChipRead(kind: .topPanel, settings: [], app: patched),
                               backupTakenThisSession: true, edits: edits, known: known)
-        #expect(flow.status == "Up to date: 00.31 with this app's patch")
+        #expect(flow.status == "Up to date: 00.31 with DeckBridge's top panel firmware")
         #expect(!flow.canConfirm)
     }
 
@@ -116,7 +116,7 @@ struct UpdateFlowTests {
         let flow = UpdateFlow(chip: .topPanel, backup: read, backupTakenThisSession: true, edits: edits, known: known)
         let unknown = Identified(kind: .topPanel, version: nil, refusal: "The top panel chip runs firmware this app doesn't know. Updates are off; a backup is still allowed.")
         #expect(flow.backupLine(files: 2, identified: unknown)
-            == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31, with this app's patch.")
+            == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31, with DeckBridge's top panel firmware.")
         let stockFlow = UpdateFlow(chip: .topPanel, backup: ChipRead(kind: .topPanel, settings: [], app: stock),
                                    backupTakenThisSession: true, edits: edits, known: known)
         let found = Identified(kind: .topPanel, version: "00.31", refusal: nil)
@@ -132,5 +132,39 @@ struct UpdateFlowTests {
             == "Writing the display chip. Don't unplug or switch off the LC6000. This takes under a minute.")
         #expect(UpdateFlow(chip: .topPanel, backup: nil, backupTakenThisSession: true, edits: [], known: .none).writingText
             == "Writing the top panel chip. Don't unplug or switch off the LC6000. This takes about 30 seconds.")
+    }
+
+    @Test("The log line for each outcome: fixed words, and where a read-back differed (#763: the address is log only)")
+    func logLines() throws {
+        let flow = try Self.flow()
+        #expect(flow.logLine(.written) == "LC6000 display chip: update written and read back equal")
+        #expect(flow.logLine(.mismatch(at: 0x0800_BDA4)) == "LC6000 display chip: update read back different at 0x0800BDA4")
+        #expect(flow.logLine(.noAnswer) == "LC6000 display chip: update the chip stopped answering")
+        #expect(flow.logLine(.refused) == "LC6000 display chip: update not sent")
+    }
+
+    @Test("No status the owner reads has a hex address (#763)")
+    func noStatusHasHex() throws {
+        var mismatch = try Self.flow()
+        mismatch.finished(.mismatch(at: 0x0800_BDA4))
+        var recovery = try Self.flow()
+        recovery.finished(.noAnswer)
+        var done = try Self.flow()
+        done.finished(.written)
+        for flow in [try Self.flow(patched: true), mismatch, recovery, done] {
+            #expect(flow.status.map { !$0.contains("0x") } ?? true)
+        }
+    }
+
+    /// The backup's line with no update to agree with (the app's own copy before #763): the same words.
+    @Test("A backup with no flow: a chip already running ours says so in the chip's own words (#763)")
+    func backupLineWithoutFlow() {
+        let display = Identified(kind: .display, version: "00.50", refusal: nil, ours: true)
+        #expect(UpdateFlow.backupLine(files: 3, identified: display)
+            == "Backup saved: read twice and the same, 3 files.\nDisplay chip: firmware 00.50, with DeckBridge's display firmware already on it.")
+        let topPanel = Identified(kind: .topPanel, version: "00.31", refusal: nil, ours: true)
+        #expect(UpdateFlow.backupLine(files: 2, identified: topPanel)
+            == "Backup saved: read twice and the same, 2 files.\nTop panel chip: firmware 00.31, with DeckBridge's top panel firmware already on it.")
+        #expect(UpdateFlow.backupLine(files: 2, identified: nil) == "Backup saved: read twice and the same, 2 files.")
     }
 }

@@ -1,5 +1,6 @@
 import DeviceFinder
 import Foundation
+import PanelFlasher
 
 /// Steps to install a missing USB driver (#688): plain text, and the maker's own download page.
 public struct DriverGuide: Sendable, Equatable {
@@ -50,15 +51,18 @@ public struct UpdaterScreen: Sendable, Equatable {
         "Then pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.",
     ]
 
+    /// The app's name wherever the owner sees it (#763): the window title here; project.yml names the rest.
+    public static let appName = "DeckBridge Firmware Updater"
+
     /// The LC6000 section's own warning (#685, spec #684 story 9), so someone who owns only a panel never starts on it.
     public static let lc6000Warning = """
-        This section changes the firmware inside a Denon LC6000 PRIME. It is not made or supported by Denon. \
+        This section changes the firmware inside a Denon LC6000 PRIME. It is not made, supported or endorsed by Denon. \
         If a change goes wrong, the unit may stop working, and the worst case needs a hardware debug probe to \
         recover. If you only have a deck panel, you don't need this section.
         """
 
     /// When DeckBridge holds the panel's port (#710's interim, cos): the one sentence, shared with the panel flasher (#687).
-    public static let portBusy = "DeckBridge is using the panel's USB cable. Turn off Send over the USB cable in DeckBridge, then look again."
+    public static let portBusy = "DeckBridge is using the panel's USB cable. \(PanelUpdate.turnOffCable), then look again."
 
     /// `panelWaiting`: the panel is on USB with no serial port yet, and its driver may still make one (#700).
     /// `deckBridgeSilent`: the port is busy, and DeckBridge didn't let go of it when asked (#710).
