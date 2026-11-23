@@ -30,7 +30,9 @@ ALSO_MAC = ["tools/lc6000-display-fw/vectors/*", "tools/lc6000-display-fw/test/r
             "tools/lc6000-display-fw/arm/upper_header.py"]
 # What the Deck panel job (#615) builds and tests, and CI itself, so a change to the job runs it. The icon SVG the
 # panel's logo is made from (#651), whose drift test the job runs (#669).
-DECK_PANEL = ["tools/deck-panel/*", ".github/workflows/ci.yml", "design/icon/icon-1-deck-ring.svg"]
+# The app's release keys, which the panel must trust too (#690).
+DECK_PANEL = ["tools/deck-panel/*", ".github/workflows/ci.yml", "design/icon/icon-1-deck-ring.svg",
+              "Packages/FirmwareUpdaterKit/Sources/FirmwareRelease/ReleaseKeys.swift"]
 
 
 def site_only(path):

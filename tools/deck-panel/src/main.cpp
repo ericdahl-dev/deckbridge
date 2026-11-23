@@ -37,6 +37,7 @@
 #include "feed_intake.h"
 #include "feed_udp.h"
 #include "hold_reset.h"
+#include "update_wifi.h"
 #include "wifi_link.h"
 #endif
 
@@ -364,6 +365,7 @@ class PanelBoard : public frame_clock::Board {
 #ifdef DECK_PANEL_TEST_SCREEN
         test_screen::show_touch();
 #else
+        if (update_wifi::hold_render()) return;  // an update is writing flash: the still screen, not the deck (#690)
         // Read after the drain, so a datagram stamped then is never in the future of the render.
         g_core.render(g_screen, millis());
 #endif
@@ -371,6 +373,9 @@ class PanelBoard : public frame_clock::Board {
 
     void refresh() override {
         MARK(refresh);
+#ifndef DECK_PANEL_TEST_SCREEN
+        if (update_wifi::hold_refresh()) return;
+#endif
         display_refresh();
     }
 
@@ -388,6 +393,7 @@ class PanelBoard : public frame_clock::Board {
         MARK(wifi);
         wifi_link::poll(now);
         g_core.set_network(wifi_link::state(), wifi_link::ip());
+        update_wifi::chores(now);
         MARK(udp);
         // For the receive task, which opens the socket on each join and closes it off Wi-Fi (FeedUdp::poll); wifi_link
         // is this task's, so it's told, not asked. A join seen a millisecond before its state only reopens late.
@@ -496,6 +502,7 @@ void setup() {
     receive_begin();     // before Wi-Fi, so the first join's socket opens on it
 #endif
     wifi_link::begin();  // after the backlight: joining takes seconds and must not hold the first frame
+    update_wifi::begin();
     Serial.println("deck panel: deck view up");
 #endif
 }

@@ -26,6 +26,9 @@ const char* ip();
 const char* setup_name();
 const char* setup_password();
 
+/// Whether the setup network (AP, DNS, web server) is running: in setup only. For the update's trial (#690).
+bool setup_up();
+
 /// Counts connections: changes each time the station (re)joins, so the UDP socket knows to open again.
 uint32_t joins();
 

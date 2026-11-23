@@ -89,12 +89,27 @@ jobs:
           key: deck-panel-pio-6.2.0-${{ hashFiles('tools/deck-panel/platformio.ini') }}
       - name: PlatformIO
         run: pip install platformio==6.2.0
+      # The host tests check release signatures and image hashes with the system libsodium (#690); the board links the
+      # copy in the ESP32 libs. Two builds of one library: the shared RFC 8032 and CryptoKit vectors tie them together.
+      # Same guard as the Arm toolchain (#640): a stalled transfer gives up after 30 s, an attempt over 2 minutes is cut
+      # off and tried once more, so it can't hang the merge queue.
+      - name: libsodium
+        run: |
+          apt="-o Acquire::http::Timeout=30 -o Acquire::Retries=3"
+          for attempt in 1 2; do
+            timeout 120 sudo apt-get $apt update && timeout 120 sudo apt-get $apt install -y --no-install-recommends \
+              libsodium-dev && break
+            [ "$attempt" = 2 ] && exit 1
+            echo "libsodium download attempt $attempt failed or stalled; trying once more"
+          done
+          echo "libsodium $(dpkg-query -W -f='${Version}' libsodium-dev)"
       - name: Deck panel host tests
         run: |
           pio test -d tools/deck-panel -e native
           python3 -I tools/deck-panel/test_secret_logs.py
           python3 -I tools/deck-panel/check_secret_logs.py
           python3 -I tools/deck-panel/test_deck_logo.py
+          python3 -I tools/deck-panel/test_release_keys.py
           python3 -I tools/deck-panel/test_git_sha.py
       # The panel keeps its Wi-Fi in NVS, set from a phone (#622): nothing to build in.
       - name: Deck panel firmware build
