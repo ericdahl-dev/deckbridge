@@ -15,7 +15,7 @@ public struct UpdateFlow: Sendable {
 
     enum Phase: Equatable { case ready, mismatch(UInt32), done(String), recovery }
 
-    /// The written recovery guide, in the repo.
+    /// The written recovery guide, in the repo: the fallback when the app's own copy is missing.
     public static let recoveryGuideURL = URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md")!
 
     /// `backup`: the read the plan is built from. `backupTakenThisSession`: it was read in this run of the app.
@@ -62,8 +62,8 @@ public struct UpdateFlow: Sendable {
     public var restoreButton: String { "Restore backup" }
     public var restorePlan: WritePlan? { plan?.restore }
 
-    /// The guide, when the chip may not start.
-    public var recoveryGuide: URL? { phase == .recovery ? Self.recoveryGuideURL : nil }
+    /// The guide, when the chip may not start: the app's own copy (`bundled`, #762: no network needed), else GitHub's.
+    public func recoveryGuide(bundled: URL?) -> URL? { phase == .recovery ? bundled ?? Self.recoveryGuideURL : nil }
 
     public var status: String? {
         switch phase {

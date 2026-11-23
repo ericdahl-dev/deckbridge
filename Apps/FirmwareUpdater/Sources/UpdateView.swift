@@ -98,7 +98,9 @@ struct UpdateView: View {
                 if model.flow.canRestore {
                     Button(model.flow.restoreButton + "…") { model.confirmingRestore = true }.disabled(model.running)
                 }
-                if let guide = model.flow.recoveryGuide { Link("Recovery guide", destination: guide) }
+                if let guide = model.flow.recoveryGuide(bundled: Bundle.main.url(forResource: "LC6000-RECOVERY", withExtension: "md")) {
+                    Link("Recovery guide", destination: guide)
+                }
                 if model.running { ProgressView().controlSize(.small) }
             }
         }

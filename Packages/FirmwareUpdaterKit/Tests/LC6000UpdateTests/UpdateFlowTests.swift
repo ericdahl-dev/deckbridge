@@ -61,7 +61,7 @@ struct UpdateFlowTests {
         var flow = try Self.flow()
         flow.finished(.written)
         #expect(flow.status == "Written and checked. Turn the LC6000 off and on again.")
-        #expect(!flow.canConfirm && !flow.canRestore && flow.recoveryGuide == nil)
+        #expect(!flow.canConfirm && !flow.canRestore && flow.recoveryGuide(bundled: URL(filePath: "/x.md")) == nil)
     }
 
     @Test("A mismatch offers Restore backup; restored and checked, power-cycle")
@@ -84,10 +84,13 @@ struct UpdateFlowTests {
         let noAnswer = "The chip stopped answering during the update, so the LC6000 may not start. Leave it plugged in and follow the recovery guide."
         #expect(flow.status == noAnswer)
         #expect(!flow.canRestore && !flow.canConfirm)
-        #expect(flow.recoveryGuide == URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md"))
+        #expect(flow.recoveryGuide(bundled: nil) == URL(string: "https://github.com/ericdahl-dev/deckbridge/blob/main/docs/LC6000-RECOVERY.md"))
+        // The app's own copy first (#762): it opens with no network, when the unit may need it most.
+        let local = URL(filePath: "/Applications/DeckBridge Firmware Updater.app/Contents/Resources/LC6000-RECOVERY.md")
+        #expect(flow.recoveryGuide(bundled: local) == local)
         var gone = try Self.flow()
         gone.finished(.noAnswer)
-        #expect(gone.status == noAnswer && !gone.canRestore && gone.recoveryGuide != nil)
+        #expect(gone.status == noAnswer && !gone.canRestore && gone.recoveryGuide(bundled: nil) != nil)
     }
 
     @Test("The owner's top panel chip after #748's run: patched, so its hash isn't stock's, and it shows up to date")
