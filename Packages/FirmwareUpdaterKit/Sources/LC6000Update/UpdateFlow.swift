@@ -36,6 +36,16 @@ public struct UpdateFlow: Sendable {
         }
     }
 
+    #if DEBUG
+    /// A screenshot preview's flow (#762): a made-up plan on a made-up backup, never from a chip. Debug builds only.
+    public init(preview plan: WritePlan, version: String) {
+        chip = plan.chip
+        fresh = true
+        state = .stock(version)
+        self.plan = plan
+    }
+    #endif
+
     var name: String { chip == .display ? "display chip" : "top panel chip" }
 
     /// The confirm can be pressed: a plan from this session's backup, and nothing written yet.

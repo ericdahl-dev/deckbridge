@@ -23,8 +23,10 @@ final class BackupModel {
     init() {}
 
     #if DEBUG
-    init(preview result: String?) {
+    init(preview result: String?, confirmingStep: Bool = false, update: UpdateModel? = nil) {
         lines.backup = result
+        self.confirmingStep = confirmingStep
+        self.update = update
         inert = true
     }
     #endif

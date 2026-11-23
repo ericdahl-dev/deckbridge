@@ -14,11 +14,15 @@ final class UpdateModel {
     private(set) var stop: String?
     var confirming = false
     var confirmingRestore = false
+    /// The confirm's Details disclosure is open.
+    var detailsOpen = false
     /// The word typed in the write's confirm (#762): the write's button stays off until it's UPDATE.
     var typed = ""
 
     /// Called as a write or restore starts: the backup's line goes (#762).
     private let writeStarts: () -> Void
+    /// A screenshot preview (#762): write and restore do nothing, so no IOKit object is made and no chip is reached.
+    private var inert = false
 
     /// `read`: the backup read just taken, in this run of the app.
     init(read: ChipRead, writeStarts: @escaping () -> Void = {}) {
@@ -36,6 +40,23 @@ final class UpdateModel {
     /// The write's confirmation, only with the typed word; the button is off without it.
     var writeConfirmation: Confirmation? { flow.plan.flatMap { Confirmation(typed: typed, for: $0) } }
 
+    #if DEBUG
+    /// A screenshot preview (#762): a made-up plan, its confirm open or a write showing as running. Nothing reaches a
+    /// chip: the preview's buttons are inert (BackupModel), and no IOKit object is made.
+    init(preview writing: Bool, details: Bool = false) {
+        writeStarts = {}
+        // Made-up bytes: the top panel chip's app area as 0xFF, with one byte changed in its 64 KB sector.
+        let backup = [UInt8](repeating: 0xFF, count: ChipKind.topPanel.app.length)
+        var patched = backup
+        patched[0x8000] = 0x00
+        flow = UpdateFlow(preview: WritePlan(chip: .topPanel, backup: backup, patched: patched), version: "00.31")
+        running = writing
+        confirming = !writing && !details
+        detailsOpen = details
+        inert = true
+    }
+    #endif
+
     func write() async {
         let confirmed = writeConfirmation
         typed = ""
@@ -45,7 +66,7 @@ final class UpdateModel {
     func restore() async { await run(flow.restorePlan, flow.restorePlan.flatMap(Confirmation.init(restoring:))) }
 
     private func run(_ plan: WritePlan?, _ confirmed: Confirmation?) async {
-        guard let plan, let confirmed, !running else { return }
+        guard !inert, let plan, let confirmed, !running else { return }
         stop = nil
         writeStarts()
         if let reason = await Preflight(apps: WorkspaceApps()).stop() {
@@ -87,7 +108,7 @@ struct UpdateView: View {
             if model.running { Text(model.flow.writingText).fixedSize(horizontal: false, vertical: true) }
             // The sectors and addresses, out of the way (#762): an alert can't hold a disclosure, so it sits by the button.
             if model.flow.canConfirm {
-                DisclosureGroup("Details") {
+                DisclosureGroup("Details", isExpanded: $model.detailsOpen) {
                     Text(model.flow.confirmDetails).font(.callout).fixedSize(horizontal: false, vertical: true)
                 }
             }

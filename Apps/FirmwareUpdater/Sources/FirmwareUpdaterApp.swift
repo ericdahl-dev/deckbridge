@@ -75,7 +75,11 @@ struct UpdaterView: View {
 
     static func makeBackup() -> BackupModel {
         #if DEBUG
-        if let shot = PreviewLaunch.shot { return BackupModel(preview: shot.backupResult) }
+        if let shot = PreviewLaunch.shot {
+            return BackupModel(preview: shot.backupResult, confirmingStep: shot == .stepConfirm,
+                               update: [.writeConfirm, .writing, .details].contains(shot)
+                                   ? UpdateModel(preview: shot == .writing, details: shot == .details) : nil)
+        }
         #endif
         return BackupModel()
     }
