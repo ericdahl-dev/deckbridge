@@ -9,6 +9,8 @@ import fnmatch, json, sys
 # and the LC6000 firmware tool.
 # Anything else, including .github/ and the release scripts the Kit job tests, runs the Mac jobs too.
 SITE_ONLY = ["website/*", "scripts/check_site.py", "scripts/test_check_site.py", "scripts/site-preview.sh",
+             # the server check (#767): builds website/Dockerfile, which the Site check job runs
+             "scripts/check_site_image.py",
              "scripts/test_*.mjs", "*.md",
              # the domain docs' check (GLOSSARY.md, docs/adr), which the Site check job runs
              "scripts/check_domain_docs.py", "scripts/test_check_domain_docs.py",

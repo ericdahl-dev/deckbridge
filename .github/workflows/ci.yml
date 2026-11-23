@@ -64,6 +64,9 @@ jobs:
         run: node --test scripts/test_analytics.mjs scripts/test_capture.mjs
       - name: Site check
         run: python3 -I scripts/check_site.py website
+      - name: Site server check
+        # website/Dockerfile and nginx.conf (#767): built and run here, checked over HTTP against the files.
+        run: python3 -I scripts/check_site_image.py
 
   deck-panel:
     name: Deck panel
