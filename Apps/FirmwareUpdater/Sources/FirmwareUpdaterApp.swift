@@ -10,7 +10,7 @@ struct FirmwareUpdaterApp: App {
     @State private var model = Live.updater()
 
     var body: some Scene {
-        Window("Firmware Updater", id: "updater") {
+        Window(UpdaterScreen.appName, id: "updater") {
             UpdaterView(model: model)
                 .frame(minWidth: 480, minHeight: 360)
                 .task {

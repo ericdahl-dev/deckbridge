@@ -41,6 +41,9 @@ public struct UpdaterScreen: Sendable, Equatable {
     public let panel: DeviceSection
     public let lc6000: DeviceSection
 
+    /// The app's name wherever the owner sees it (#763): the window title here; project.yml names the rest.
+    public static let appName = "DeckBridge Firmware Updater"
+
     /// The LC6000 section's own warning (#685, spec #684 story 9), so someone who owns only a panel never starts on it.
     public static let lc6000Warning = """
         This section changes the firmware inside a Denon LC6000 PRIME. It is not made, supported or endorsed by Denon. \

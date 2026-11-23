@@ -19,4 +19,9 @@ struct BrandWordingTests {
     func oneCableSentence(line: String) {
         #expect(line.contains("Turn off \"Send over the USB cable\" in DeckBridge"))
     }
+
+    @Test("The window is titled with the app's whole name (#763)")
+    func appName() {
+        #expect(UpdaterScreen.appName == "DeckBridge Firmware Updater")
+    }
 }

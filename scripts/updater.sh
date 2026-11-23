@@ -7,6 +7,6 @@ command -v xcodegen >/dev/null || { echo "Needs XcodeGen: brew install xcodegen"
 xcodegen generate -q
 xcodebuild -project FirmwareUpdater.xcodeproj -scheme FirmwareUpdater -configuration Debug -derivedDataPath build \
     -quiet build
-app=build/Build/Products/Debug/FirmwareUpdater.app
+app="build/Build/Products/Debug/DeckBridge Firmware Updater.app"
 [[ "${1:-}" == build ]] || open "$app"
 echo "$app"
