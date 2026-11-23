@@ -17,10 +17,21 @@ final class BackupModel {
     var confirmingStep = false
     /// The update this session's backup allows (#693); nil until a backup is saved.
     private(set) var update: UpdateModel?
+    /// A screenshot preview's model (#761): its buttons do nothing, so no MIDI message is sent and no chip is read.
+    private var inert = false
+
+    init() {}
+
+    #if DEBUG
+    init(preview result: String?) {
+        lines.backup = result
+        inert = true
+    }
+    #endif
 
     /// The display chip's step into update mode: only from the confirm's own button, once.
     func enterUpdateMode(clicked button: String) async {
-        guard let confirmed = UpdateModeStep.Confirmed(clicked: button) else { return }
+        guard !inert, let confirmed = UpdateModeStep.Confirmed(clicked: button) else { return }
         lines.stepStarts()
         let outcome = await UpdateModeStep(midi: CoreMIDISend(), apps: WorkspaceApps()).enter(confirmed: confirmed)
         switch outcome {
@@ -30,7 +41,7 @@ final class BackupModel {
     }
 
     func backUp() async {
-        guard !running else { return }
+        guard !running, !inert else { return }
         lines.backupStarts()
         if let stop = await Preflight(apps: WorkspaceApps()).stop() {
             lines.backup = stop
