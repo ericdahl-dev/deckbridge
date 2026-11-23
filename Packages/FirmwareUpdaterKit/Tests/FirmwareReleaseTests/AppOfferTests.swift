@@ -14,14 +14,16 @@ func publish(_ release: FakeFeed, on github: FakeGitHub) {
             on: github)
 }
 
-@Test func withTheAppsKeysStillEmptyAWholeReleaseOffersTheBuiltInFirmwareAndSaysTheKeyIsUnknown() async throws {
+/// With the owner's keys in the app (#689): a release signed by another key under the name "primary" offers the
+/// built-in firmware and says the signature doesn't check out.
+@Test func aReleaseSignedByAnImpostorPrimaryKeyOffersTheBuiltInFirmware() async throws {
     let github = FakeGitHub()
     publish(release(panelVersion: "1.1.0", sha: "bbbbbbb", signedBy: TestKey(id: "primary"), name: "deck-panel-1.1.0-bbbbbbb.bin"),
             on: github)
     let offer = await FirmwareOffer.fetch(http: github, over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"),
                                           cache: temporaryFolder())
     #expect(offer.source == "Firmware built into this app: deck panel 1.0.0")
-    #expect(offer.reason == "The newest release is signed with a key this app doesn't trust yet, so the firmware built into this app is offered.")
+    #expect(offer.reason == "The newest release's signature doesn't check out, so the firmware built into this app is offered.")
 }
 
 @Test func gitHubTimingOutOffersTheBuiltInFirmwareAndSaysItCouldntBeReached() async throws {
