@@ -230,7 +230,7 @@ jobs:
           [[ "$info" == *"flags="*"runtime"* ]] || { echo "hardened runtime missing"; exit 1; }
           if codesign -d --entitlements - --xml "$app" 2>/dev/null | grep -q app-sandbox; then echo "sandboxed"; exit 1; fi
           # Its own icon (#733): every size in the set, and the built app names and carries it.
-          python3 -I ../../scripts/check_app_icon.py --iconset Assets.xcassets/AppIcon.appiconset --app "$app"
+          python3 -I ../../scripts/check_app_icon.py --iconset Assets.xcassets/AppIcon.appiconset --badge 62929E --app "$app"
           # Its name (#763): the file, the app menu, About, Quit and the Dock.
           python3 -I ../../scripts/check_updater_name.py "$app"
       # It starts with nothing plugged in, logs its first look ("not found" for both sections) and quits (#734).
