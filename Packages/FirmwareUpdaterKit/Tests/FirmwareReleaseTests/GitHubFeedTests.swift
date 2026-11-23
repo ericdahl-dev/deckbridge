@@ -91,14 +91,14 @@ func anythingWrongTalkingToGitHubIsUnreachableAndTheBuiltInStays(_ fault: String
     #expect(outcome.catalog.newestPanel()?.version == FirmwareVersion("1.0.0"))
 }
 
-/// Until the owner adds their keys (docs/FIRMWARE-RELEASE-SIGNING.md), the app trusts none: a release that reaches it
-/// whole is refused as signed with a key it doesn't know.
-@Test func withTheAppsKeysStillEmptyEveryReleaseIsAnUnknownKey() async throws {
+/// With the owner's keys in the app (#689): a release naming "primary" that isn't signed by the owner's primary key
+/// is refused, its signature doesn't check out.
+@Test func aReleaseNamingThePrimaryKeyButNotSignedByItIsRefused() async throws {
     let github = publishedGitHub()
     serve("manifest.json", Data(#"{"format": 1, "key": "primary", "lowest_allowed": {}, "catalog": {}, "files": []}"#.utf8), on: github)
     let outcome = await ReleaseFetcher(feed: GitHubReleaseFeed(http: github), trusting: ReleaseKeys.trusted, cache: temporaryFolder())
         .fetch(over: try builtIn(panelVersion: "1.0.0", sha: "aaaaaaa"))
-    #expect(outcome.refusal == .unknownKey("primary"))
+    #expect(outcome.refusal == .badSignature)
 }
 
 // Where the feed goes is its own rule, not the JSON's: an asset only from this repo's download URL on github.com, and

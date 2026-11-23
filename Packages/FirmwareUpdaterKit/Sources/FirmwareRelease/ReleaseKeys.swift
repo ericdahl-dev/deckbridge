@@ -1,11 +1,13 @@
 import Foundation
 
 /// The public keys the updater trusts to sign firmware releases (ADR 0012): the maintainer's primary key and the
-/// offline backup key. Empty until the owner makes them (docs/FIRMWARE-RELEASE-SIGNING.md); until then every
-/// fetched release is refused as signed by an unknown key, and the built-in firmware is used.
+/// offline backup key, made by the owner on 2026-11-23 (docs/FIRMWARE-RELEASE-SIGNING.md). Public halves only.
 public enum ReleaseKeys {
     /// Each entry: (id, public key as 64 hex characters), as `firmware-release public-key` prints it.
-    static let listed: [(id: String, hex: String)] = []
+    static let listed: [(id: String, hex: String)] = [
+        ("primary", "26739c2c075965fd9a99330f97c3b09a28d11f85c1fa4d81bd5495cb67c1a5f8"),
+        ("backup", "2e972a79fd40b287a151166dcdc723d07e84afe9ffc933fb211c670873c07cbe"),
+    ]
 
     public static var trusted: [TrustedKey] {
         listed.compactMap { entry in
