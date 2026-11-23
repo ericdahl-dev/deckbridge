@@ -11,11 +11,13 @@ Checked, as the live site answered on 2026-11-22:
 And new with #767 (the live site sent no cache headers):
   - HTML is never cached long: no-cache, or at most 5 minutes;
   - fonts and images are cached at least 30 days.
+  - text (HTML, CSS, JS, JSON, plain text, XML) is gzipped when asked, and unzips to the same bytes.
 
 Usage: python3 -I scripts/check_site_image.py [--url BASE]
 Needs Docker without --url (CI's Linux runner has it).
 """
 import argparse
+import gzip
 import os
 import pathlib
 import subprocess
@@ -138,7 +140,21 @@ def check_cache(base):
     return failures
 
 
-CHECKS = [check_files, check_not_found, check_cache]
+GZIPPED = ["/index.html", "/site.css", "/analytics.js", "/controllers.json", "/llms.txt", "/sitemap.xml"]
+
+
+def check_gzip(base):
+    failures = []
+    for path in GZIPPED:
+        status, headers, body = fetch(base, path, {"Accept-Encoding": "gzip"})
+        if headers.get("Content-Encoding") != "gzip":
+            failures.append(f"{path}: not gzipped (Content-Encoding {headers.get('Content-Encoding')!r})")
+        elif gzip.decompress(body) != (SITE / path.lstrip("/")).read_bytes():
+            failures.append(f"{path}: gzipped bytes differ from website{path}")
+    return failures
+
+
+CHECKS = [check_files, check_not_found, check_cache, check_gzip]
 
 
 def run_checks(base):
