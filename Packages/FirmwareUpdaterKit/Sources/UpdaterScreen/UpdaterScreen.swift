@@ -39,6 +39,16 @@ public struct DeviceSection: Sendable, Equatable {
 public struct UpdaterScreen: Sendable, Equatable {
     public let panel: DeviceSection
     public let lc6000: DeviceSection
+    /// The LC6000's steps (update mode, backup) show: its warning accepted and an LC6000 found (#762).
+    public let showsLC6000Steps: Bool
+
+    /// The LC6000's steps, in order (#762): DeckBridge quit first, since it talks to the LC6000.
+    public static let lc6000Steps = [
+        "Quit DeckBridge first. It talks to the LC6000.",
+        "Put one chip in update mode. Top panel chip: power the LC6000 off, then hold BACK + FWD + VINYL while you power it on.",
+        "Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware.",
+        "Then pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.",
+    ]
 
     /// The LC6000 section's own warning (#685, spec #684 story 9), so someone who owns only a panel never starts on it.
     public static let lc6000Warning = """
@@ -74,14 +84,16 @@ public struct UpdaterScreen: Sendable, Equatable {
             panel = DeviceSection(status: "Deck panel found",
                             detail: "Build not read")
         }
+        showsLC6000Steps = lc6000WarningAccepted && found.lc6000 != nil
         guard lc6000WarningAccepted else {
             lc6000 = DeviceSection(status: "Read the warning first", warning: Self.lc6000Warning)
             return
         }
         switch found.lc6000 {
-        case nil: lc6000 = DeviceSection(status: "Nothing connected")
+        case nil: lc6000 = DeviceSection(status: "Nothing connected", detail: "Plug in the LC6000 and switch it on.")
         case .onMIDI: lc6000 = DeviceSection(status: "LC6000 found", detail: "Firmware not checked yet")
-        case .updateMode: lc6000 = DeviceSection(status: "A device in update mode, maybe an LC6000")
+        // Not which chip: naming it would mean a new request at every look (#762). The backup names it.
+        case .updateMode: lc6000 = DeviceSection(status: "An LC6000 chip in update mode")
         }
     }
 

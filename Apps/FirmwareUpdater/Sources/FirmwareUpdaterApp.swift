@@ -64,8 +64,10 @@ struct UpdaterView: View {
             SectionView(title: "Deck panel", section: model.screen.panel, accept: nil)
             FirmwareRow(line: model.firmware)
             PanelUpdateView(model: model)
-            SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning)
-            if model.screen.lc6000.warning == nil { BackupView(model: backup) }
+            // The LC6000's steps inside its box, only once one is found (#762).
+            SectionView(title: "LC6000", section: model.screen.lc6000, accept: model.acceptLC6000Warning) {
+                if model.screen.showsLC6000Steps { BackupView(model: backup) }
+            }
             HStack {
                 Spacer()
                 if model.looking { ProgressView().controlSize(.small) }
@@ -77,10 +79,18 @@ struct UpdaterView: View {
     }
 }
 
-struct SectionView: View {
+struct SectionView<Extra: View>: View {
     let title: String
     let section: DeviceSection
     let accept: (() -> Void)?
+    let extra: Extra
+
+    init(title: String, section: DeviceSection, accept: (() -> Void)?, @ViewBuilder extra: () -> Extra) {
+        self.title = title
+        self.section = section
+        self.accept = accept
+        self.extra = extra()
+    }
 
     var body: some View {
         GroupBox {
@@ -92,6 +102,7 @@ struct SectionView: View {
                     Text(section.status).font(.headline)
                     if let detail = section.detail { Text(detail).foregroundStyle(.secondary) }
                     if let guide = section.guide { GuideView(guide: guide) }
+                    extra
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -99,6 +110,12 @@ struct SectionView: View {
         } label: {
             Text(title).font(.title3.bold())
         }
+    }
+}
+
+extension SectionView where Extra == EmptyView {
+    init(title: String, section: DeviceSection, accept: (() -> Void)?) {
+        self.init(title: title, section: section, accept: accept) { EmptyView() }
     }
 }
 

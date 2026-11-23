@@ -2,6 +2,7 @@ import AppKit
 import FirmwareCatalog
 import SwiftUI
 import UnitCheck
+import UpdaterScreen
 
 /// The LC6000 section's unit check and backup (#692): the owner puts one chip in update mode, picks a folder, and the
 /// app reads the chip twice and saves it. The backup writes nothing to the unit; an update (#693) writes only after its confirm.
@@ -95,14 +96,14 @@ struct BackupView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Back up a chip").font(.headline)
-            Text("Put one chip in update mode. Top panel chip: power the LC6000 off, then hold BACK + FWD + VINYL while you power it on.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Display chip: it has no buttons. One MIDI message restarts it in update mode. It writes nothing to its firmware.")
-                .fixedSize(horizontal: false, vertical: true)
+            // The steps in order (#762), DeckBridge quit first.
+            ForEach(Array(UpdaterScreen.lc6000Steps.prefix(3).enumerated()), id: \.offset) { _, step in
+                Text(step).fixedSize(horizontal: false, vertical: true)
+            }
             Button("Restart the display chip in update mode…") { model.confirmingStep = true }
                 .disabled(model.running)
             if let stepResult = model.stepResult { Text(stepResult).fixedSize(horizontal: false, vertical: true) }
-            Text("Then quit DeckBridge and pick a folder. The app reads the chip twice and saves it only if both reads match. Nothing is written to the LC6000.")
+            Text(UpdaterScreen.lc6000Steps[3])
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)
             HStack {

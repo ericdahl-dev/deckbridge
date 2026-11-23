@@ -157,13 +157,39 @@ struct UpdaterScreenTests {
         #expect(screen.panel.status == "Nothing connected")
     }
 
-    @Test("ST's ROM bootloader on USB (0483:DF11): a device in update mode, maybe an LC6000")
+    /// The look only sees ST's bootloader on USB, not which chip: naming it would need a new request at every look
+    /// (#762, cos: option 1). The backup names it.
+    @Test("ST's ROM bootloader on USB (0483:DF11): an LC6000 chip in update mode")
     func deviceInUpdateMode() async {
         let rig = Rig()
         rig.usb.plugged = [USBDevice(vendor: 0x0483, product: 0xDF11, name: "STM32  BOOTLOADER")]
         let screen = await rig.screen()
-        #expect(screen.lc6000.status == "A device in update mode, maybe an LC6000")
+        #expect(screen.lc6000.status == "An LC6000 chip in update mode")
         #expect(screen.lc6000.detail == nil)
+    }
+
+    /// #762: the LC6000's steps show only when an LC6000 is there, and quitting DeckBridge is the first of them.
+    @Test("LC6000 steps: quit DeckBridge first, then update mode, then the backup")
+    func lc6000StepOrder() {
+        #expect(UpdaterScreen.lc6000Steps.first == "Quit DeckBridge first. It talks to the LC6000.")
+        #expect(UpdaterScreen.lc6000Steps.count == 4)
+        #expect(UpdaterScreen.lc6000Steps[1].hasPrefix("Put one chip in update mode."))
+        #expect(UpdaterScreen.lc6000Steps.last?.hasPrefix("Then pick a folder.") == true)
+        #expect(!UpdaterScreen.lc6000Steps.joined().contains("quit DeckBridge"))
+    }
+
+    @Test("No LC6000: no steps, and the section says to plug it in; found on MIDI or in update mode: the steps")
+    func lc6000StepsOnlyWhenFound() async {
+        let rig = Rig()
+        let none = await rig.screen()
+        #expect(!none.showsLC6000Steps)
+        #expect(none.lc6000.detail == "Plug in the LC6000 and switch it on.")
+        rig.midi.ports = ["LC6000 PRIME Controller"]
+        #expect(await rig.screen().showsLC6000Steps)
+        rig.midi.ports = []
+        rig.usb.plugged = [USBDevice(vendor: 0x0483, product: 0xDF11, name: "STM32  BOOTLOADER")]
+        #expect(await rig.screen().showsLC6000Steps)
+        #expect(!(await rig.screen(lc6000WarningAccepted: false).showsLC6000Steps))
     }
 
     @Test("Finding opens no serial port but the panel's own: another device's port is never touched, and opening resets some boards")
